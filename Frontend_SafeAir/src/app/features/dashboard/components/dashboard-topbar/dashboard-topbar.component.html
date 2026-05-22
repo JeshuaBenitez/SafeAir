@@ -1,0 +1,305 @@
+<header class="dashboard-topbar">
+  <div class="dashboard-topbar__breadcrumb">
+  <span>{{ breadcrumbRoot }}</span>
+  <span class="sep">&gt;</span>
+  <span class="current">{{ breadcrumbCurrent }}</span>
+</div>
+
+  <div class="dashboard-topbar__actions">
+    <div class="dashboard-topbar__date-wrapper" *ngIf="showDateTimeFilter">
+      <button
+        class="dashboard-topbar__date-trigger"
+        type="button"
+        aria-label="Seleccionar fecha"
+        (click)="togglePicker()"
+      >
+        <span class="dashboard-topbar__inline-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="3.5" y="5.5" width="17" height="15" rx="3"></rect>
+            <path d="M7 3.5V7"></path>
+            <path d="M17 3.5V7"></path>
+            <path d="M3.5 9H20.5"></path>
+            <path d="M8 13H8.01"></path>
+            <path d="M12 13H12.01"></path>
+            <path d="M16 13H16.01"></path>
+            <path d="M8 17H8.01"></path>
+            <path d="M12 17H12.01"></path>
+            <path d="M16 17H16.01"></path>
+          </svg>
+        </span>
+
+        <span class="dashboard-topbar__date-text">
+          {{ formatDisplayDate(selectedDate) }}
+        </span>
+      </button>
+
+      <div class="dashboard-topbar__picker-panel" *ngIf="isPickerOpen">
+        <div class="dashboard-topbar__picker-hero">
+          <button
+            class="dashboard-topbar__picker-close"
+            type="button"
+            aria-label="Cerrar"
+            (click)="closePicker()"
+          >
+            ×
+          </button>
+
+          <button
+            class="dashboard-topbar__hero-year"
+            type="button"
+            [class.is-active]="pickerMode === 'year'"
+            (click)="setPickerMode('year')"
+          >
+            {{ draftYear }}
+          </button>
+
+          <div class="dashboard-topbar__hero-main">
+            <button
+              class="dashboard-topbar__hero-date"
+              type="button"
+              [class.is-active]="pickerMode === 'calendar' || pickerMode === 'year'"
+              (click)="setPickerMode('calendar')"
+            >
+              {{ draftMonthShort }} {{ draftDayNumber }}
+            </button>
+
+            <button
+              class="dashboard-topbar__hero-time"
+              type="button"
+              [class.is-active]="pickerMode === 'hour' || pickerMode === 'minute'"
+              (click)="setPickerMode('hour')"
+            >
+              {{ draftHourLabel }}<span>:</span>{{ draftMinuteLabel }}
+            </button>
+          </div>
+
+          <div class="dashboard-topbar__picker-tabs">
+            <button
+              type="button"
+              [class.is-active]="pickerMode === 'calendar' || pickerMode === 'year'"
+              (click)="setPickerMode('calendar')"
+              aria-label="Seleccionar fecha"
+            >
+              <span class="dashboard-topbar__inline-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="3.5" y="5.5" width="17" height="15" rx="3"></rect>
+                  <path d="M7 3.5V7"></path>
+                  <path d="M17 3.5V7"></path>
+                  <path d="M3.5 9H20.5"></path>
+                </svg>
+              </span>
+            </button>
+
+            <button
+              type="button"
+              [class.is-active]="pickerMode === 'hour' || pickerMode === 'minute'"
+              (click)="setPickerMode('hour')"
+              aria-label="Seleccionar hora"
+            >
+              <span class="dashboard-topbar__inline-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="8.5"></circle>
+                  <path d="M12 7.5V12L15.5 14"></path>
+                </svg>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <section class="dashboard-topbar__picker-body">
+          <ng-container *ngIf="pickerMode === 'calendar'">
+            <div class="dashboard-topbar__calendar-header">
+              <button
+                class="dashboard-topbar__calendar-nav"
+                type="button"
+                aria-label="Mes anterior"
+                (click)="previousMonth()"
+              >
+                ‹
+              </button>
+
+              <div class="dashboard-topbar__calendar-title">
+                <button type="button" (click)="setPickerMode('calendar')">
+                  {{ calendarMonthLabel }}
+                </button>
+
+                <button type="button" (click)="setPickerMode('year')">
+                  {{ calendarYearLabel }}
+                </button>
+              </div>
+
+              <button
+                class="dashboard-topbar__calendar-nav"
+                type="button"
+                aria-label="Mes siguiente"
+                (click)="nextMonth()"
+              >
+                ›
+              </button>
+            </div>
+
+            <div class="dashboard-topbar__weekdays">
+              <span *ngFor="let weekday of weekdays">{{ weekday }}</span>
+            </div>
+
+            <div class="dashboard-topbar__days-grid">
+              <button
+                *ngFor="let day of calendarDays; trackBy: trackByCalendarDay"
+                class="dashboard-topbar__day"
+                type="button"
+                [class.is-outside]="!day.isCurrentMonth"
+                [class.is-selected]="day.isoDate === draftDate"
+                [class.is-today]="day.isoDate === todayIsoDate"
+                (click)="selectCalendarDate(day.isoDate)"
+              >
+                {{ day.day }}
+              </button>
+            </div>
+          </ng-container>
+
+          <ng-container *ngIf="pickerMode === 'year'">
+            <div class="dashboard-topbar__year-header">
+              <button type="button" (click)="previousYearRange()">‹</button>
+
+              <div>
+                <strong>Seleccionar año</strong>
+                <span>{{ visibleYears[0] }} - {{ visibleYears[visibleYears.length - 1] }}</span>
+              </div>
+
+              <button type="button" (click)="nextYearRange()">›</button>
+            </div>
+
+            <div class="dashboard-topbar__year-grid">
+              <button
+                *ngFor="let year of visibleYears; trackBy: trackByYear"
+                class="dashboard-topbar__year-option"
+                type="button"
+                [class.is-active]="year === calendarYear"
+                (click)="selectCalendarYear(year)"
+              >
+                {{ year }}
+              </button>
+            </div>
+          </ng-container>
+
+          <ng-container *ngIf="pickerMode === 'hour' || pickerMode === 'minute'">
+            <div class="dashboard-topbar__clock-header">
+              <p>{{ pickerMode === 'hour' ? 'Seleccionar hora' : 'Seleccionar minutos' }}</p>
+              <strong>{{ draftHourLabel }}:{{ draftMinuteLabel }}</strong>
+            </div>
+
+            <div class="dashboard-topbar__clock-mode-switch">
+              <button
+                type="button"
+                [class.is-active]="pickerMode === 'hour'"
+                (click)="setPickerMode('hour')"
+              >
+                Hora
+              </button>
+
+              <button
+                type="button"
+                [class.is-active]="pickerMode === 'minute'"
+                (click)="setPickerMode('minute')"
+              >
+                Minutos
+              </button>
+            </div>
+
+            <div
+              class="dashboard-topbar__clock-face"
+              (pointerdown)="startClockDrag($event)"
+              (pointermove)="moveClockDrag($event)"
+            >
+              <div
+                class="dashboard-topbar__clock-hand"
+                [style.transform]="'rotate(' + selectedClockAngle + 'deg)'"
+              ></div>
+
+              <button
+                *ngFor="let mark of currentClockMarks; trackBy: trackByClockMark"
+                class="dashboard-topbar__clock-mark"
+                type="button"
+                [class.is-selected]="mark.value === activeClockValue"
+                [style.transform]="'rotate(' + mark.angle + 'deg) translateY(-112px) rotate(' + (-mark.angle) + 'deg)'"
+                (click)="selectClockValue(mark.value)"
+              >
+                {{ mark.label }}
+              </button>
+
+              <div
+                class="dashboard-topbar__clock-knob"
+                [style.transform]="'rotate(' + selectedClockAngle + 'deg) translateY(-112px) rotate(' + (-selectedClockAngle) + 'deg)'"
+              >
+                {{ activeClockLabel }}
+              </div>
+
+              <div class="dashboard-topbar__clock-center"></div>
+            </div>
+          </ng-container>
+        </section>
+
+        <div class="dashboard-topbar__picker-helper">
+          <span class="dashboard-topbar__picker-helper-dot"></span>
+          <span>
+            Se consultarán los registros disponibles desde el primer evento del día seleccionado.
+          </span>
+        </div>
+
+        <div class="dashboard-topbar__picker-actions">
+          <button
+            class="dashboard-topbar__picker-btn dashboard-topbar__picker-btn--ghost"
+            type="button"
+            (click)="cancelSelection()"
+          >
+            Cancelar
+          </button>
+
+          <button
+            class="dashboard-topbar__picker-btn dashboard-topbar__picker-btn--primary"
+            type="button"
+            (click)="applySelection()"
+          >
+            Aplicar
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="dashboard-topbar__search-wrapper">
+  <div class="dashboard-topbar__search">
+    <button
+      class="dashboard-topbar__search-icon"
+      type="button"
+      aria-label="Buscar cuarto"
+      (click)="searchRoom(searchInput.value)"
+    >
+      <img src="assets/icons/lupa.png" alt="" aria-hidden="true" />
+    </button>
+
+    <input
+      #searchInput
+      type="text"
+      placeholder="Búsqueda rápida..."
+      autocomplete="off"
+      (input)="onSearchInput(searchInput.value)"
+      (keydown.enter)="searchRoom(searchInput.value)"
+    />
+  </div>
+
+  <p class="dashboard-topbar__search-message" *ngIf="searchMessage">
+    {{ searchMessage }}
+  </p>
+</div>
+    <!--
+    <button class="dashboard-topbar__icon-btn" type="button" aria-label="Notificaciones">
+      <img src="assets/icons/campana.png" alt="Notificaciones" />
+    </button>
+
+    <button class="dashboard-topbar__icon-btn" type="button" aria-label="Perfil">
+      <img src="assets/icons/user.png" alt="Perfil" />
+    </button>
+  -->
+
+  </div>
+</header>

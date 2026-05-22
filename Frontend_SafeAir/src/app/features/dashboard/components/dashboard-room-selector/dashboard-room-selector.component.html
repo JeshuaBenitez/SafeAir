@@ -1,0 +1,11 @@
+<section class="room-selector" aria-label="Selector de habitación">
+  <button
+    *ngFor="let room of rooms"
+    type="button"
+    class="room-selector__pill"
+    [class.is-active]="room.id === selectedRoomId"
+    (click)="onSelect(room.id)">
+    <span class="room-selector__name">{{ room.label }}</span>
+    <span class="room-selector__status">{{ room.statusLabel }}</span>
+  </button>
+</section>

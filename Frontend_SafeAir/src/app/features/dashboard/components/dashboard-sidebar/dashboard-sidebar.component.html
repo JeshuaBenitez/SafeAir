@@ -1,0 +1,27 @@
+<aside class="dashboard-sidebar" aria-label="SafeAir navigation">
+  <div class="dashboard-sidebar__brand">
+    <img class="dashboard-sidebar__brand-icon" src="assets/icons/cuadros.png" alt="SafeAir logo" />
+    <span class="dashboard-sidebar__brand-text">SafeAir</span>
+  </div>
+
+  <section class="dashboard-sidebar__user-card">
+    <img class="dashboard-sidebar__avatar" src="assets/images/userprofile.png" alt="User avatar" />
+    <div class="dashboard-sidebar__user-content">
+      <p class="dashboard-sidebar__user-name">{{ user.displayName }}</p>
+      <p class="dashboard-sidebar__user-status">{{ user.statusLabel }}</p>
+    </div>
+  </section>
+
+  <nav class="dashboard-sidebar__nav">
+    <a
+      *ngFor="let item of menuItems"
+      class="dashboard-sidebar__nav-item"
+      [routerLink]="item.to"
+      [class.is-active]="isItemActive(item)"
+      [attr.aria-current]="isItemActive(item) ? 'page' : null"
+    >
+      <img class="dashboard-sidebar__nav-icon" [src]="item.iconSrc" alt="" aria-hidden="true" />
+      <span>{{ item.label }}</span>
+    </a>
+  </nav>
+</aside>

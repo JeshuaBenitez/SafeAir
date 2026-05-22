@@ -1,0 +1,20 @@
+@use 'tokens/index' as tokens;
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 1.65rem;
+}
+
+.auth-header__title {
+  margin: 0;
+  font-size: clamp(2.2rem, 3.2vw, 2.85rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: tokens.$color-text-primary;
+}
+
+.auth-header__subtitle {
+  margin: 0.85rem 0 0;
+  color: tokens.$color-text-muted;
+  font-size: 1.15rem;
+}

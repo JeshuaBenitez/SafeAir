@@ -1,0 +1,127 @@
+<form class="register-form" [formGroup]="form" (ngSubmit)="onSubmit()" novalidate>
+  <sa-form-input
+    id="register-fullname"
+    label="NOMBRE COMPLETO"
+    placeholder="Ingresa tu nombre completo"
+    leftIconSrc="assets/icons/user.png"
+    [control]="fullNameControl"
+    [error]="getFullNameError()"
+  />
+
+  <sa-form-input
+    id="register-lastname"
+    label="APELLIDOS"
+    placeholder="Ingresa tus apellidos"
+    leftIconSrc="assets/icons/apellidos.png"
+    [control]="lastNameControl"
+    [error]="getLastNameError()"
+  />
+
+  <sa-form-input
+    id="register-email"
+    label="CORREO ELECTRÓNICO"
+    type="email"
+    autocomplete="email"
+    placeholder="nombre@empresa.com"
+    leftIconSrc="assets/icons/correo.png"
+    [control]="emailControl"
+    [error]="getEmailError()"
+  />
+
+  <label class="register-password">
+    <span class="register-password__label">CONTRASEÑA</span>
+
+    <div
+      class="register-password__field"
+      [class.has-error]="getPasswordError()"
+    >
+      <img
+        class="register-password__left-icon"
+        src="assets/icons/candado.png"
+        alt=""
+        aria-hidden="true"
+      />
+
+      <input
+        id="register-password"
+        [type]="showPassword ? 'text' : 'password'"
+        autocomplete="new-password"
+        placeholder="********"
+        [formControl]="passwordControl"
+      />
+
+      <button
+        class="register-password__toggle"
+        type="button"
+        [attr.aria-label]="showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+        (click)="togglePasswordVisibility()"
+      >
+        <img
+          [src]="showPassword ? 'assets/icons/ojocerrado.png' : 'assets/icons/ojo.png'"
+          alt=""
+          aria-hidden="true"
+        />
+      </button>
+    </div>
+
+    <span class="register-password__error" *ngIf="getPasswordError()">
+      {{ getPasswordError() }}
+    </span>
+  </label>
+
+  <label class="register-password">
+    <span class="register-password__label">CONFIRMAR CONTRASEÑA</span>
+
+    <div
+      class="register-password__field"
+      [class.has-error]="getConfirmPasswordError()"
+    >
+      <img
+        class="register-password__left-icon"
+        src="assets/icons/escudo.png"
+        alt=""
+        aria-hidden="true"
+      />
+
+      <input
+        id="register-confirm-password"
+        [type]="showConfirmPassword ? 'text' : 'password'"
+        autocomplete="new-password"
+        placeholder="********"
+        [formControl]="confirmPasswordControl"
+      />
+
+      <button
+        class="register-password__toggle"
+        type="button"
+        [attr.aria-label]="showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+        (click)="toggleConfirmPasswordVisibility()"
+      >
+        <img
+          [src]="showConfirmPassword ? 'assets/icons/ojocerrado.png' : 'assets/icons/ojo.png'"
+          alt=""
+          aria-hidden="true"
+        />
+      </button>
+    </div>
+
+    <span class="register-password__error" *ngIf="getConfirmPasswordError()">
+      {{ getConfirmPasswordError() }}
+    </span>
+  </label>
+
+  <p *ngIf="formError" class="register-form__error" role="alert">{{ formError }}</p>
+
+  <sa-primary-button
+    type="submit"
+    [label]="submitLabel"
+    [loading]="loading"
+    [disabled]="form.invalid || loading"
+    rightGlyph="&#8594;"
+  />
+
+  <p class="register-form__login-hint">
+    ¿Ya tienes cuenta?
+    <sa-auth-link to="/auth/login" label="Iniciar sesión" />
+  </p>
+</form>

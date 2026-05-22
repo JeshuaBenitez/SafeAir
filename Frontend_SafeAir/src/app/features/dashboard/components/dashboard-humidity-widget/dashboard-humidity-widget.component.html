@@ -1,0 +1,57 @@
+<article class="widget-card">
+  <header class="widget-card__header">
+    <h3>Humedad</h3>
+    <span>%</span>
+  </header>
+
+  <div class="humidity-widget">
+    <svg viewBox="0 0 160 98" class="humidity-widget__gauge" aria-hidden="true">
+      <path d="M18 82 A62 62 0 0 1 142 82" class="humidity-widget__track"></path>
+      <path
+        d="M18 82 A62 62 0 0 1 142 82"
+        class="humidity-widget__progress-glow"
+        [attr.stroke-dasharray]="circumference"
+        [attr.stroke-dashoffset]="dashOffset">
+      </path>
+
+      <path
+        d="M18 82 A62 62 0 0 1 142 82"
+        class="humidity-widget__progress"
+        [attr.stroke-dasharray]="circumference"
+        [attr.stroke-dashoffset]="dashOffset">
+      </path>
+
+      <line
+        class="humidity-widget__needle"
+        [attr.x1]="markerNeedleInnerX"
+        [attr.y1]="markerNeedleInnerY"
+        [attr.x2]="markerNeedleOuterX"
+        [attr.y2]="markerNeedleOuterY">
+      </line>
+
+      <circle
+        class="humidity-widget__marker-halo"
+        [attr.cx]="markerTipX"
+        [attr.cy]="markerTipY"
+        r="5.2">
+      </circle>
+
+      <circle
+        class="humidity-widget__marker-dot"
+        [attr.cx]="markerTipX"
+        [attr.cy]="markerTipY"
+        r="2.7">
+      </circle>
+    </svg>
+
+    <div class="humidity-widget__center">
+      <p class="humidity-widget__value">{{ clampedHumidity | number: '1.0-0' }}%</p>
+      <p class="humidity-widget__status">Nivel estable</p>
+    </div>
+
+    <div class="humidity-widget__range" aria-hidden="true">
+      <span>0%</span>
+      <span>100%</span>
+    </div>
+  </div>
+</article>

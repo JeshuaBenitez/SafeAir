@@ -1,0 +1,267 @@
+<section class="section-page" *ngIf="viewModel$ | async as vm">
+  <sa-dashboard-sidebar class="section-page__sidebar" [user]="vm.user" />
+
+  <section class="section-page__main">
+    <sa-dashboard-topbar [locationLabel]="'Room Configuration'" />
+
+    <section class="rooms-config">
+      <header class="rooms-config__header">
+        <div>
+          <h1>Creación de Cuartos</h1>
+          <p>Configuración de habitaciones</p>
+        </div>
+      </header>
+
+      <section class="rooms-config__summary">
+        <div class="rooms-config__summary-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <rect x="7" y="4.5" width="10" height="15" rx="2"></rect>
+            <path d="M9.5 4.5V2.8h5v1.7"></path>
+            <path d="M9.5 8h5"></path>
+            <path d="M9.5 11.5h5"></path>
+            <path d="M9.5 15h3"></path>
+          </svg>
+        </div>
+
+        <div class="rooms-config__summary-copy">
+          <strong>{{ vm.rooms.length }} de {{ maxRoomsPerDashboard }} habitaciones configuradas</strong>
+          <span>Organiza cada cuarto con parámetros físicos y actuadores de control.</span>
+        </div>
+
+        <div class="rooms-config__progress">
+          <div class="rooms-config__progress-track">
+            <span
+              class="rooms-config__progress-fill"
+              [style.width.%]="(vm.rooms.length / maxRoomsPerDashboard) * 100"
+            ></span>
+          </div>
+
+          <strong>{{ ((vm.rooms.length / maxRoomsPerDashboard) * 100) | number: '1.0-0' }}%</strong>
+        </div>
+      </section>
+
+      <p class="rooms-config__limit-warning" *ngIf="!hasRoomCapacity()">
+        Límite alcanzado: no puedes guardar más de 3 habitaciones por dashboard.
+      </p>
+
+      <form class="rooms-config__grid" [formGroup]="form" (ngSubmit)="onSaveRoom()" novalidate>
+        <article class="rooms-config__panel rooms-config__panel--properties">
+          <header class="rooms-config__panel-heading">
+            <span class="rooms-config__panel-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M4 20V7.5L12 4l8 3.5V20"></path>
+                <path d="M8 20v-7h8v7"></path>
+                <path d="M10 9h.01"></path>
+                <path d="M14 9h.01"></path>
+              </svg>
+            </span>
+
+            <div>
+              <h2>Propiedades del cuarto</h2>
+              <p>Define las características físicas del espacio.</p>
+            </div>
+          </header>
+
+          <label class="rooms-config__field">
+            <span>Designación del cuarto</span>
+            <input
+              id="room-name"
+              class="rooms-config__input"
+              formControlName="roomName"
+              placeholder="Lab_Alpha_01"
+              maxlength="40"
+            />
+          </label>
+
+          <p
+            class="rooms-config__error"
+            *ngIf="roomNameControl.invalid && (roomNameControl.dirty || roomNameControl.touched)"
+          >
+            El nombre es requerido y debe tener al menos 2 caracteres.
+          </p>
+
+          <section class="rooms-config__area-block">
+            <div class="rooms-config__area-header">
+              <span>Área total</span>
+
+              <strong>
+                {{ areaControl.value }}
+                <small>m²</small>
+              </strong>
+            </div>
+
+            <input
+  class="rooms-config__slider"
+  type="range"
+  min="1"
+  max="300"
+  [value]="areaControl.value"
+  [style.--area-progress.%]="((areaControl.value - 1) / 299) * 100"
+  (input)="onAreaSliderChange($any($event.target).value)"
+/>
+
+            <div class="rooms-config__ticks">
+              <span>1 m²</span>
+              <span>150 m²</span>
+              <span>300 m²</span>
+            </div>
+          </section>
+
+          <section class="rooms-config__windows">
+            <span class="rooms-config__windows-label">Aberturas / ventanas</span>
+
+            <div class="rooms-config__stepper">
+              <button type="button" aria-label="Disminuir ventanas" (click)="incrementWindows(-1)">
+                −
+              </button>
+
+              <strong>
+                {{ windowsControl.value < 10 ? '0' + windowsControl.value : windowsControl.value }}
+              </strong>
+
+              <button type="button" aria-label="Aumentar ventanas" (click)="incrementWindows(1)">
+                +
+              </button>
+            </div>
+
+            <p>Cantidad total de aberturas o ventanas.</p>
+          </section>
+        </article>
+
+        <article class="rooms-config__panel rooms-config__panel--actuators">
+          <header class="rooms-config__panel-heading rooms-config__panel-heading--actuators">
+            <span class="rooms-config__panel-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M4 8c2.5-3 5.5-3 8 0s5.5 3 8 0"></path>
+                <path d="M4 14c2.5-3 5.5-3 8 0s5.5 3 8 0"></path>
+                <path d="M4 20c2.5-3 5.5-3 8 0s5.5 3 8 0"></path>
+              </svg>
+            </span>
+
+            <div>
+              <h2>Configuración de actuadores</h2>
+              <p>Selecciona los actuadores y sus parámetros.</p>
+            </div>
+
+            <span class="rooms-config__slots">
+              <span></span>
+              {{ form.controls.minisplitQty.value + form.controls.purifierQty.value + form.controls.extractorQty.value }}
+              slots activos
+            </span>
+          </header>
+
+          <div class="rooms-config__actuators-grid">
+            <sa-room-actuator-card
+              type="minisplit"
+              title="MiniSplit"
+              subtitle="Regulación térmica"
+              iconSrc="assets/icons/temperatura.png"
+              [quantity]="form.controls.minisplitQty.value"
+              [size]="form.controls.minisplitSize.value"
+              [showError]="shouldShowActuatorError('minisplit')"
+              (quantityChange)="setActuatorQuantity('minisplit', $event)"
+              (sizeChange)="setActuatorSize('minisplit', $event)"
+            />
+
+            <sa-room-actuator-card
+              type="purifier"
+              title="Purficador"
+              subtitle="Gestión de aerosoles"
+              iconSrc="assets/icons/humedad.png"
+              [quantity]="form.controls.purifierQty.value"
+              [size]="form.controls.purifierSize.value"
+              [showError]="shouldShowActuatorError('purifier')"
+              (quantityChange)="setActuatorQuantity('purifier', $event)"
+              (sizeChange)="setActuatorSize('purifier', $event)"
+            />
+
+            <sa-room-actuator-card
+              type="extractor"
+              title="Extractor"
+              subtitle="Sistemas de extracción"
+              iconSrc="assets/icons/actuador.png"
+              [quantity]="form.controls.extractorQty.value"
+              [size]="form.controls.extractorSize.value"
+              [showError]="shouldShowActuatorError('extractor')"
+              (quantityChange)="setActuatorQuantity('extractor', $event)"
+              (sizeChange)="setActuatorSize('extractor', $event)"
+            />
+          </div>
+
+          <div class="rooms-config__validation" *ngIf="missingActuatorTypes.length > 0 && (saveAttempted || form.touched)">
+            <p>Cada actuador debe tener entre 1 y 3 unidades al guardar:</p>
+
+            <ul>
+              <li *ngFor="let type of missingActuatorTypes">{{ actuatorLabel(type) }}</li>
+            </ul>
+          </div>
+
+          <div class="rooms-config__actions">
+            <p class="rooms-config__error" *ngIf="saveError">{{ saveError }}</p>
+
+            <button class="rooms-config__save" type="submit" [disabled]="!hasRoomCapacity()">
+              <span aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M5 4h12l2 2v14H5z"></path>
+                  <path d="M8 4v6h8V4"></path>
+                  <path d="M8 20v-6h8v6"></path>
+                </svg>
+              </span>
+              Guardar cuarto
+            </button>
+          </div>
+        </article>
+      </form>
+
+      <section class="rooms-config__existing" *ngIf="vm.rooms.length > 0">
+        <header class="rooms-config__existing-header">
+          <span class="rooms-config__existing-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M6 21V5.5A2.5 2.5 0 0 1 8.5 3h7A2.5 2.5 0 0 1 18 5.5V21"></path>
+              <path d="M4 21h16"></path>
+              <path d="M9 7h6"></path>
+              <path d="M9 11h6"></path>
+              <path d="M9 15h3"></path>
+            </svg>
+          </span>
+
+          <div>
+            <h3>Habitaciones creadas</h3>
+            <p>Consulta los cuartos configurados anteriormente.</p>
+          </div>
+        </header>
+
+        <div class="rooms-config__table">
+          <div class="rooms-config__table-head">
+            <span>Cuarto</span>
+            <span>ID</span>
+            <span>Área</span>
+            <span>Aberturas</span>
+            <span></span>
+          </div>
+
+          <div class="rooms-config__table-row" *ngFor="let room of vm.rooms">
+            <div class="rooms-config__room-name">
+              <span class="rooms-config__room-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path d="M4 19V8l8-4 8 4v11"></path>
+                  <path d="M8 19v-6h8v6"></path>
+                </svg>
+              </span>
+
+              <strong>{{ room.name }}</strong>
+            </div>
+
+            <span class="rooms-config__room-id">{{ room.id }}</span>
+            <span class="rooms-config__pill">{{ room.areaM2 }} m²</span>
+            <span class="rooms-config__pill">{{ room.windowsCount }} ventanas</span>
+
+            <button class="rooms-config__row-action" type="button" aria-label="Ver cuarto">
+              ›
+            </button>
+          </div>
+        </div>
+      </section>
+    </section>
+  </section>
+</section>

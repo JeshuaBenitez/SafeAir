@@ -1,0 +1,57 @@
+<section class="section-page" *ngIf="viewModel$ | async as vm">
+  <sa-dashboard-sidebar class="section-page__sidebar" [user]="vm.user" />
+
+  <section class="section-page__main">
+    <sa-dashboard-topbar
+  [locationLabel]="'Dashboard'"
+  [breadcrumbRoot]="'Dashboard'"
+  [breadcrumbCurrent]="'Monitoreo ambiental'"
+  [showDateTimeFilter]="true"
+  [selectedDate]="selectedTelemetryDate"
+  [selectedTime]="selectedTelemetryTime"
+  (dateTimeApplied)="onTelemetryDateTimeApplied($event)"
+/>
+
+    <section class="section-page__content" *ngIf="environmentViewModel$ | async as envVm">
+      <header class="section-page__header">
+        <h1>Dashboard Ambiental</h1>
+        <p>Monitoreo inteligente por habitacion con actualizacion reactiva en tiempo real.</p>
+      </header>
+
+      <sa-dashboard-room-selector
+        [rooms]="envVm.rooms"
+        [selectedRoomId]="envVm.selectedRoomId"
+        (roomSelected)="selectRoom($event)"
+      />
+
+      <section class="dashboard-grid" *ngIf="envVm.selectedState as state">
+        <div class="dashboard-grid__item dashboard-grid__item--temperature">
+          <sa-dashboard-temperature-widget [temperatureC]="state.temperatureC" />
+        </div>
+
+        <div class="dashboard-grid__item dashboard-grid__item--humidity">
+          <sa-dashboard-humidity-widget [humidityPct]="state.humidityPct" />
+        </div>
+
+        <div class="dashboard-grid__item dashboard-grid__item--co2">
+          <sa-dashboard-co2-widget
+            [co2Ppm]="state.co2Ppm"
+            [history]="state.co2History"
+          />
+        </div>
+
+        <div class="dashboard-grid__item dashboard-grid__item--pm25">
+          <sa-dashboard-pm25-widget
+            [pm25UgM3]="state.pm25UgM3"
+            [history]="state.pm25History"
+          />
+        </div>
+      </section>
+
+      <section class="section-page__empty" *ngIf="!envVm.selectedState">
+        <h2>Sin habitaciones disponibles</h2>
+        <p>Agrega habitaciones en la seccion Cuartos para habilitar el monitoreo ambiental.</p>
+      </section>
+    </section>
+  </section>
+</section>

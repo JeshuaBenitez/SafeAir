@@ -1,0 +1,64 @@
+<section class="dashboard-layout" *ngIf="viewModel$ | async as vm">
+  <sa-dashboard-sidebar
+    class="dashboard-layout__sidebar"
+    [user]="vm.user">
+  </sa-dashboard-sidebar>
+
+  <div class="dashboard-main">
+    <sa-dashboard-topbar
+  [locationLabel]="'Inicio'"
+  [breadcrumbRoot]="'Inicio'"
+  [breadcrumbCurrent]="'Vista de cuartos'">
+</sa-dashboard-topbar>
+
+    <div class="dashboard-content">
+      <section class="metrics-grid">
+        <app-dashboard-metric-card
+          label="Total de Cuartos"
+          [value]="vm.metrics.totalRooms"
+          icon="assets/icons/cuarto.png">
+        </app-dashboard-metric-card>
+
+        <app-dashboard-metric-card
+          label="Actuadores Activos"
+          [value]="vm.metrics.activeActuators"
+          icon="assets/icons/actuador.png">
+        </app-dashboard-metric-card>
+
+        <app-dashboard-metric-card
+          label="Total Area"
+          [value]="vm.metrics.totalAreaM2"
+          unit="m2"
+          icon="assets/icons/area.png">
+        </app-dashboard-metric-card>
+
+        <app-dashboard-metric-card
+          label="Total Ventanas"
+          [value]="vm.metrics.totalWindows"
+          icon="assets/icons/ventana.png">
+        </app-dashboard-metric-card>
+      </section>
+
+      <section class="rooms-section">
+        <div class="rooms-section__header">
+          <h2>Vista de Cuartos</h2>
+        </div>
+
+        <ng-container *ngIf="(vm.rooms?.length ?? 0) > 0; else emptyState">
+          <div class="rooms-grid">
+            <app-dashboard-room-card
+              *ngFor="let room of vm.rooms; let i = index; trackBy: trackByRoom"
+              [room]="room"
+              [index]="i"
+              (deleteRequested)="onDeleteRoom($event)">
+            </app-dashboard-room-card>
+          </div>
+        </ng-container>
+
+        <ng-template #emptyState>
+          <sa-dashboard-empty-state></sa-dashboard-empty-state>
+        </ng-template>
+      </section>
+    </div>
+  </div>
+</section>

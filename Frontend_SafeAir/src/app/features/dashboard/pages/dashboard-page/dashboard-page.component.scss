@@ -1,0 +1,174 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(25, 59, 107, 0.38), transparent 26%),
+    linear-gradient(180deg, #171821 0%, #121321 100%);
+  color: #f3f5fb;
+}
+
+.dashboard-layout {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 200px 1fr;
+}
+
+.dashboard-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dashboard-content {
+  /* =========================
+     CONTROLES GENERALES
+     ========================= */
+  --content-max-width: 1600px;
+  --content-padding-top: 22px;
+  --content-padding-x: 1px;
+  --content-padding-bottom: 28px;
+  --content-gap: 18px;
+
+  /* NUEVOS CONTROLES */
+  --content-shift-x: 0px; /* derecha + / izquierda - */
+  --content-shift-y: 0px; /* abajo + / arriba - */
+
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin: 0 auto;
+  padding:
+    var(--content-padding-top)
+    var(--content-padding-x)
+    var(--content-padding-bottom);
+  display: flex;
+  flex-direction: column;
+  gap: var(--content-gap);
+  box-sizing: border-box;
+
+  transform: translate(var(--content-shift-x), var(--content-shift-y));
+}
+
+.metrics-grid {
+  /* =========================
+     CONTROLES METRICAS
+     ========================= */
+  --metrics-gap-x: 16px;
+  --metrics-gap-y: 12px;
+  --metrics-margin-bottom: 30px;
+  --metrics-min-width: 220px;
+
+  --metrics-shift-y: 40px; /* abajo + / arriba - */
+  --metrics-shift-x: 0px; /* derecha + / izquierda - */
+
+  /* NUEVOS CONTROLES */
+  --metrics-margin-top: 0px; /* separacion real arriba */
+  --metrics-width-scale: 1; /* no tocar si no hace falta */
+
+  display: grid;
+  grid-template-columns: repeat(4, minmax(var(--metrics-min-width), 1fr));
+  column-gap: var(--metrics-gap-x);
+  row-gap: var(--metrics-gap-y);
+  align-items: stretch;
+  margin-top: var(--metrics-margin-top);
+  margin-bottom: var(--metrics-margin-bottom);
+
+  transform: translate(var(--metrics-shift-x), var(--metrics-shift-y)) scaleX(var(--metrics-width-scale));
+  transform-origin: top center;
+}
+
+.rooms-section {
+  /* =========================
+     CONTROLES SECCION CUARTOS
+     ========================= */
+  --rooms-section-gap: 14px;
+  --rooms-section-margin-top: 70px;
+
+  /* NUEVOS CONTROLES */
+  --rooms-section-shift-x: 0px; /* derecha + / izquierda - */
+  --rooms-section-shift-y: 0px; /* abajo + / arriba - */
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--rooms-section-gap);
+  margin-top: var(--rooms-section-margin-top);
+
+  transform: translate(var(--rooms-section-shift-x), var(--rooms-section-shift-y));
+}
+
+.rooms-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  /* NUEVOS CONTROLES */
+  --rooms-header-shift-x: 0px;
+  --rooms-header-shift-y: 0px;
+
+  transform: translate(var(--rooms-header-shift-x), var(--rooms-header-shift-y));
+
+  h2 {
+    margin: 0;
+    font-size: 26px;
+    line-height: 1.1;
+    font-weight: 700;
+    color: #ffffff;
+
+    /* NUEVOS CONTROLES DEL TITULO */
+    --rooms-title-shift-x: 0px;
+    --rooms-title-shift-y: 0px;
+    --rooms-title-letter-spacing: 0px;
+
+    transform: translate(var(--rooms-title-shift-x), var(--rooms-title-shift-y));
+    letter-spacing: var(--rooms-title-letter-spacing);
+  }
+}
+
+.rooms-grid {
+  /* =========================
+     CONTROLES GRID DE CUARTOS
+     ========================= */
+  --rooms-gap: 29px;
+  --rooms-min-width: 320px;
+
+  /* NUEVOS CONTROLES */
+  --rooms-grid-shift-x: 0px; /* derecha + / izquierda - */
+  --rooms-grid-shift-y: 0px; /* abajo + / arriba - */
+
+  display: grid;
+  grid-template-columns: repeat(3, minmax(var(--rooms-min-width), 1fr));
+  gap: var(--rooms-gap);
+  align-items: start;
+
+  transform: translate(var(--rooms-grid-shift-x), var(--rooms-grid-shift-y));
+}
+
+/* Responsive */
+@media (max-width: 1500px) {
+  .rooms-grid {
+    grid-template-columns: repeat(2, minmax(var(--rooms-min-width), 1fr));
+  }
+}
+
+@media (max-width: 1200px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, minmax(var(--metrics-min-width), 1fr));
+  }
+
+  .rooms-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-content {
+    --content-padding-x: 16px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}

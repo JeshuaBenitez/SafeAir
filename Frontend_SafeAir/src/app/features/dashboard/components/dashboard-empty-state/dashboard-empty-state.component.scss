@@ -1,0 +1,56 @@
+@use 'tokens/index' as tokens;
+
+.dashboard-empty-state__title {
+  margin: 0 0 0.75rem;
+  color: tokens.$color-text-primary;
+  font-size: 1.65rem;
+  font-weight: 700;
+}
+
+.dashboard-empty-state__panel {
+  border-radius: 1rem;
+  border: 1px solid rgba(tokens.$color-border, 0.72);
+  background: rgba(tokens.$color-surface, 0.85);
+  min-height: 19.5rem;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  gap: 0.8rem;
+  padding: 1.6rem 1.2rem;
+}
+
+.dashboard-empty-state__icon {
+  width: 2.2rem;
+  height: 2.2rem;
+  opacity: 0.88;
+}
+
+.dashboard-empty-state__headline {
+  margin: 0;
+  color: tokens.$color-text-primary;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.dashboard-empty-state__copy {
+  margin: 0;
+  color: tokens.$color-text-muted;
+  max-width: 36rem;
+  font-size: 0.96rem;
+}
+
+.dashboard-empty-state__action {
+  border: 1px solid rgba(tokens.$color-accent, 0.45);
+  background: rgba(tokens.$color-accent, 0.12);
+  color: tokens.$color-accent;
+  border-radius: 0.85rem;
+  min-height: 2.65rem;
+  padding: 0 1rem;
+  font-weight: 700;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: rgba(tokens.$color-accent, 0.18);
+  }
+}

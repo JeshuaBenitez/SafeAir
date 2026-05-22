@@ -1,0 +1,151 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+.room-card {
+  border-radius: 20px;
+  overflow: hidden;
+  background: #2f3144;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.22);
+  min-height: 340px;
+  display: flex;
+  flex-direction: column;
+}
+
+.room-card__image {
+  position: relative;
+  min-height: 285px;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: flex;
+  align-items: flex-end;
+}
+
+.room-card__overlay {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.04) 52%, rgba(18, 19, 33, 0.82) 100%);
+}
+
+.room-card__status {
+  position: absolute;
+  top: 16px;
+  left: 14px;
+  z-index: 2;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #8f95bc;
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.room-card__status--active {
+  background: #38f3d0;
+  color: #0d1323;
+}
+
+.room-card__delete {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 3;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(14, 16, 30, 0.55);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  img {
+    width: 20px;
+    height: 20px;
+    opacity: 0.9;
+  }
+
+  &:hover {
+    background: rgba(236, 84, 113, 0.36);
+    border-color: rgba(236, 84, 113, 0.8);
+  }
+}
+
+.room-card__content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  padding: 18px 16px 16px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: end;
+
+  h3 {
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: 25px;
+    font-weight: 700;
+    color: #ffffff;
+  }
+}
+
+.room-card__inline-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #f6f8ff;
+    font-size: 22px;
+    font-weight: 500;
+  }
+
+  img {
+    width: 23px;
+    height: 23px;
+    object-fit: contain;
+  }
+}
+
+.room-card__arrow {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  font-size: 25px;
+  cursor: pointer;
+}
+
+.room-card__footer {
+  min-height: 56px;
+  padding: 0 16px;
+  background: #3a3b53;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: #eef2ff;
+  font-size: 16px;
+  font-weight: 600;
+}
+.room-card {
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+}

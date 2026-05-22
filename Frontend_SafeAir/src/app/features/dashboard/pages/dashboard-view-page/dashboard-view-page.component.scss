@@ -1,0 +1,122 @@
+@use 'tokens/index' as tokens;
+
+:host {
+  display: block;
+}
+
+.section-page {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 45% -12%, rgba(tokens.$color-accent, 0.08) 0%, rgba(tokens.$color-bg, 0) 48%),
+    linear-gradient(180deg, #151627 0%, #131426 100%),
+    tokens.$color-bg;
+}
+
+.section-page__sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+
+.section-page__main {
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.section-page__content {
+  padding: 1.25rem 1.45rem 1.8rem;
+  display: grid;
+  align-content: start;
+  gap: 1.15rem;
+
+  h1 {
+    margin: 0;
+    color: tokens.$color-text-primary;
+    font-size: 2.2rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  p {
+    margin: 0;
+    color: tokens.$color-text-muted;
+    font-size: 1.23rem;
+    max-width: 44rem;
+  }
+}
+
+.section-page__header {
+  display: grid;
+  gap: 0.38rem;
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    'temperature humidity'
+    'co2 pm25';
+  align-items: stretch;
+}
+
+.dashboard-grid__item {
+  min-width: 0;
+}
+
+.dashboard-grid__item--temperature {
+  grid-area: temperature;
+}
+
+.dashboard-grid__item--humidity {
+  grid-area: humidity;
+}
+
+.dashboard-grid__item--co2 {
+  grid-area: co2;
+  display: block;
+}
+
+.dashboard-grid__item--pm25 {
+  grid-area: pm25;
+  display: block;
+}
+
+.section-page__empty {
+  border-radius: 0.95rem;
+  border: 1px solid rgba(tokens.$color-border, 0.7);
+  background: rgba(#202233, 0.82);
+  padding: 1rem;
+
+  h2 {
+    margin: 0 0 0.35rem;
+    color: tokens.$color-text-primary;
+    font-size: 1.1rem;
+  }
+
+  p {
+    margin: 0;
+    color: tokens.$color-text-muted;
+  }
+}
+
+@media (max-width: 1024px) {
+  .section-page {
+    grid-template-columns: 1fr;
+  }
+
+  .section-page__sidebar {
+    position: static;
+  }
+
+  .dashboard-grid {
+    grid-template-areas:
+      'temperature'
+      'humidity'
+      'co2'
+      'pm25';
+    grid-template-columns: 1fr;
+  }
+}

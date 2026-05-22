@@ -1,0 +1,10 @@
+<section class="auth-card" aria-label="Authentication card">
+  <header class="auth-card__header" *ngIf="title || subtitle">
+    <h1 class="auth-card__title">{{ title }}</h1>
+    <p *ngIf="subtitle" class="auth-card__subtitle">{{ subtitle }}</p>
+  </header>
+
+  <section class="auth-card__body">
+    <ng-content></ng-content>
+  </section>
+</section>

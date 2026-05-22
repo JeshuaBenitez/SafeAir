@@ -1,0 +1,158 @@
+<section class="section-page" *ngIf="viewModel$ | async as vm">
+  <sa-dashboard-sidebar class="section-page__sidebar" [user]="vm.user" />
+
+  <section class="section-page__main">
+    <sa-dashboard-topbar
+  [locationLabel]="'Configuración'"
+  [breadcrumbRoot]="'Configuración'"
+  [breadcrumbCurrent]="'Perfil y acceso'">
+</sa-dashboard-topbar>
+
+    <section class="section-page__content settings-page">
+      <header class="settings-page__header">
+        <div>
+          <p class="settings-page__eyebrow">Perfil de usuario</p>
+          <h1>Configuración</h1>
+          <p>Administra tu información personal, foto de perfil y acceso a la cuenta.</p>
+        </div>
+      </header>
+
+      <section class="settings-layout">
+        <aside class="settings-profile-card">
+          <div class="settings-profile-card__glow"></div>
+
+          <div class="settings-profile-card__avatar">
+            <img
+              [src]="profilePreviewUrl || defaultProfileImage"
+              alt="Foto de perfil"
+            />
+          </div>
+
+          <div class="settings-profile-card__info">
+            <h2>Admin</h2>
+            <p>Cuenta conectada</p>
+          </div>
+
+          <label class="settings-profile-card__upload">
+            <span>Cambiar foto</span>
+            <input type="file" accept="image/*" (change)="onPhotoSelected($event)" />
+          </label>
+
+          <p class="settings-profile-card__hint">
+            Puedes usar imágenes JPG, PNG o WEBP.
+          </p>
+        </aside>
+
+        <form class="settings-form-card" [formGroup]="form" (ngSubmit)="onSave()" novalidate>
+          <div class="settings-form-card__header">
+            <div>
+              <h2>Datos personales</h2>
+              <p>Actualiza la información visible de tu perfil.</p>
+            </div>
+          </div>
+
+          <div class="settings-form">
+            <label class="settings-field">
+              <span>Nombre</span>
+              <input
+                type="text"
+                formControlName="firstName"
+                placeholder="Escribe tu nombre"
+              />
+            </label>
+
+            <label class="settings-field">
+              <span>Apellidos</span>
+              <input
+                type="text"
+                formControlName="lastName"
+                placeholder="Escribe tus apellidos"
+              />
+            </label>
+
+            <label class="settings-field settings-field--full">
+              <span>Correo electrónico</span>
+              <input
+                type="email"
+                formControlName="email"
+                placeholder="correo@safeair.io"
+              />
+            </label>
+
+            <label class="settings-field">
+  <span>Contraseña nueva</span>
+
+  <div class="settings-password-field">
+    <input
+      [type]="showNewPassword ? 'text' : 'password'"
+      formControlName="newPassword"
+      placeholder="••••••••"
+    />
+
+    <button
+      class="settings-password-field__toggle"
+      type="button"
+      [attr.aria-label]="showNewPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+      (click)="toggleNewPasswordVisibility()"
+    >
+      <img
+        [src]="showNewPassword ? 'assets/icons/ojocerrado.png' : 'assets/icons/ojo.png'"
+        alt=""
+        aria-hidden="true"
+      />
+    </button>
+  </div>
+</label>
+
+<label class="settings-field">
+  <span>Confirmar contraseña</span>
+
+  <div class="settings-password-field">
+    <input
+      [type]="showConfirmPassword ? 'text' : 'password'"
+      formControlName="confirmPassword"
+      placeholder="••••••••"
+    />
+
+    <button
+      class="settings-password-field__toggle"
+      type="button"
+      [attr.aria-label]="showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+      (click)="toggleConfirmPasswordVisibility()"
+    >
+      <img
+        [src]="showConfirmPassword ? 'assets/icons/ojocerrado.png' : 'assets/icons/ojo.png'"
+        alt=""
+        aria-hidden="true"
+      />
+    </button>
+  </div>
+</label>
+          </div>
+
+          <div class="settings-feedback" *ngIf="saveError || saveMessage">
+            <p class="settings-feedback__error" *ngIf="saveError">{{ saveError }}</p>
+            <p class="settings-feedback__success" *ngIf="saveMessage">{{ saveMessage }}</p>
+          </div>
+
+          <div class="settings-form-card__actions">
+            <button class="settings-save-button" type="submit">
+              Guardar cambios
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section class="settings-danger-zone">
+        <div>
+          <h2>Cerrar sesión</h2>
+          <p>Finaliza tu sesión actual y vuelve a la pantalla de acceso.</p>
+        </div>
+
+        <button type="button" class="settings-logout-button" (click)="onLogout()">
+          Cerrar sesión
+        </button>
+      </section>
+    </section>
+  </section>
+</section>

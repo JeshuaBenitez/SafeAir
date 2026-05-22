@@ -1,0 +1,803 @@
+@use 'tokens/index' as tokens;
+
+:host {
+  display: block;
+}
+
+.section-page {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  background:
+    radial-gradient(circle at 52% -18%, rgba(#31ddff, 0.12) 0%, transparent 36%),
+    radial-gradient(circle at 100% 8%, rgba(tokens.$color-accent, 0.08) 0%, transparent 25%),
+    linear-gradient(180deg, #101629 0%, #101223 48%, #0d1020 100%);
+  color: tokens.$color-text-primary;
+}
+
+.section-page__sidebar {
+  position: sticky;
+  top: 0;
+  align-self: start;
+}
+
+.section-page__main {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+}
+
+.rooms-config {
+  /* =========================
+     CONTROLES GENERALES
+     ========================= */
+  --page-max-width: none;
+  --page-padding-top: 0.35rem;
+  --page-padding-x: 2.55rem;
+  --page-padding-bottom: 2rem;
+  --page-gap: 1rem;
+
+  width: 100%;
+  max-width: var(--page-max-width);
+  padding:
+    var(--page-padding-top)
+    var(--page-padding-x)
+    var(--page-padding-bottom);
+  display: grid;
+  align-content: start;
+  gap: var(--page-gap);
+  box-sizing: border-box;
+}
+
+.rooms-config__header {
+  display: grid;
+  gap: 0.18rem;
+
+  h1 {
+    margin: 0;
+    color: #f4f8ff;
+    font-size: clamp(2.25rem, 3vw, 3.05rem);
+    font-weight: 850;
+    letter-spacing: -0.025em;
+    text-shadow: 0 14px 35px rgba(0, 0, 0, 0.28);
+  }
+
+  p {
+    margin: 0;
+    color: #aeb9d3;
+    font-size: 1rem;
+    font-weight: 500;
+  }
+}
+
+/* =========================
+   RESUMEN / PROGRESO
+   ========================= */
+.rooms-config__summary {
+  min-height: 5rem;
+  border-radius: 1rem;
+  border: 1px solid rgba(#5b6b98, 0.38);
+  background:
+    radial-gradient(circle at 4% 50%, rgba(tokens.$color-accent, 0.22), transparent 11%),
+    linear-gradient(180deg, rgba(#17243c, 0.92) 0%, rgba(#11182c, 0.92) 100%);
+  box-shadow:
+    0 18px 38px rgba(4, 8, 18, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(18rem, 0.46fr);
+  align-items: center;
+  gap: 1.1rem;
+  padding: 0.85rem 1.45rem;
+}
+
+.rooms-config__summary-icon,
+.rooms-config__panel-icon,
+.rooms-config__existing-icon,
+.rooms-config__room-icon {
+  display: inline-grid;
+  place-items: center;
+  color: tokens.$color-accent;
+
+  svg {
+    width: 100%;
+    height: 100%;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}
+
+.rooms-config__summary-icon {
+  width: 3.45rem;
+  height: 3.45rem;
+  border-radius: 50%;
+  border: 1px solid rgba(tokens.$color-accent, 0.28);
+  background:
+    radial-gradient(circle, rgba(tokens.$color-accent, 0.22), rgba(tokens.$color-accent, 0.06) 64%, transparent);
+  box-shadow:
+    0 0 0 8px rgba(tokens.$color-accent, 0.04),
+    0 0 28px rgba(tokens.$color-accent, 0.16);
+}
+
+.rooms-config__summary-copy {
+  display: grid;
+  gap: 0.22rem;
+
+  strong {
+    color: #f5f8ff;
+    font-size: 1.18rem;
+    font-weight: 850;
+  }
+
+  span {
+    color: #aeb9d3;
+    font-size: 0.88rem;
+  }
+}
+
+.rooms-config__progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1.15rem;
+
+  strong {
+    color: tokens.$color-accent;
+    font-size: 1.18rem;
+    font-weight: 850;
+  }
+}
+
+.rooms-config__progress-track {
+  height: 0.62rem;
+  border-radius: 99rem;
+  background: rgba(#4a5575, 0.35);
+  overflow: hidden;
+}
+
+.rooms-config__progress-fill {
+  display: block;
+  height: 100%;
+  min-width: 0.35rem;
+  max-width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4bf7e9 0%, #33d9ff 100%);
+  box-shadow: 0 0 18px rgba(#35e9f2, 0.38);
+}
+
+.rooms-config__limit-warning {
+  margin: 0;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(#ffc96a, 0.5);
+  background: rgba(#ffc96a, 0.12);
+  color: #ffe2a8;
+  padding: 0.72rem 0.9rem;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+/* =========================
+   GRID FORMULARIO
+   ========================= */
+.rooms-config__grid {
+  display: grid;
+  gap: 0.95rem;
+  grid-template-columns: minmax(24rem, 0.72fr) minmax(0, 1.55fr);
+  width: 100%;
+}
+
+.rooms-config__panel {
+  border-radius: 1rem;
+  border: 1px solid rgba(#526081, 0.42);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(#42d9ff, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(#162137, 0.96) 0%, rgba(#12182d, 0.98) 100%);
+  box-shadow:
+    0 18px 42px rgba(4, 8, 18, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 1.35rem 1.45rem;
+}
+
+.rooms-config__panel-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.95rem;
+  margin-bottom: 1.35rem;
+
+  h2 {
+    margin: 0;
+    color: #f4f8ff;
+    font-size: 1.08rem;
+    font-weight: 850;
+  }
+
+  p {
+    margin: 0.24rem 0 0;
+    color: #aab5ce;
+    font-size: 0.84rem;
+  }
+}
+
+.rooms-config__panel-heading--actuators {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.rooms-config__panel-icon {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 0.75rem;
+  background: rgba(tokens.$color-accent, 0.12);
+  border: 1px solid rgba(tokens.$color-accent, 0.2);
+  box-shadow: 0 0 18px rgba(tokens.$color-accent, 0.1);
+
+  svg {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+}
+
+/* =========================
+   CAMPOS
+   ========================= */
+.rooms-config__field {
+  display: grid;
+  gap: 0.48rem;
+  margin-bottom: 1rem;
+
+  span {
+    color: #c4cee5;
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+}
+
+.rooms-config__input {
+  width: 100%;
+  min-height: 3rem;
+  border-radius: 0.78rem;
+  border: 1px solid rgba(#5c6a91, 0.5);
+  background: rgba(#0b1122, 0.72);
+  color: #eef4ff;
+  padding: 0 1rem;
+  font-size: 1rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+
+  &::placeholder {
+    color: #8994ae;
+  }
+
+  &:focus-visible {
+    outline: none;
+    border-color: rgba(tokens.$color-accent, 0.72);
+    box-shadow:
+      0 0 0 3px rgba(tokens.$color-accent, 0.13),
+      inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  }
+}
+
+.rooms-config__error {
+  margin: 0;
+  color: #ff9ea8;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+/* =========================
+   AREA
+   ========================= */
+.rooms-config__area-block {
+  display: grid;
+  gap: 0.52rem;
+  margin: 1.18rem 0 1.25rem;
+}
+
+.rooms-config__area-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+
+  span {
+    color: #c4cee5;
+    font-size: 0.82rem;
+    font-weight: 800;
+  }
+
+  strong {
+    min-width: 6.7rem;
+    min-height: 3rem;
+    padding: 0 1rem;
+    border-radius: 0.8rem;
+    border: 1px solid rgba(#5c6a91, 0.48);
+    background: rgba(#11182b, 0.78);
+    color: #f4f8ff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.22rem;
+    font-size: 1.72rem;
+    font-weight: 900;
+
+    small {
+      font-size: 0.95rem;
+      color: #c7d1e8;
+      font-weight: 800;
+    }
+  }
+}
+
+.rooms-config__slider {
+  width: 100%;
+  height: 0.45rem;
+  appearance: none;
+  border-radius: 99rem;
+  outline: none;
+  background:
+    linear-gradient(
+      90deg,
+      tokens.$color-accent 0%,
+      tokens.$color-accent var(--area-progress, 50%),
+      rgba(#5d6685, 0.58) var(--area-progress, 50%),
+      rgba(#5d6685, 0.58) 100%
+    );
+  accent-color: tokens.$color-accent;
+  cursor: pointer;
+
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #77fff3, #34d8e6);
+    box-shadow:
+      0 0 0 4px rgba(tokens.$color-accent, 0.12),
+      0 0 18px rgba(tokens.$color-accent, 0.38);
+  }
+
+  &::-moz-range-thumb {
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 0;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #77fff3, #34d8e6);
+    box-shadow:
+      0 0 0 4px rgba(tokens.$color-accent, 0.12),
+      0 0 18px rgba(tokens.$color-accent, 0.38);
+  }
+}
+
+.rooms-config__ticks {
+  display: flex;
+  justify-content: space-between;
+  color: #8e9ab6;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+/* =========================
+   VENTANAS
+   ========================= */
+.rooms-config__windows {
+  display: grid;
+  gap: 0.58rem;
+}
+
+.rooms-config__windows-label {
+  color: #c4cee5;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.rooms-config__stepper {
+  min-height: 3.25rem;
+  border-radius: 0.78rem;
+  border: 1px solid rgba(#5c6a91, 0.5);
+  background: rgba(#0b1122, 0.72);
+  display: grid;
+  grid-template-columns: 3.65rem 1fr 3.65rem;
+  align-items: center;
+  overflow: hidden;
+
+  button {
+    min-height: 3.25rem;
+    border: 0;
+    background: rgba(#25304a, 0.45);
+    color: #d8e2f7;
+    font-size: 1.7rem;
+    cursor: pointer;
+    transition:
+      background-color 0.18s ease,
+      color 0.18s ease;
+
+    &:hover {
+      background: rgba(tokens.$color-accent, 0.14);
+      color: tokens.$color-accent;
+    }
+  }
+
+  strong {
+    text-align: center;
+    color: #f4f8ff;
+    font-size: 1.65rem;
+    letter-spacing: 0.04em;
+    font-weight: 900;
+  }
+}
+
+.rooms-config__windows p {
+  margin: 0;
+  color: #91a0bf;
+  font-size: 0.8rem;
+}
+
+/* =========================
+   ACTUADORES
+   ========================= */
+.rooms-config__slots {
+  border-radius: 99rem;
+  border: 1px solid rgba(tokens.$color-accent, 0.38);
+  background: rgba(tokens.$color-accent, 0.08);
+  color: #d7fff8;
+  min-height: 2.2rem;
+  padding: 0 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 850;
+  white-space: nowrap;
+
+  span {
+    width: 0.42rem;
+    height: 0.42rem;
+    border-radius: 50%;
+    background: tokens.$color-accent;
+    box-shadow: 0 0 12px rgba(tokens.$color-accent, 0.55);
+  }
+}
+
+.rooms-config__actuators-grid {
+  display: grid;
+  gap: 0.85rem;
+  grid-template-columns: repeat(3, minmax(13rem, 1fr));
+  align-items: stretch;
+  width: 100%;
+}
+
+/*
+  Estos ::ng-deep son para empujar visualmente el componente hijo
+  sa-room-actuator-card hacia el estilo de la referencia sin tocar todavía
+  su archivo interno.
+*/
+.rooms-config__actuators-grid ::ng-deep sa-room-actuator-card {
+  display: block;
+  min-width: 0;
+  height: 100%;
+}
+
+.rooms-config__actuators-grid ::ng-deep article,
+.rooms-config__actuators-grid ::ng-deep .room-actuator-card,
+.rooms-config__actuators-grid ::ng-deep .actuator-card {
+  min-height: 15.4rem;
+  border-radius: 1rem !important;
+  border: 1px solid rgba(tokens.$color-accent, 0.48) !important;
+  background:
+    radial-gradient(circle at 18% 15%, rgba(#6f8dff, 0.12), transparent 22%),
+    linear-gradient(180deg, rgba(#16243d, 0.9), rgba(#10182d, 0.96)) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.035),
+    0 16px 30px rgba(4, 8, 18, 0.25) !important;
+}
+
+/* =========================
+   VALIDACIÓN Y BOTÓN
+   ========================= */
+.rooms-config__validation {
+  border-radius: 0.8rem;
+  border: 1px solid rgba(#ff9ea8, 0.42);
+  background: rgba(#ff9ea8, 0.08);
+  color: #ffd3d8;
+  padding: 0.72rem 0.85rem;
+
+  p {
+    margin: 0;
+    font-size: 0.8rem;
+    font-weight: 750;
+  }
+
+  ul {
+    margin: 0.35rem 0 0;
+    padding-left: 1rem;
+    font-size: 0.76rem;
+    display: grid;
+    gap: 0.18rem;
+  }
+}
+
+.rooms-config__actions {
+  /* =========================
+     CONTROLES BOTON GUARDAR
+     ========================= */
+  --save-button-shift-x: 12px;   /* derecha + / izquierda - */
+  --save-button-shift-y: 12px;  /* abajo + / arriba - */
+  --save-button-width: 20rem;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.65rem;
+}
+
+.rooms-config__save {
+  min-width: 15.3rem;
+  min-height: 3.15rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(tokens.$color-accent, 0.55);
+  background: linear-gradient(180deg, #5cf7f0 0%, #28d9ef 100%);
+  color: #071426;
+  font-size: 1rem;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow:
+    0 14px 25px rgba(tokens.$color-accent, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    opacity 0.18s ease;
+
+  span {
+    width: 1.25rem;
+    height: 1.25rem;
+    display: inline-flex;
+
+    svg {
+      width: 100%;
+      height: 100%;
+      stroke: currentColor;
+      stroke-width: 1.9;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+  }
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow:
+      0 18px 32px rgba(tokens.$color-accent, 0.26),
+      inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+/* =========================
+   HABITACIONES CREADAS
+   ========================= */
+.rooms-config__existing {
+  border-radius: 1rem;
+  border: 1px solid rgba(#526081, 0.42);
+  background:
+    radial-gradient(circle at 0% 0%, rgba(tokens.$color-accent, 0.1), transparent 20%),
+    linear-gradient(180deg, rgba(#152138, 0.94), rgba(#0f1629, 0.98));
+  box-shadow:
+    0 18px 42px rgba(4, 8, 18, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  padding: 1rem;
+}
+
+.rooms-config__existing-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 0.9rem;
+
+  h3 {
+    margin: 0;
+    color: #f4f8ff;
+    font-size: 1.05rem;
+    font-weight: 850;
+  }
+
+  p {
+    margin: 0.16rem 0 0;
+    color: #aab5ce;
+    font-size: 0.82rem;
+  }
+}
+
+.rooms-config__existing-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.65rem;
+  background: rgba(tokens.$color-accent, 0.1);
+  border: 1px solid rgba(tokens.$color-accent, 0.18);
+
+  svg {
+    width: 1.25rem;
+    height: 1.25rem;
+  }
+}
+
+.rooms-config__table {
+  border-radius: 0.85rem;
+  overflow: hidden;
+  border: 1px solid rgba(#526081, 0.25);
+  background: rgba(#0b1122, 0.38);
+}
+
+.rooms-config__table-head,
+.rooms-config__table-row {
+  display: grid;
+  grid-template-columns: 1.25fr 2.3fr 0.7fr 0.9fr 2rem;
+  align-items: center;
+  gap: 1rem;
+}
+
+.rooms-config__table-head {
+  min-height: 2.4rem;
+  padding: 0 1rem;
+  background: rgba(#0b1122, 0.48);
+  color: #b6c0d8;
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rooms-config__table-row {
+  min-height: 3.75rem;
+  padding: 0 1rem;
+  border-top: 1px solid rgba(#526081, 0.22);
+  color: #c4cee5;
+}
+
+.rooms-config__room-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+
+  strong {
+    color: #f2f6ff;
+    font-size: 0.98rem;
+    font-weight: 850;
+  }
+}
+
+.rooms-config__room-icon {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: rgba(tokens.$color-accent, 0.14);
+  border: 1px solid rgba(tokens.$color-accent, 0.18);
+
+  svg {
+    width: 1.08rem;
+    height: 1.08rem;
+  }
+}
+
+.rooms-config__room-id {
+  min-width: 0;
+  overflow: hidden;
+  color: #a9b4cf;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.rooms-config__pill {
+  width: fit-content;
+  border-radius: 999px;
+  background: rgba(#4d597b, 0.35);
+  border: 1px solid rgba(#667497, 0.25);
+  color: #d9e2f7;
+  padding: 0.45rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.rooms-config__row-action {
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #e7eefc;
+  font-size: 1.55rem;
+  cursor: pointer;
+
+  &:hover {
+    color: tokens.$color-accent;
+    background: rgba(tokens.$color-accent, 0.08);
+  }
+}
+
+/* =========================
+   RESPONSIVE
+   ========================= */
+@media (max-width: 1180px) {
+  .rooms-config {
+    --page-padding-x: 1.15rem;
+  }
+
+  .rooms-config__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rooms-config__summary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .rooms-config__progress {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1024px) {
+  .section-page {
+    grid-template-columns: 1fr;
+  }
+
+  .section-page__sidebar {
+    position: static;
+  }
+
+  .rooms-config__actuators-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rooms-config__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .rooms-config__save {
+    width: 100%;
+  }
+
+  .rooms-config__table-head {
+    display: none;
+  }
+
+  .rooms-config__table-row {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+    padding: 0.85rem;
+  }
+
+  .rooms-config__row-action {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .rooms-config {
+    --page-padding-x: 0.85rem;
+    --page-padding-y: 1rem;
+  }
+
+  .rooms-config__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .rooms-config__panel-heading,
+  .rooms-config__panel-heading--actuators {
+    grid-template-columns: 1fr;
+  }
+
+  .rooms-config__slots {
+    width: fit-content;
+  }
+}
