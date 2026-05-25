@@ -1,16 +1,16 @@
 # SafeAir
 
-SafeAir is a multi-service system for emulator telemetry, room control, and monitoring.
-This repo contains two apps:
+SafeAir es un sistema multi-servicio para telemetria de emuladores, control de salas y monitoreo.
+Este repo contiene dos apps:
 
-- Api_Emuladores: Node.js/Express API with PostgreSQL and MQTT.
-- Frontend_SafeAir: Angular frontend.
+- Api_Emuladores: API Node.js/Express con PostgreSQL y MQTT.
+- Frontend_SafeAir: frontend Angular.
 
-## Project goal
-Provide a reliable local and multi-device environment for SafeAir emulator integration,
-with clear contracts and repeatable setup.
+## Objetivo del proyecto
+Proveer un entorno local y multi-dispositivo confiable para la integracion de emuladores SafeAir,
+con contratos claros y setup repetible.
 
-## Quick start (local)
+## Inicio rapido (local)
 
 Backend:
 - cd Api_Emuladores
@@ -29,48 +29,48 @@ Health check:
 - http://localhost:3000/health
 - http://localhost:4200/auth/login
 
-## Docker (optional)
+## Docker (opcional)
 - docker compose up -d --build
 - http://localhost:3000/health
 - http://localhost:8080/auth/login
 
-## Multi-device setup (network)
+## Setup multi-dispositivo (red)
 
-Devices:
-- DB host (Postgres)
-- API host (Backend)
-- MQTT host (broker)
-- Frontend hosts (1 or more)
+Dispositivos:
+- Host DB (Postgres)
+- Host API (Backend)
+- Host MQTT (broker)
+- Hosts Frontend (1 o mas)
 
-DB host:
+Host DB:
 - cd Api_Emuladores/database
 - docker compose up -d
-- Open port 6543
+- Abrir puerto 6543
 
-MQTT host:
+Host MQTT:
 - docker run -d --name safeair-mqtt -p 1883:1883 eclipse-mosquitto:2
-- Open port 1883 (and 8083 if using WebSocket)
+- Abrir puerto 1883 (y 8083 si se usa WebSocket)
 
-API host (.env):
+Host API (.env):
 - DB_HOST=DB_HOST_IP
 - DB_PORT=6543
 - MQTT_URL=mqtt://MQTT_HOST_IP:1883
 - BACKEND_BIND_HOST=0.0.0.0
 - BACKEND_PORT=3000
 
-Start API:
+Iniciar API:
 - cd Api_Emuladores
 - npm run dev
-- Open port 3000
+- Abrir puerto 3000
 
-Frontend host (environment.ts):
+Host Frontend (environment.ts):
 - API_BASE_URL=http://API_HOST_IP:3000
 - MQTT_BROKER_URL=ws://MQTT_HOST_IP:1883/mqtt
 
-Start Frontend:
+Iniciar Frontend:
 - cd Frontend_SafeAir
 - npm start -- --host 0.0.0.0 --port 4200
-- Open port 4200
+- Abrir puerto 4200
 
 Checks:
 - http://API_HOST_IP:3000/health
@@ -81,5 +81,5 @@ Checks:
 - Backend: npm run typecheck
 
 ## Docs
-Feature specs and contracts:
+Specs y contratos:
 - specs/001-safeair-integration/
