@@ -124,6 +124,20 @@ class MqttGateway {
     });
   }
 
+  async disconnect(): Promise<void> {
+    if (!this.client) {
+      return;
+    }
+
+    const client = this.client;
+    this.client = null;
+    this.connectPromise = null;
+
+    await new Promise<void>((resolve) => {
+      client.end(false, {}, () => resolve());
+    });
+  }
+
   private registerClientListeners(client: MqttClient): void {
     client.on("connect", () => {
       this.connectCount += 1;

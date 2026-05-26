@@ -12,6 +12,13 @@ con contratos claros y setup repetible.
 
 ## Inicio rapido (local)
 
+### Opcion A: Docker (recomendado)
+- docker compose up -d --build
+- http://localhost:3000/health
+- http://localhost:8080/auth/login
+
+### Opcion B: Sin Docker
+
 Backend:
 - cd Api_Emuladores
 - npm install
@@ -29,12 +36,21 @@ Health check:
 - http://localhost:3000/health
 - http://localhost:4200/auth/login
 
-## Docker (opcional)
-- docker compose up -d --build
-- http://localhost:3000/health
-- http://localhost:8080/auth/login
-
 ## Setup multi-dispositivo (red)
+
+### Opcion A: Docker (1 host + 3 dispositivos clientes)
+Recomendado cuando todo corre en una sola laptop con Docker y los otros
+dispositivos solo abren el frontend.
+
+En el host con Docker:
+- docker compose up -d --build
+- Abrir puertos 8080, 3000, 1883 y 6543
+
+En los dispositivos cliente:
+- http://IP_DEL_HOST:8080
+- http://IP_DEL_HOST:3000/health
+
+### Opcion B: Servicios distribuidos (4 dispositivos)
 
 Dispositivos:
 - Host DB (Postgres)
@@ -75,6 +91,12 @@ Iniciar Frontend:
 Checks:
 - http://API_HOST_IP:3000/health
 - http://FRONTEND_HOST_IP:4200/auth/login
+
+## Troubleshooting
+- Si `npm ci` falla en Docker por lockfile fuera de sync: ejecutar
+	`cd Frontend_SafeAir && npm install`.
+- Si hay conflicto de nombre con `safeair-mqtt` o `safeair-postgres`:
+	`docker rm -f safeair-mqtt safeair-postgres`.
 
 ## Tests
 - Frontend: npm test, npm run test:e2e

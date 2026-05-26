@@ -22,6 +22,17 @@ const error: LogFn = (message, payload) => {
   console.error(`[ERROR] ${message}`);
 };
 
+const warn: LogFn = (message, payload) => {
+  if (payload !== undefined) {
+    // eslint-disable-next-line no-console
+    console.warn(`[WARN] ${message}`, payload);
+    return;
+  }
+
+  // eslint-disable-next-line no-console
+  console.warn(`[WARN] ${message}`);
+};
+
 const debug: LogFn = (message, payload) => {
   if (payload !== undefined) {
     // eslint-disable-next-line no-console
@@ -36,5 +47,6 @@ const debug: LogFn = (message, payload) => {
 export const logger = {
   info,
   error,
-  debug
+  debug,
+  warn
 };

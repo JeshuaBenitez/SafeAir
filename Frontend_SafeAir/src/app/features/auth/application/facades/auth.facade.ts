@@ -78,4 +78,14 @@ export class AuthFacade {
 
     return false;
   }
+
+  logout(): void {
+    this.authSessionStorage.clearSession();
+
+    if (environment.features.jwtInterceptor) {
+      this.apiClient.setAuthToken(null);
+    }
+
+    this.loginViewStateSubject.next(initialLoginViewState);
+  }
 }

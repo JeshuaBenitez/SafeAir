@@ -4,6 +4,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { Router } from '@angular/router';
 
 import { DashboardFacade } from '@features/dashboard/application/facades/dashboard.facade';
+import { AuthFacade } from '@features/auth/application/facades/auth.facade';
 import { DashboardSidebarComponent } from '@features/dashboard/components/dashboard-sidebar/dashboard-sidebar.component';
 import { DashboardTopbarComponent } from '@features/dashboard/components/dashboard-topbar/dashboard-topbar.component';
 
@@ -57,6 +58,7 @@ export class SettingsPageComponent implements OnDestroy {
 
   constructor(
     private readonly dashboardFacade: DashboardFacade,
+    private readonly authFacade: AuthFacade,
     private readonly router: Router,
   ) {}
 
@@ -123,6 +125,7 @@ export class SettingsPageComponent implements OnDestroy {
   }
 
   onLogout(): void {
+    this.authFacade.logout();
     void this.router.navigateByUrl('/auth/login');
   }
 
