@@ -44,6 +44,8 @@ export class DashboardViewPageComponent {
     private readonly dashboardFacade: DashboardFacade,
     private readonly environmentMockState: DashboardEnvironmentMockService,
   ) {
+    this.dashboardFacade.refreshRooms();
+
     this.viewModel$
       .pipe(
         map((vm) => vm.rooms),

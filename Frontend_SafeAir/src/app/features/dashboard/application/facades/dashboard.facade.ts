@@ -15,21 +15,34 @@ import {
   MAX_ROOMS_PER_DASHBOARD,
   RemoveRoomResult,
 } from '@features/dashboard/application/services/dashboard-mock-state.service';
+import { AuthSessionStorageService } from '@features/auth/application/services/auth-session-storage.service';
 
 @Injectable({ providedIn: 'root' })
 export class DashboardFacade {
   readonly maxRoomsPerDashboard = MAX_ROOMS_PER_DASHBOARD;
 
   readonly viewModel$ = this.dashboardMockState.rooms$.pipe(
-    map((rooms): DashboardViewModel => ({
-      locationLabel: DASHBOARD_MOCK_LOCATION,
-      user: DASHBOARD_MOCK_USER,
-      metrics: this.computeMetrics(rooms),
-      rooms,
-    })),
+    map((rooms): DashboardViewModel => {
+      const session = this.authSessionStorage.getSession();
+      const displayName = session?.displayName || 'Usuario';
+      return {
+        locationLabel: DASHBOARD_MOCK_LOCATION,
+        user: {
+          displayName,
+          statusLabel: 'CONECTADO',
+        },
+        metrics: this.computeMetrics(rooms),
+        rooms,
+      };
+    }),
   );
 
-  constructor(private readonly dashboardMockState: DashboardMockStateService) {}
+  constructor(
+    private readonly dashboardMockState: DashboardMockStateService,
+    private readonly authSessionStorage: AuthSessionStorageService,
+  ) {
+    this.dashboardMockState.refreshRooms();
+  }
 
   addRoom(draft: CreateRoomDraft): AddRoomResult {
     return this.dashboardMockState.addRoom(draft);
@@ -41,6 +54,10 @@ export class DashboardFacade {
 
   hasRoomCapacity(): boolean {
     return this.dashboardMockState.hasRoomCapacity();
+  }
+
+  refreshRooms(): void {
+    this.dashboardMockState.refreshRooms();
   }
 
   private computeMetrics(rooms: readonly DashboardRoom[]): DashboardMetrics {

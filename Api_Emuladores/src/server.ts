@@ -2,18 +2,27 @@ import { createApp } from "./app";
 import { env } from "./shared/config/env";
 import { logger } from "./shared/config/logger";
 import { connectDatabase, closeDatabase } from "./infrastructure/database/sequelize";
-import { initModelAssociations } from "./infrastructure/database/models";
+import { initModelAssociations, UserModel } from "./infrastructure/database/models";
 import { syncModels } from "./infrastructure/database/sync";
 import { mqttGateway } from "./infrastructure/mqtt/mqtt.gateway";
 import { container } from "./application/container";
 import { mapTelemetryPayload } from "./infrastructure/mappers/telemetry.mapper";
 import { mapActuatorStatePayload } from "./infrastructure/mappers/actuator-state.mapper";
+import { runDatabaseSeed } from "./infrastructure/database/seeders/seed-fn";
 
 export async function startServer(): Promise<void> {
   try {
     await connectDatabase();
     initModelAssociations();
     await syncModels();
+
+    // Auto-seed si la base de datos no tiene usuarios
+    const userCount = await UserModel.count();
+    if (userCount === 0) {
+      logger.info("Database is empty. Running automatic seed...");
+      await runDatabaseSeed();
+      logger.info("Automatic seed completed successfully");
+    }
 
     mqttGateway.onTelemetry(async (message) => {
       try {

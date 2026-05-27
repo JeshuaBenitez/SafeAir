@@ -1,6 +1,8 @@
 import { AuthRepositoryPort } from '@features/auth/domain/ports/auth-repository.port';
 import { AuthCredentials } from '@features/auth/domain/models/auth-credentials.model';
 import { LoginResult } from '@features/auth/domain/models/login-result.model';
+import { RegisterDraft } from '@features/auth/domain/models/register-draft.model';
+import { AuthError } from '@features/auth/domain/models/auth-error.model';
 import { ApiClientPort, ApiClientError } from '@core/http/api-client.port';
 import { LoginResponseDto } from '../dto/login-response.dto';
 
@@ -54,6 +56,35 @@ export class AuthApiRepositoryAdapter implements AuthRepositoryPort {
   }
 
   /**
+   * Register a new user account
+   * 
+   * @param draft - User registration draft data
+   * @returns Promise with ok and optional error
+   */
+  async register(draft: RegisterDraft): Promise<{ ok: boolean; error?: AuthError }> {
+    try {
+      await this.apiClient.post<any, any>(
+        '/api/v1/auth/register',
+        {
+          firstName: draft.fullName,
+          lastName: draft.lastName,
+          email: draft.email,
+          password: draft.password,
+          confirmPassword: draft.confirmPassword,
+        }
+      );
+
+      console.debug('[Auth] Registration successful', { email: draft.email });
+
+      return {
+        ok: true,
+      };
+    } catch (error) {
+      return this.handleRegisterError(error);
+    }
+  }
+
+  /**
    * Map API errors to domain LoginResult errors
    * 
    * @param error - Error from API client
@@ -96,6 +127,47 @@ export class AuthApiRepositoryAdapter implements AuthRepositoryPort {
 
     // Network errors or unknown
     console.error('[Auth] Unexpected login error', error);
+    return {
+      ok: false,
+      error: networkError(),
+    };
+  }
+
+  /**
+   * Map API errors to domain registration errors
+   * 
+   * @param error - Error from API client
+   * @returns Registration error result
+   */
+  private handleRegisterError(error: any): { ok: boolean; error: AuthError } {
+    if (error instanceof Object && 'status' in error) {
+      const apiError = error as ApiClientError;
+
+      console.error('[Auth] Register error', apiError);
+
+      if (apiError.status === 409) {
+        return {
+          ok: false,
+          error: {
+            code: 'EMAIL_ALREADY_EXISTS',
+            message: 'El correo electronico ya esta registrado.',
+            recoverable: true,
+          },
+        };
+      }
+
+      if (apiError.status >= 400) {
+        return {
+          ok: false,
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: apiError.error?.message || 'Error de validacion al registrar.',
+            recoverable: true,
+          },
+        };
+      }
+    }
+
     return {
       ok: false,
       error: networkError(),

@@ -1,6 +1,8 @@
 import { AuthRepositoryPort } from '@features/auth/domain/ports/auth-repository.port';
 import { AuthCredentials } from '@features/auth/domain/models/auth-credentials.model';
 import { LoginResult } from '@features/auth/domain/models/login-result.model';
+import { RegisterDraft } from '@features/auth/domain/models/register-draft.model';
+import { AuthError } from '@features/auth/domain/models/auth-error.model';
 
 import {
   invalidCredentialsError,
@@ -37,6 +39,27 @@ export class AuthMockRepositoryAdapter implements AuthRepositoryPort {
         accessToken: 'mock-access-token',
         expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
       }),
+    };
+  }
+
+  async register(draft: RegisterDraft): Promise<{ ok: boolean; error?: AuthError }> {
+    await new Promise((resolve) => {
+      setTimeout(resolve, SIMULATED_DELAY_MS);
+    });
+
+    if (draft.email === 'error@safeair.local') {
+      return {
+        ok: false,
+        error: {
+          code: 'EMAIL_ALREADY_EXISTS',
+          message: 'El correo electronico ya esta registrado.',
+          recoverable: true,
+        },
+      };
+    }
+
+    return {
+      ok: true,
     };
   }
 }

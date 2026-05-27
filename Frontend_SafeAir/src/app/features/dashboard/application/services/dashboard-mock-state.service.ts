@@ -5,8 +5,9 @@ import { DASHBOARD_INITIAL_ROOMS } from '@features/dashboard/data/mock/dashboard
 import { CreateRoomDraft } from '@features/dashboard/domain/models/create-room-draft.model';
 import { DashboardRoom } from '@features/dashboard/domain/models/dashboard-room.model';
 import { RoomActuatorsMap } from '@features/dashboard/domain/models/room-actuator-config.model';
+import { AuthSessionStorageService } from '@features/auth/application/services/auth-session-storage.service';
 
-const STORAGE_KEY = 'safeair.dashboard.rooms.mock';
+const STORAGE_KEY_PREFIX = 'safeair.dashboard.rooms.mock';
 export const MAX_ROOMS_PER_DASHBOARD = 3;
 
 export type AddRoomResult =
@@ -31,12 +32,16 @@ export type RemoveRoomResult =
 
 @Injectable({ providedIn: 'root' })
 export class DashboardMockStateService {
-  private readonly roomsSubject = new BehaviorSubject<readonly DashboardRoom[]>(this.loadRooms());
+  private readonly roomsSubject = new BehaviorSubject<readonly DashboardRoom[]>([]);
 
   readonly rooms$ = this.roomsSubject.asObservable();
 
+  constructor(private readonly authSessionStorage: AuthSessionStorageService) {
+    this.roomsSubject.next(this.loadRooms());
+  }
+
   getRoomCount(): number {
-    return this.roomsSubject.value.length;
+    return this.loadRooms().length;
   }
 
   hasRoomCapacity(): boolean {
@@ -44,7 +49,8 @@ export class DashboardMockStateService {
   }
 
   addRoom(draft: CreateRoomDraft): AddRoomResult {
-    if (!this.hasRoomCapacity()) {
+    const currentRooms = this.loadRooms();
+    if (currentRooms.length >= MAX_ROOMS_PER_DASHBOARD) {
       return {
         ok: false,
         reason: 'max-rooms-reached',
@@ -90,7 +96,7 @@ export class DashboardMockStateService {
       actuators,
     };
 
-    const nextRooms = [...this.roomsSubject.value, room];
+    const nextRooms = [...currentRooms, room];
     this.roomsSubject.next(nextRooms);
     this.persistRooms(nextRooms);
 
@@ -101,9 +107,10 @@ export class DashboardMockStateService {
   }
 
   removeRoom(roomId: string): RemoveRoomResult {
-    const nextRooms = this.roomsSubject.value.filter((room) => room.id !== roomId);
+    const currentRooms = this.loadRooms();
+    const nextRooms = currentRooms.filter((room) => room.id !== roomId);
 
-    if (nextRooms.length === this.roomsSubject.value.length) {
+    if (nextRooms.length === currentRooms.length) {
       return {
         ok: false,
         reason: 'room-not-found',
@@ -117,6 +124,24 @@ export class DashboardMockStateService {
       ok: true,
       roomId,
     };
+  }
+
+  refreshRooms(): void {
+    this.roomsSubject.next(this.loadRooms());
+  }
+
+  private getCurrentUserId(): string | null {
+    try {
+      const session = this.authSessionStorage.getSession();
+      return session?.userId || null;
+    } catch {
+      return null;
+    }
+  }
+
+  private getStorageKey(): string {
+    const userId = this.getCurrentUserId();
+    return userId ? `${STORAGE_KEY_PREFIX}.${userId}` : STORAGE_KEY_PREFIX;
   }
 
   private validateDraft(draft: CreateRoomDraft): 'invalid-room-data' | 'invalid-actuator-range' | null {
@@ -161,8 +186,9 @@ export class DashboardMockStateService {
     return null;
   }
 
-  private loadRooms(): readonly DashboardRoom[] {
-    const raw = localStorage.getItem(STORAGE_KEY);
+  public loadRooms(): readonly DashboardRoom[] {
+    const key = this.getStorageKey();
+    const raw = localStorage.getItem(key);
     if (!raw) {
       return DASHBOARD_INITIAL_ROOMS;
     }
@@ -180,7 +206,8 @@ export class DashboardMockStateService {
   }
 
   private persistRooms(rooms: readonly DashboardRoom[]): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(rooms));
+    const key = this.getStorageKey();
+    localStorage.setItem(key, JSON.stringify(rooms));
   }
 
   private createRoomId(): string {

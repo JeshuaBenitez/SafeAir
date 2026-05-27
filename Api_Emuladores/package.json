@@ -8,6 +8,7 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "seed": "node -r ts-node/register/transpile-only src/infrastructure/database/seeders/seed.ts",
+    "emulator": "ts-node-dev --respawn --transpile-only src/emulator.ts",
     "test:mapping": "node -r ts-node/register/transpile-only src/infrastructure/mappers/actuator-state.mapper.test.ts",
     "lint": "echo \"Add eslint config when ready\"",
     "test": "echo \"Tests not configured yet\""

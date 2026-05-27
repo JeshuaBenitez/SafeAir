@@ -18,6 +18,7 @@ export const environment = {
    * - Build-time substitution
    * - Runtime injection (e.g., from index.html or config server)
    */
+  // IMPORTANTE: Si estás ejecutando en red (ejercicio multi-laptop), cambia 'localhost' por la IP de la laptop que corre la API (ej: 'http://192.168.1.52:3000')
   API_BASE_URL: 'http://localhost:3000',
   
   /**

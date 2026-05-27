@@ -2,7 +2,9 @@ import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 
 import { AuthCredentials } from '@features/auth/domain/models/auth-credentials.model';
+import { RegisterDraft } from '@features/auth/domain/models/register-draft.model';
 import { LoginUseCase } from '@features/auth/domain/use-cases/login.use-case';
+import { RegisterUseCase } from '@features/auth/domain/use-cases/register.use-case';
 import { AuthSessionStorageService } from '@features/auth/application/services/auth-session-storage.service';
 import { API_CLIENT } from '@core/config/api-client.token';
 import { environment } from '../../../../../environments/environment';
@@ -18,6 +20,7 @@ export class AuthFacade {
 
   constructor(
     private readonly loginUseCase: LoginUseCase,
+    private readonly registerUseCase: RegisterUseCase,
     private readonly authSessionStorage: AuthSessionStorageService,
   ) {}
 
@@ -77,6 +80,17 @@ export class AuthFacade {
     });
 
     return false;
+  }
+
+  async register(draft: RegisterDraft): Promise<{ ok: boolean; error?: string }> {
+    const result = await this.registerUseCase.execute(draft);
+    if (result.ok) {
+      return { ok: true };
+    }
+    return {
+      ok: false,
+      error: result.error?.message || 'Error al crear la cuenta',
+    };
   }
 
   logout(): void {
