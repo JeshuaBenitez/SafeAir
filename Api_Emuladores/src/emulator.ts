@@ -1,6 +1,7 @@
 import mqtt from "mqtt";
 import dotenv from "dotenv";
 import path from "path";
+import http from "http";
 
 // Cargar variables de entorno desde .env
 dotenv.config({ path: path.join(__dirname, "../.env") });
@@ -8,6 +9,16 @@ dotenv.config({ path: path.join(__dirname, "../.env") });
 const MQTT_URL = process.env.MQTT_URL || "mqtt://localhost:1883";
 const API_URL = process.env.BACKEND_API_URL || "http://localhost:3000";
 const EMULATOR_ID = "emu-room-a";
+
+// Servidor HTTP falso para pasar el Health Check de Render en la capa gratuita (Web Service)
+const DUMMY_PORT = process.env.PORT || 10000;
+http.createServer((_req, res) => {
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("SafeAir Emulator Alive\n");
+}).listen(Number(DUMMY_PORT), "0.0.0.0", () => {
+  console.log(`[Emulator] Servidor de diagnóstico escuchando en puerto ${DUMMY_PORT}`);
+});
+
 
 // Estado interno simulado del cuarto/emulador
 interface DeviceState {

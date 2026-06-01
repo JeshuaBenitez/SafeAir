@@ -165,9 +165,24 @@ Este escenario simula un entorno productivo real donde la infraestructura está 
 2. Ejecuta el backend con `npm run dev`. Ahora la API aceptará peticiones entrantes en el puerto `3000` de cualquier laptop de la red.
 
 ### 3. Configuración de Laptop C (Broker y Emuladores MQTT)
-1. Levanta el Broker Mosquitto MQTT en esta laptop:
+
+> [!IMPORTANT]
+> **ARCHIVO ESPECIAL DE CONFIGURACIÓN MQTT (`mosquitto.conf`)**  
+> Para poder ejecutar el broker de mensajería en red local física distribuyendo servicios, se ha dispuesto un archivo especial en la raíz del proyecto llamado `mosquitto.conf`.
+> A partir de la versión 2.0 de Mosquitto, el contenedor Docker por defecto **bloquea todas las conexiones externas** (enlazándose solo a localhost interno) y **deniega conexiones anónimas** sin credenciales. Esto provocaría que la API y los Emuladores de otras laptops reciban errores de conexión instantáneos (`ECONNREFUSED` / socket error).
+> 
+> **¿Dónde debe ubicarse este archivo al ejecutar el contenedor?**
+> *   **En tu máquina física (Host):** El archivo `mosquitto.conf` ya se encuentra ubicado en la **raíz del proyecto**. Al ejecutar el comando de Docker con la variable `$(pwd)/mosquitto.conf`, la terminal buscará el archivo en tu directorio de trabajo actual. **Por lo tanto, debes abrir tu terminal y ejecutar el comando obligatoriamente desde la raíz del proyecto**. Si deseas ejecutarlo desde otra ubicación, debes cambiar `$(pwd)/mosquitto.conf` por la ruta absoluta al archivo (ej. `/home/usuario/DSR_Jorge/Proyecto/mosquitto.conf`).
+> *   **Dentro del contenedor de Docker (Destino):** Docker se encarga de montar el archivo automáticamente en la ruta interna fija `/mosquitto/config/mosquitto.conf` para que el broker de eclipse-mosquitto lo consuma por defecto al arrancar.
+
+1. Utiliza el archivo `mosquitto.conf` de la raíz del proyecto y levanta el broker en esta laptop ejecutando en la terminal **desde la raíz del proyecto** el comando de Docker modificado:
    ```bash
-   docker run -d --name safeair-mqtt -p 1883:1883 eclipse-mosquitto:2
+   # Asegúrate de ejecutar este comando desde la raíz del proyecto para que $(pwd)/mosquitto.conf apunte al archivo real
+   docker run -d --name safeair-mqtt \
+     -p 1883:1883 \
+     -p 8083:8083 \
+     -v $(pwd)/mosquitto.conf:/mosquitto/config/mosquitto.conf \
+     eclipse-mosquitto:2
    ```
 2. Abre una terminal y configura las variables para ejecutar el emulador de SafeAir:
    ```env
