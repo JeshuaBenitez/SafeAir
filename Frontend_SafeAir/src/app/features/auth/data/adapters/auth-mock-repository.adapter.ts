@@ -62,4 +62,34 @@ export class AuthMockRepositoryAdapter implements AuthRepositoryPort {
       ok: true,
     };
   }
+
+  async verifyOtp(email: string, code: string): Promise<LoginResult> {
+    await new Promise((resolve) => setTimeout(resolve, SIMULATED_DELAY_MS));
+    if (code !== '123456') {
+      return {
+        ok: false,
+        error: {
+          code: 'INVALID_OTP',
+          message: 'Código de verificación incorrecto.',
+          recoverable: true
+        }
+      };
+    }
+    return {
+      ok: true,
+      session: toAuthSession({
+        authenticated: true,
+        userId: 'user-admin-01',
+        displayName: 'Administrador SafeAir',
+        tokenType: 'Bearer',
+        accessToken: 'mock-access-token',
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+      }),
+    };
+  }
+
+  async resendOtp(email: string): Promise<{ ok: boolean; error?: AuthError }> {
+    await new Promise((resolve) => setTimeout(resolve, SIMULATED_DELAY_MS));
+    return { ok: true };
+  }
 }

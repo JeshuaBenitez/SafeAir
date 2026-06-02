@@ -5,4 +5,5 @@ export interface LoginResponseDto {
   readonly tokenType: string;
   readonly accessToken: string;
   readonly expiresAt: string;
+  readonly email?: string;
 }

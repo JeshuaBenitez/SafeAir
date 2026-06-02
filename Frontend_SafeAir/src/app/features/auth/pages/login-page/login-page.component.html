@@ -4,13 +4,24 @@
 
     <ng-container *ngIf="state$ | async as state">
       <sa-login-form
+        *ngIf="!state.requiresOtp"
         [loading]="state.loading"
         [error]="state.error"
         (submitCredentials)="onLogin($event)"
       />
 
+      <sa-otp-form
+        *ngIf="state.requiresOtp"
+        [email]="state.email"
+        [loading]="state.loading"
+        [error]="state.error"
+        (verifyOtp)="onVerifyOtp($event)"
+        (resendOtp)="onResendOtp()"
+        (cancel)="onCancelOtp()"
+      />
+
       <output *ngIf="state.session" class="login-page__success" aria-live="polite">
-        Inicio de sesion simulado exitoso. Bienvenido, {{ state.session.displayName }}.
+        Inicio de sesion exitoso. Bienvenido, {{ state.session.displayName }}.
       </output>
     </ng-container>
   </sa-auth-card>

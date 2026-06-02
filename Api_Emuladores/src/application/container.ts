@@ -10,6 +10,7 @@ import { RoomRepository } from "../infrastructure/repositories/room.repository";
 import { UserRepository } from "../infrastructure/repositories/user.repository";
 import { AlarmService } from "./services/alarm.service";
 import { AuthService } from "./services/auth.service";
+import { EmailService } from "./services/email.service";
 import { ConfigurationService } from "./services/configuration.service";
 import { CycleService } from "./services/cycle.service";
 import { DeviceActionService } from "./services/device-action.service";
@@ -32,7 +33,8 @@ const alarmRepository = new AlarmRepository();
 const configurationRepository = new ConfigurationRepository();
 const roomSetupDomainService = new RoomSetupDomainService();
 
-const authService = new AuthService(userRepository);
+const emailService = new EmailService();
+const authService = new AuthService(userRepository, emailService);
 const instanceService = new InstanceService(instanceRepository);
 const roomService = new RoomService(instanceRepository, roomRepository, roomSetupDomainService);
 const emulatorResolutionService = new EmulatorResolutionService(emulatorRepository, instanceRepository, roomRepository);

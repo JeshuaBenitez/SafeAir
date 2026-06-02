@@ -1,5 +1,5 @@
 import { AsyncPipe, NgIf } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
@@ -7,6 +7,7 @@ import { DashboardFacade } from '@features/dashboard/application/facades/dashboa
 import { AuthFacade } from '@features/auth/application/facades/auth.facade';
 import { DashboardSidebarComponent } from '@features/dashboard/components/dashboard-sidebar/dashboard-sidebar.component';
 import { DashboardTopbarComponent } from '@features/dashboard/components/dashboard-topbar/dashboard-topbar.component';
+import { AuthSessionStorageService } from '@features/auth/application/services/auth-session-storage.service';
 
 @Component({
   selector: 'sa-settings-page',
@@ -22,7 +23,7 @@ import { DashboardTopbarComponent } from '@features/dashboard/components/dashboa
   styleUrl: './settings-page.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class SettingsPageComponent implements OnDestroy {
+export class SettingsPageComponent implements OnInit, OnDestroy {
   readonly defaultProfileImage = 'assets/images/userprofile.png';
   readonly viewModel$ = this.dashboardFacade.viewModel$;
 
@@ -55,12 +56,45 @@ export class SettingsPageComponent implements OnDestroy {
   showConfirmPassword = false;
 
   private objectUrl: string | null = null;
+  private tempBase64Image: string | null = null;
 
   constructor(
     private readonly dashboardFacade: DashboardFacade,
     private readonly authFacade: AuthFacade,
+    private readonly authSessionStorage: AuthSessionStorageService,
     private readonly router: Router,
   ) {}
+
+  ngOnInit(): void {
+    const session = this.authSessionStorage.getSession();
+
+    // Cargar datos guardados de perfil en localStorage para persistencia real
+    const savedFirstName = localStorage.getItem('safeair.user.firstName');
+    const savedLastName = localStorage.getItem('safeair.user.lastName');
+    const savedEmail = localStorage.getItem('safeair.user.email');
+    const savedAvatar = localStorage.getItem('safeair.user.profileImage');
+
+    let defaultFirstName = 'Admin';
+    let defaultLastName = 'SafeAir';
+
+    if (session?.displayName) {
+      const parts = session.displayName.split(' ');
+      defaultFirstName = parts[0] || 'Admin';
+      defaultLastName = parts.slice(1).join(' ') || 'SafeAir';
+    }
+
+    this.form.patchValue({
+      firstName: savedFirstName || defaultFirstName,
+      lastName: savedLastName || defaultLastName,
+      email: savedEmail || session?.email || (session?.userId ? `${session.userId.substring(0, 8)}@safeair.com` : 'admin@safeair.local'),
+    });
+
+    if (savedAvatar) {
+      this.profilePreviewUrl = savedAvatar;
+    } else {
+      this.profilePreviewUrl = this.defaultProfileImage;
+    }
+  }
 
   get passwordsMismatch(): boolean {
     const newPassword = this.form.controls.newPassword.value;
@@ -98,12 +132,14 @@ export class SettingsPageComponent implements OnDestroy {
       return;
     }
 
-    if (this.objectUrl) {
-      URL.revokeObjectURL(this.objectUrl);
-    }
-
-    this.objectUrl = URL.createObjectURL(file);
-    this.profilePreviewUrl = this.objectUrl;
+    // Convertir a Base64 para persistir la foto directamente en localStorage
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string;
+      this.profilePreviewUrl = base64;
+      this.tempBase64Image = base64;
+    };
+    reader.readAsDataURL(file);
   }
 
   onSave(): void {
@@ -121,7 +157,32 @@ export class SettingsPageComponent implements OnDestroy {
       return;
     }
 
-    this.saveMessage = 'Cambios guardados localmente.';
+    const { firstName, lastName, email } = this.form.getRawValue();
+
+    // Persistir campos de perfil en localStorage
+    localStorage.setItem('safeair.user.firstName', firstName);
+    localStorage.setItem('safeair.user.lastName', lastName);
+    localStorage.setItem('safeair.user.email', email);
+
+    if (this.tempBase64Image) {
+      localStorage.setItem('safeair.user.profileImage', this.tempBase64Image);
+    }
+
+    // Actualizar nombre en la sesión activa si existe
+    const session = this.authSessionStorage.getSession();
+    if (session) {
+      const updatedSession = {
+        ...session,
+        displayName: `${firstName} ${lastName}`,
+      };
+      this.authSessionStorage.persistSession(updatedSession);
+      this.authFacade.restoreSession();
+    }
+
+    // Disparar recarga de datos en el Facade del Dashboard para refrescar la barra lateral de inmediato
+    this.dashboardFacade.refreshRooms();
+
+    this.saveMessage = '¡Cambios guardados con éxito y aplicados al perfil!';
   }
 
   onLogout(): void {

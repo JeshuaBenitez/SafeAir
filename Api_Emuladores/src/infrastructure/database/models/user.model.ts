@@ -1,4 +1,4 @@
-﻿import { DataTypes, Model } from "sequelize";
+import { DataTypes, Model } from "sequelize";
 import type { Sequelize } from "sequelize";
 
 export class UserModel extends Model {
@@ -7,6 +7,8 @@ export class UserModel extends Model {
   declare passwordHash: string;
   declare fullName: string;
   declare role: "admin" | "operator";
+  declare otpCode: string | null;
+  declare otpExpiresAt: Date | null;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 }
@@ -36,6 +38,14 @@ export function initUserModel(sequelize: Sequelize): void {
         type: DataTypes.ENUM("admin", "operator"),
         allowNull: false,
         defaultValue: "operator"
+      },
+      otpCode: {
+        type: DataTypes.STRING(6),
+        allowNull: true
+      },
+      otpExpiresAt: {
+        type: DataTypes.DATE,
+        allowNull: true
       },
       createdAt: DataTypes.DATE,
       updatedAt: DataTypes.DATE

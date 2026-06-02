@@ -21,7 +21,15 @@ export interface LoginResponse {
   authenticated: true;
   userId: string;
   displayName: string;
+  email: string;
   tokenType: "Bearer";
   accessToken: string;
   expiresAt: string;
 }
+
+export interface OtpRequiredResponse {
+  requiresOtp: true;
+  email: string;
+}
+
+export type LoginResult = LoginResponse | OtpRequiredResponse;

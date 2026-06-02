@@ -5,4 +5,5 @@ export interface AuthSession {
   readonly tokenType: 'Bearer';
   readonly accessToken: string;
   readonly expiresAt: string;
+  readonly email?: string;
 }

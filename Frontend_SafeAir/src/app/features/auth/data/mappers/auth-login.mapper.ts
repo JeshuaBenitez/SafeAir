@@ -17,6 +17,7 @@ export const toAuthSession = (response: LoginResponseDto): AuthSession => ({
   tokenType: 'Bearer',
   accessToken: response.accessToken,
   expiresAt: response.expiresAt,
+  email: response.email,
 });
 
 export const invalidCredentialsError = (): AuthError => ({

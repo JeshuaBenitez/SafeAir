@@ -29,7 +29,14 @@ const envSchema = z.object({
   EMULATOR_MISSING_STRATEGY: z.enum(["reject", "auto-provision"]).default("reject"),
   EMULATOR_AUTO_INSTANCE_NAME: z.string().default("Auto Provisioned Instance"),
   EMULATOR_AUTO_ROOM_PREFIX: z.string().default("Room"),
-  EMULATOR_AUTO_CREATE_DEVICES: z.string().default("true")
+  EMULATOR_AUTO_CREATE_DEVICES: z.string().default("true"),
+  // SMTP Configuration (optional - uses Ethereal test account when not set)
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_SECURE: z.string().default("false"),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().default('"SafeAir Security" <security@safeair.io>')
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -65,5 +72,11 @@ export const env = {
   emulatorMissingStrategy: parsed.data.EMULATOR_MISSING_STRATEGY,
   emulatorAutoInstanceName: parsed.data.EMULATOR_AUTO_INSTANCE_NAME,
   emulatorAutoRoomPrefix: parsed.data.EMULATOR_AUTO_ROOM_PREFIX,
-  emulatorAutoCreateDevices: parsed.data.EMULATOR_AUTO_CREATE_DEVICES === "true"
+  emulatorAutoCreateDevices: parsed.data.EMULATOR_AUTO_CREATE_DEVICES === "true",
+  smtpHost: parsed.data.SMTP_HOST,
+  smtpPort: parsed.data.SMTP_PORT,
+  smtpSecure: parsed.data.SMTP_SECURE === "true",
+  smtpUser: parsed.data.SMTP_USER,
+  smtpPass: parsed.data.SMTP_PASS,
+  smtpFrom: parsed.data.SMTP_FROM
 };

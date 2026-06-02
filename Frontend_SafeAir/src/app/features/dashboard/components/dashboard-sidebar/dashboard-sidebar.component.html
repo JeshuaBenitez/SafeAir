@@ -5,7 +5,7 @@
   </div>
 
   <section class="dashboard-sidebar__user-card">
-    <img class="dashboard-sidebar__avatar" src="assets/images/userprofile.png" alt="User avatar" />
+    <img class="dashboard-sidebar__avatar" [src]="user.avatarUrl || 'assets/images/userprofile.png'" alt="User avatar" />
     <div class="dashboard-sidebar__user-content">
       <p class="dashboard-sidebar__user-name">{{ user.displayName }}</p>
       <p class="dashboard-sidebar__user-status">{{ user.statusLabel }}</p>

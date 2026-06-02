@@ -1,4 +1,4 @@
-﻿import type { Request, Response } from "express";
+import type { Request, Response } from "express";
 import { container } from "../../application/container";
 import { AppError } from "../../shared/errors/app-error";
 
@@ -24,6 +24,18 @@ export class AuthController {
 
     const result = await container.authService.me(req.auth.sub);
     res.status(200).json(result);
+  }
+
+  async verifyOtp(req: Request, res: Response): Promise<void> {
+    const { email, code } = req.body;
+    const result = await container.authService.verifyOtp(email, code);
+    res.status(200).json(result);
+  }
+
+  async resendOtp(req: Request, res: Response): Promise<void> {
+    const { email } = req.body;
+    await container.authService.resendOtp(email);
+    res.status(200).json({ message: "Verification code resent successfully." });
   }
 
   /**

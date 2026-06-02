@@ -36,3 +36,12 @@ export const registerSchema = z
     message: "Passwords do not match",
     path: ["confirmPassword"]
   });
+
+export const verifyOtpSchema = z.object({
+  email: z.string().email(),
+  code: z.string().length(6)
+});
+
+export const resendOtpSchema = z.object({
+  email: z.string().email()
+});

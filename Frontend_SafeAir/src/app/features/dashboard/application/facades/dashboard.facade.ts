@@ -24,12 +24,23 @@ export class DashboardFacade {
   readonly viewModel$ = this.dashboardMockState.rooms$.pipe(
     map((rooms): DashboardViewModel => {
       const session = this.authSessionStorage.getSession();
-      const displayName = session?.displayName || 'Usuario';
+      
+      const savedFirstName = localStorage.getItem('safeair.user.firstName');
+      const savedLastName = localStorage.getItem('safeair.user.lastName');
+      const savedAvatar = localStorage.getItem('safeair.user.profileImage');
+
+      const displayName = savedFirstName && savedLastName
+        ? `${savedFirstName} ${savedLastName}`
+        : (session?.displayName || 'Usuario');
+
+      const avatarUrl = savedAvatar || 'assets/images/userprofile.png';
+
       return {
         locationLabel: DASHBOARD_MOCK_LOCATION,
         user: {
           displayName,
           statusLabel: 'CONECTADO',
+          avatarUrl,
         },
         metrics: this.computeMetrics(rooms),
         rooms,

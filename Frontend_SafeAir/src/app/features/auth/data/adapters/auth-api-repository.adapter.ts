@@ -33,14 +33,21 @@ export class AuthApiRepositoryAdapter implements AuthRepositoryPort {
    */
   async login(credentials: AuthCredentials): Promise<LoginResult> {
     try {
-      // Convert credentials to DTO (for mapping and validation)
       const loginRequest = toLoginRequestDto(credentials);
 
-      // Call backend API
-      const response = await this.apiClient.post<any, LoginResponseDto>(
+      const response = await this.apiClient.post<any, any>(
         '/api/v1/auth/login',
         loginRequest
       );
+
+      if (response.data && response.data.requiresOtp) {
+        console.debug('[Auth] OTP Verification required for email', response.data.email);
+        return {
+          ok: true,
+          requiresOtp: true,
+          email: response.data.email,
+        };
+      }
 
       const session = toAuthSession(response.data);
 
@@ -49,9 +56,48 @@ export class AuthApiRepositoryAdapter implements AuthRepositoryPort {
       return {
         ok: true,
         session,
+        requiresOtp: false,
       };
     } catch (error) {
       return this.handleLoginError(error);
+    }
+  }
+
+  async verifyOtp(email: string, code: string): Promise<LoginResult> {
+    try {
+      const response = await this.apiClient.post<any, any>(
+        '/api/v1/auth/verify-otp',
+        { email, code }
+      );
+
+      const session = toAuthSession(response.data);
+
+      console.debug('[Auth] OTP Verification successful', { userId: session.userId });
+
+      return {
+        ok: true,
+        session,
+        requiresOtp: false,
+      };
+    } catch (error) {
+      return this.handleLoginError(error);
+    }
+  }
+
+  async resendOtp(email: string): Promise<{ ok: boolean; error?: AuthError }> {
+    try {
+      await this.apiClient.post<any, any>(
+        '/api/v1/auth/resend-otp',
+        { email }
+      );
+
+      console.debug('[Auth] OTP resend successful', { email });
+
+      return {
+        ok: true,
+      };
+    } catch (error) {
+      return this.handleRegisterError(error);
     }
   }
 

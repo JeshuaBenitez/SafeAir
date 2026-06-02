@@ -3,7 +3,9 @@ export type AuthErrorCode =
   | 'TEMPORARY_UNAVAILABLE'
   | 'VALIDATION_ERROR'
   | 'NETWORK_ERROR'
-  | 'EMAIL_ALREADY_EXISTS';
+  | 'EMAIL_ALREADY_EXISTS'
+  | 'INVALID_OTP'
+  | 'OTP_EXPIRED';
 
 export interface AuthError {
   readonly code: AuthErrorCode;

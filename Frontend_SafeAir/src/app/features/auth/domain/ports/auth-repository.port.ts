@@ -8,6 +8,8 @@ import { AuthError } from '../models/auth-error.model';
 export interface AuthRepositoryPort {
   login(credentials: AuthCredentials): Promise<LoginResult>;
   register(draft: RegisterDraft): Promise<{ ok: boolean; error?: AuthError }>;
+  verifyOtp(email: string, code: string): Promise<LoginResult>;
+  resendOtp(email: string): Promise<{ ok: boolean; error?: AuthError }>;
 }
 
 export const AUTH_REPOSITORY = new InjectionToken<AuthRepositoryPort>('AUTH_REPOSITORY');
