@@ -21,8 +21,17 @@ FROM nginx:1.27-alpine
 
 WORKDIR /usr/share/nginx/html
 
-# Copy optimized nginx config with API proxy for Docker Compose
+# Build args para configurar la URL de la API (default: api:3000 para Docker Compose)
+ARG API_BASE_URL=http://api:3000
+
+# Copy optimized nginx config with API proxy
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Reemplazar la URL del API en la configuración de nginx durante el build
+RUN sed -i "s|http://api:3000|${API_BASE_URL}|g" /etc/nginx/conf.d/default.conf
+
+# Mostrar la URL configurada para depuración
+RUN echo "API configurada: ${API_BASE_URL}"
 
 # Copy compiled Angular app from build stage
 COPY --from=build /app/dist/safeair-frontend/browser ./
