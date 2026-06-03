@@ -88,4 +88,14 @@ export class RoomService {
     const device = await this.roomRepository.createDevice(input);
     return { id: device.id };
   }
+
+  async delete(roomId: string): Promise<void> {
+    const room = await this.roomRepository.findById(roomId);
+    if (!room) {
+      throw new AppError("Room not found", 404, "ROOM_NOT_FOUND");
+    }
+
+    await this.roomRepository.delete(roomId);
+  }
 }
+

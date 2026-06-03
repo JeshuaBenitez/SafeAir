@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, combineLatest, interval, map } from 'rxjs';
 
 import { DashboardRoom } from '@features/dashboard/domain/models/dashboard-room.model';
@@ -7,15 +7,20 @@ import {
   DashboardEnvironmentViewModel,
   DashboardRoomOption,
 } from '@features/dashboard/domain/models/dashboard-environment-state.model';
+import { API_CLIENT } from '@core/config/api-client.token';
+import { environment } from '../../../../../environments/environment';
 
 const UPDATE_INTERVAL_MS = 2200;
 const HISTORY_LIMIT = 24;
 
 @Injectable({ providedIn: 'root' })
 export class DashboardEnvironmentMockService {
+  private readonly apiClient = inject(API_CLIENT);
   private readonly roomsSubject = new BehaviorSubject<readonly DashboardRoom[]>([]);
   private readonly selectedRoomIdSubject = new BehaviorSubject<string | null>(null);
   private readonly stateByRoomSubject = new BehaviorSubject<Readonly<Record<string, DashboardEnvironmentState>>>({});
+  
+  private isPaused = false;
 
   readonly viewModel$ = combineLatest([
     this.roomsSubject,
@@ -48,6 +53,15 @@ export class DashboardEnvironmentMockService {
     });
   }
 
+  pauseTelemetry(): void {
+    this.isPaused = true;
+  }
+
+  resumeTelemetry(): void {
+    this.isPaused = false;
+    this.tick();
+  }
+
   setRooms(rooms: readonly DashboardRoom[]): void {
     this.roomsSubject.next(rooms);
 
@@ -77,11 +91,79 @@ export class DashboardEnvironmentMockService {
   }
 
   private tick(): void {
+    if (this.isPaused) {
+      return;
+    }
+
     const rooms = this.roomsSubject.value;
     if (rooms.length === 0) {
       return;
     }
 
+    if (environment.DASHBOARD_MODE === 'api') {
+      this.tickApi().catch((error) => {
+        console.error('Error en tick de telemetría real:', error);
+      });
+    } else {
+      this.tickMock();
+    }
+  }
+
+  private async tickApi(): Promise<void> {
+    const rooms = this.roomsSubject.value;
+    const currentMap = this.stateByRoomSubject.value;
+    const nextMap = { ...currentMap };
+    let hasChanges = false;
+
+    const promises = rooms.map(async (room) => {
+      try {
+        const metrics = await this.apiClient.get<any>(`/api/v1/rooms/${room.id}/metrics/current`);
+        
+        if (!metrics) {
+          return;
+        }
+
+        const previousState = currentMap[room.id];
+        
+        const temperatureC = metrics.temperature;
+        const humidityPct = metrics.humidity;
+        const co2Ppm = metrics.co2;
+        const pm25UgM3 = metrics.pm25;
+
+        // Mantener historial acumulado para graficos
+        const co2History = previousState && Array.isArray(previousState.co2History)
+          ? this.pushHistory(previousState.co2History, co2Ppm)
+          : Array(10).fill(co2Ppm);
+        
+        const pm25History = previousState && Array.isArray(previousState.pm25History)
+          ? this.pushHistory(previousState.pm25History, pm25UgM3)
+          : Array(10).fill(pm25UgM3);
+
+        nextMap[room.id] = {
+          roomId: room.id,
+          temperatureC,
+          humidityPct,
+          co2Ppm,
+          pm25UgM3,
+          co2History,
+          pm25History,
+          updatedAt: new Date(metrics.measuredAt).getTime(),
+        };
+        hasChanges = true;
+      } catch (error) {
+        // Silenciar error si no hay datos aun persistidos (el emulador no ha transmitido telemetria)
+      }
+    });
+
+    await Promise.all(promises);
+
+    if (hasChanges) {
+      this.stateByRoomSubject.next(nextMap);
+    }
+  }
+
+  private tickMock(): void {
+    const rooms = this.roomsSubject.value;
     const currentMap = this.stateByRoomSubject.value;
     const nextMap: Record<string, DashboardEnvironmentState> = {};
 

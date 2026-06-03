@@ -55,11 +55,11 @@ export class DashboardFacade {
     this.dashboardMockState.refreshRooms();
   }
 
-  addRoom(draft: CreateRoomDraft): AddRoomResult {
+  async addRoom(draft: CreateRoomDraft): Promise<AddRoomResult> {
     return this.dashboardMockState.addRoom(draft);
   }
 
-  removeRoom(roomId: string): RemoveRoomResult {
+  async removeRoom(roomId: string): Promise<RemoveRoomResult> {
     return this.dashboardMockState.removeRoom(roomId);
   }
 

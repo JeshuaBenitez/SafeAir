@@ -38,3 +38,8 @@ roomRouter.post("/:id/devices", authMiddleware, validateBody(createDeviceSchema)
 roomRouter.get("/:id/actions/history", authMiddleware, (req, res, next) => {
   controller.actionHistory(req, res).catch(next);
 });
+
+roomRouter.delete("/:id", authMiddleware, (req, res, next) => {
+  controller.delete(req, res).catch(next);
+});
+

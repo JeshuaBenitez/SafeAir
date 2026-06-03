@@ -11,10 +11,22 @@ export class InstanceRepository {
   }
 
   async findById(id: string): Promise<InstanceModel | null> {
+    const { RoomSetupModel, DeviceModel } = await import("../database/models");
     return InstanceModel.findByPk(id, {
-      include: [{ model: RoomModel, as: "rooms", include: [{ model: RoomSetupDerivedModel, as: "derivedSetup" }] }]
+      include: [
+        {
+          model: RoomModel,
+          as: "rooms",
+          include: [
+            { model: RoomSetupModel, as: "setup" },
+            { model: RoomSetupDerivedModel, as: "derivedSetup" },
+            { model: DeviceModel, as: "devices" }
+          ]
+        }
+      ]
     });
   }
+
 
   async findFirstActive(): Promise<InstanceModel | null> {
     return InstanceModel.findOne({ where: { isActive: true }, order: [["createdAt", "ASC"]] });

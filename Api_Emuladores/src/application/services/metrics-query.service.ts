@@ -1,21 +1,50 @@
 import { CycleRepository } from "../../infrastructure/repositories/cycle.repository";
 import { DeviceActionRepository } from "../../infrastructure/repositories/device-action.repository";
 import { DeviceStateRepository } from "../../infrastructure/repositories/device-state.repository";
+import { RoomRepository } from "../../infrastructure/repositories/room.repository";
 
 export class MetricsQueryService {
   constructor(
     private readonly cycleRepository: CycleRepository,
     private readonly deviceActionRepository: DeviceActionRepository,
-    private readonly deviceStateRepository: DeviceStateRepository
+    private readonly deviceStateRepository: DeviceStateRepository,
+    private readonly roomRepository: RoomRepository
   ) {}
+
 
   async current(roomId: string): Promise<unknown> {
     return this.cycleRepository.getLatestMeasurement(roomId);
   }
 
   async history(roomId: string, from?: string, to?: string): Promise<unknown[]> {
-    return this.cycleRepository.getHistory(roomId, from ? new Date(from) : undefined, to ? new Date(to) : undefined);
+    const measurements = await this.cycleRepository.getHistory(roomId, from ? new Date(from) : undefined, to ? new Date(to) : undefined);
+    const devices = await this.roomRepository.listDevices(roomId);
+
+    return measurements.map((m) => {
+      const activeDevices = devices.filter((d) => new Date(d.createdAt).getTime() <= new Date(m.measuredAt).getTime());
+      
+      const minisplitCount = activeDevices.filter((d) => d.type === "minisplit").length;
+      const purifierCount = activeDevices.filter((d) => d.type === "purifier").length;
+      const extractorCount = activeDevices.filter((d) => d.type === "extractor").length;
+
+      return {
+        id: m.id,
+        roomId: m.roomId,
+        cycleId: m.cycleId,
+        temperature: m.temperature,
+        humidity: m.humidity,
+        co2: m.co2,
+        pm25: m.pm25,
+        measuredAt: m.measuredAt,
+        receivedAt: m.receivedAt,
+        source: m.source,
+        minisplitCount,
+        purifierCount,
+        extractorCount
+      };
+    });
   }
+
 
   async actuatorState(roomId: string): Promise<unknown> {
     const latestMeasurement = await this.cycleRepository.getLatestMeasurement(roomId);

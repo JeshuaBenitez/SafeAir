@@ -29,7 +29,7 @@ export class DashboardPageComponent {
   trackByRoom = (_index: number, room: any): string =>
     room?.id ?? room?.name ?? room?.designation ?? String(_index);
 
-  onDeleteRoom(roomId: string): void {
-    this.facade.removeRoom(roomId);
+  async onDeleteRoom(roomId: string): Promise<void> {
+    await this.facade.removeRoom(roomId);
   }
 }

@@ -1,7 +1,8 @@
-import { AsyncPipe, NgIf } from '@angular/common';
+import { AsyncPipe, NgIf, NgFor, DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
+import { BehaviorSubject, map } from 'rxjs';
 
 import { DashboardEnvironmentMockService } from '@features/dashboard/application/services/dashboard-environment-mock.service';
 import { DashboardCo2WidgetComponent } from '@features/dashboard/components/dashboard-co2-widget/dashboard-co2-widget.component';
@@ -12,6 +13,7 @@ import { DashboardFacade } from '@features/dashboard/application/facades/dashboa
 import { DashboardSidebarComponent } from '@features/dashboard/components/dashboard-sidebar/dashboard-sidebar.component';
 import { DashboardTemperatureWidgetComponent } from '@features/dashboard/components/dashboard-temperature-widget/dashboard-temperature-widget.component';
 import { DashboardTopbarComponent } from '@features/dashboard/components/dashboard-topbar/dashboard-topbar.component';
+import { API_CLIENT } from '@core/config/api-client.token';
 
 @Component({
   selector: 'sa-dashboard-view-page',
@@ -19,6 +21,9 @@ import { DashboardTopbarComponent } from '@features/dashboard/components/dashboa
   imports: [
     AsyncPipe,
     NgIf,
+    NgFor,
+    DatePipe,
+    FormsModule,
     DashboardSidebarComponent,
     DashboardTopbarComponent,
     DashboardRoomSelectorComponent,
@@ -33,12 +38,23 @@ import { DashboardTopbarComponent } from '@features/dashboard/components/dashboa
 })
 export class DashboardViewPageComponent {
   private readonly destroyRef = inject(DestroyRef);
+  private readonly apiClient = inject(API_CLIENT);
 
   readonly viewModel$ = this.dashboardFacade.viewModel$;
   readonly environmentViewModel$ = this.environmentMockState.viewModel$;
 
+  readonly isHistoryMode$ = new BehaviorSubject<boolean>(false);
+  readonly historyData$ = new BehaviorSubject<any[]>([]);
+  
+  historyRangeLabel = '';
+  selectedRoomId: string | null = null;
+
   selectedTelemetryDate = this.formatDateForInput(new Date());
   selectedTelemetryTime = this.formatTimeForInput(new Date());
+
+  startTime = '00:00:00';
+  endTime = '23:59:59';
+  rangeError = '';
 
   constructor(
     private readonly dashboardFacade: DashboardFacade,
@@ -54,6 +70,20 @@ export class DashboardViewPageComponent {
       .subscribe((rooms) => {
         this.environmentMockState.setRooms(rooms);
       });
+
+    this.environmentViewModel$
+      .pipe(
+        map((vm) => vm.selectedRoomId),
+        takeUntilDestroyed(this.destroyRef),
+      )
+      .subscribe((roomId) => {
+        const previousId = this.selectedRoomId;
+        this.selectedRoomId = roomId;
+        
+        if (this.isHistoryMode$.value && roomId && roomId !== previousId) {
+          this.loadHistoryData(this.selectedTelemetryDate, this.selectedTelemetryTime);
+        }
+      });
   }
 
   selectRoom(roomId: string): void {
@@ -63,9 +93,61 @@ export class DashboardViewPageComponent {
   onTelemetryDateTimeApplied(selection: { date: string; time: string }): void {
     this.selectedTelemetryDate = selection.date;
     this.selectedTelemetryTime = selection.time;
+    this.loadHistoryData(selection.date, selection.time);
+  }
 
-    // Aquí después podrás conectar la lógica real para filtrar historial/telemetría.
-    console.log('Fecha/Hora seleccionada:', selection);
+  clearHistoryFilter(): void {
+    this.isHistoryMode$.next(false);
+    this.historyData$.next([]);
+    this.environmentMockState.resumeTelemetry();
+
+    this.selectedTelemetryDate = this.formatDateForInput(new Date());
+    this.selectedTelemetryTime = this.formatTimeForInput(new Date());
+  }
+
+  getTemperatureClass(value: number): string {
+    if (value >= 18 && value <= 25) return 'metric-badge--optimal';
+    if ((value >= 15 && value < 18) || (value > 25 && value <= 28)) return 'metric-badge--stable';
+    return 'metric-badge--alert';
+  }
+
+  getCo2Class(value: number): string {
+    if (value <= 700) return 'metric-badge--optimal';
+    if (value <= 950) return 'metric-badge--stable';
+    return 'metric-badge--alert';
+  }
+
+  getPm25Class(value: number): string {
+    if (value <= 20) return 'metric-badge--optimal';
+    if (value <= 40) return 'metric-badge--stable';
+    return 'metric-badge--alert';
+  }
+
+  private loadHistoryData(date: string, time: string): void {
+    if (!this.selectedRoomId) {
+      return;
+    }
+
+    const fromStr = `${date}T00:00:00.000Z`;
+    const toStr = `${date}T${time}.000Z`;
+
+    this.environmentMockState.pauseTelemetry();
+    this.isHistoryMode$.next(true);
+    
+    const parts = date.split('-');
+    const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
+    this.historyRangeLabel = `Mostrando historial del ${formattedDate} hasta las ${time}`;
+
+    this.apiClient
+      .get<any[]>(`/api/v1/rooms/${this.selectedRoomId}/metrics/history?from=${encodeURIComponent(fromStr)}&to=${encodeURIComponent(toStr)}`)
+      .then((response) => {
+        const sorted = [...response.data].sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime());
+        this.historyData$.next(sorted);
+      })
+      .catch((error) => {
+        console.error('Error cargando historial de metras:', error);
+        this.historyData$.next([]);
+      });
   }
 
   private formatDateForInput(date: Date): string {
@@ -82,5 +164,172 @@ export class DashboardViewPageComponent {
     const seconds = String(date.getSeconds()).padStart(2, '0');
 
     return `${hours}:${minutes}:${seconds}`;
+  }
+
+  applyTimeRange(): void {
+    this.rangeError = '';
+    const error = this.validateTimeRange(this.startTime, this.endTime);
+
+    if (error) {
+      this.rangeError = error;
+      return;
+    }
+
+    this.loadHistoryWithRange(this.selectedTelemetryDate, this.startTime, this.endTime);
+  }
+
+  private validateTimeRange(start: string, end: string): string {
+    const [sH, sM, sS] = start.split(':').map(Number);
+    const [eH, eM, eS] = end.split(':').map(Number);
+
+    const startMs = sH * 3600000 + sM * 60000 + sS * 1000;
+    const endMs = eH * 3600000 + eM * 60000 + eS * 1000;
+    const diffMs = endMs - startMs;
+
+    if (diffMs < 20 * 60 * 1000) {
+      return 'El rango mínimo es 20 minutos.';
+    }
+
+    if (diffMs > 24 * 3600 * 1000) {
+      return 'El rango máximo es un día completo.';
+    }
+
+    return '';
+  }
+
+  private loadHistoryWithRange(date: string, startTime: string, endTime: string): void {
+    if (!this.selectedRoomId) return;
+
+    const fromStr = `${date}T${startTime}.000Z`;
+    const toStr = `${date}T${endTime}.000Z`;
+
+    this.environmentMockState.pauseTelemetry();
+    this.isHistoryMode$.next(true);
+
+    const parts = date.split('-');
+    const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
+    this.historyRangeLabel = `Historial del ${formattedDate} de ${startTime} a ${endTime}`;
+
+    this.apiClient
+      .get<any[]>(`/api/v1/rooms/${this.selectedRoomId}/metrics/history?from=${encodeURIComponent(fromStr)}&to=${encodeURIComponent(toStr)}`)
+      .then((response) => {
+        const sorted = [...response.data].sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime());
+        this.historyData$.next(sorted);
+      })
+      .catch((error) => {
+        console.error('Error cargando historial:', error);
+        this.historyData$.next([]);
+      });
+  }
+
+  exportToCsv(): void {
+    const data = this.historyData$.value;
+    if (!data.length) {
+      alert('No hay datos para exportar.');
+      return;
+    }
+
+    const headers = ['Fecha y Hora', 'Temperatura (°C)', 'Humedad (%)', 'CO2 (ppm)', 'PM2.5 (µg/m³)', 'Dispositivos'];
+    const rows = data.map(item => [
+      new Date(item.measuredAt).toLocaleString('es-MX'),
+      item.temperature,
+      item.humidity,
+      item.co2,
+      item.pm25,
+      this.formatDevices(item)
+    ]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `reporte-${this.selectedRoomId}-${new Date().getTime()}.csv`);
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  exportToPdf(): void {
+    const data = this.historyData$.value;
+    if (!data.length) {
+      alert('No hay datos para exportar.');
+      return;
+    }
+
+    const roomId = this.selectedRoomId || 'Desconocida';
+    const now = new Date().toLocaleString('es-MX');
+
+    let html = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .header h1 { margin: 0; color: #1a73e8; }
+            .header p { margin: 5px 0; color: #666; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th { background-color: #f0f0f0; padding: 10px; text-align: left; border-bottom: 2px solid #1a73e8; font-weight: bold; }
+            td { padding: 8px; border-bottom: 1px solid #ddd; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .footer { margin-top: 30px; text-align: center; color: #999; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Reporte de Métricas Ambientales</h1>
+            <p><strong>Sala:</strong> ${roomId}</p>
+            <p><strong>Período:</strong> ${this.historyRangeLabel}</p>
+            <p><strong>Generado:</strong> ${now}</p>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha y Hora</th>
+                <th>Temperatura (°C)</th>
+                <th>Humedad (%)</th>
+                <th>CO2 (ppm)</th>
+                <th>PM2.5 (µg/m³)</th>
+                <th>Dispositivos</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.map(item => `
+                <tr>
+                  <td>${new Date(item.measuredAt).toLocaleString('es-MX')}</td>
+                  <td>${item.temperature}</td>
+                  <td>${item.humidity}</td>
+                  <td>${item.co2}</td>
+                  <td>${item.pm25}</td>
+                  <td>${this.formatDevices(item)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="footer">
+            <p>SafeAir - Sistema de Monitoreo de Calidad de Aire</p>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const printWindow = window.open('', '', 'width=1000,height=600');
+    if (printWindow) {
+      printWindow.document.write(html);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  }
+
+  private formatDevices(item: any): string {
+    const devices = [];
+    if (item.minisplitCount > 0) devices.push(`${item.minisplitCount} Minisplit${item.minisplitCount > 1 ? 's' : ''}`);
+    if (item.purifierCount > 0) devices.push(`${item.purifierCount} Purificador${item.purifierCount > 1 ? 'es' : ''}`);
+    if (item.extractorCount > 0) devices.push(`${item.extractorCount} Extractor${item.extractorCount > 1 ? 'es' : ''}`);
+    return devices.length > 0 ? devices.join(', ') : 'Sin dispositivos';
   }
 }

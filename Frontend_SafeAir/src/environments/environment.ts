@@ -42,7 +42,7 @@ export const environment = {
    * 'api': Fetch real metrics from backend (default after Phase 2)
    * 'mock': Use simulated metrics (default for Phase 1, allows UI iteration)
    */
-  DASHBOARD_MODE: 'mock',
+  DASHBOARD_MODE: 'api',
   
   /**
    * Feature flags for gradual rollout
@@ -53,7 +53,7 @@ export const environment = {
      * When false: dashboard uses mock data
      * When true: dashboard polls /api/v1/rooms/{id}/metrics/current
      */
-    liveDashboardMetrics: false,
+    liveDashboardMetrics: true,
     
     /**
      * Enable persistent session storage (Phase 3)

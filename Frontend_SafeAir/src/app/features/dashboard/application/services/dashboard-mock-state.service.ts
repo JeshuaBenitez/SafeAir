@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 
 import { DASHBOARD_INITIAL_ROOMS } from '@features/dashboard/data/mock/dashboard-mock-state';
@@ -6,6 +6,8 @@ import { CreateRoomDraft } from '@features/dashboard/domain/models/create-room-d
 import { DashboardRoom } from '@features/dashboard/domain/models/dashboard-room.model';
 import { RoomActuatorsMap } from '@features/dashboard/domain/models/room-actuator-config.model';
 import { AuthSessionStorageService } from '@features/auth/application/services/auth-session-storage.service';
+import { API_CLIENT } from '@core/config/api-client.token';
+import { environment } from '../../../../../environments/environment';
 
 const STORAGE_KEY_PREFIX = 'safeair.dashboard.rooms.mock';
 export const MAX_ROOMS_PER_DASHBOARD = 3;
@@ -32,24 +34,272 @@ export type RemoveRoomResult =
 
 @Injectable({ providedIn: 'root' })
 export class DashboardMockStateService {
+  private readonly apiClient = inject(API_CLIENT);
   private readonly roomsSubject = new BehaviorSubject<readonly DashboardRoom[]>([]);
+  private currentInstanceId: string | null = null;
 
   readonly rooms$ = this.roomsSubject.asObservable();
 
   constructor(private readonly authSessionStorage: AuthSessionStorageService) {
-    this.roomsSubject.next(this.loadRooms());
+    this.refreshRooms();
   }
 
   getRoomCount(): number {
-    return this.loadRooms().length;
+    return this.roomsSubject.value.length;
   }
 
   hasRoomCapacity(): boolean {
     return this.getRoomCount() < MAX_ROOMS_PER_DASHBOARD;
   }
 
-  addRoom(draft: CreateRoomDraft): AddRoomResult {
-    const currentRooms = this.loadRooms();
+  async addRoom(draft: CreateRoomDraft): Promise<AddRoomResult> {
+    if (environment.DASHBOARD_MODE !== 'api') {
+      return this.addRoomMock(draft);
+    }
+
+    try {
+      const currentRooms = this.roomsSubject.value;
+      if (currentRooms.length >= MAX_ROOMS_PER_DASHBOARD) {
+        return {
+          ok: false,
+          reason: 'max-rooms-reached',
+        };
+      }
+
+      const validationError = this.validateDraft(draft);
+      if (validationError) {
+        return {
+          ok: false,
+          reason: validationError,
+        };
+      }
+
+      const instanceId = await this.getOrCreateInstanceId();
+      const normalizedName = draft.name.trim();
+
+      // 1. Crear cuarto en API
+      const roomResult = await this.apiClient.post<{ id: string }>('/api/v1/rooms', {
+        instanceId,
+        name: normalizedName,
+      });
+      const roomId = roomResult.id;
+
+      // 2. Configurar dimensiones físicas (el backend requiere ancho, largo, alto, etc.)
+      const side = Math.sqrt(draft.areaM2);
+      const roomWidth = Number(side.toFixed(2));
+      const roomLength = Number(side.toFixed(2));
+      const roomHeight = 2.7;
+      const windowCount = Math.min(6, draft.windowsCount); // Maximo 6 soportado por Zod schema del backend
+      const windowAreaTotal = Number((windowCount * 1.5).toFixed(2));
+
+      await this.apiClient.put(`/api/v1/rooms/${roomId}/setup`, {
+        roomWidth,
+        roomLength,
+        roomHeight,
+        windowCount,
+        windowAreaTotal,
+        minisplitCount: draft.actuatorQuantities.minisplit,
+        purifierCount: draft.actuatorQuantities.purifier,
+        extractorCount: draft.actuatorQuantities.extractor,
+      });
+
+      // 3. Registrar dispositivos individuales en el backend
+      const devicePromises: Promise<unknown>[] = [];
+
+      for (let index = 1; index <= draft.actuatorQuantities.minisplit; index++) {
+        devicePromises.push(
+          this.apiClient.post(`/api/v1/rooms/${roomId}/devices`, {
+            type: 'minisplit',
+            label: `MiniSplit ${index}`,
+          })
+        );
+      }
+
+      for (let index = 1; index <= draft.actuatorQuantities.purifier; index++) {
+        devicePromises.push(
+          this.apiClient.post(`/api/v1/rooms/${roomId}/devices`, {
+            type: 'purifier',
+            label: `Purifier ${index}`,
+          })
+        );
+      }
+
+      for (let index = 1; index <= draft.actuatorQuantities.extractor; index++) {
+        devicePromises.push(
+          this.apiClient.post(`/api/v1/rooms/${roomId}/devices`, {
+            type: 'extractor',
+            label: `Extractor ${index}`,
+          })
+        );
+      }
+
+      await Promise.all(devicePromises);
+
+      // Recargar cuartos reales
+      this.refreshRooms();
+
+      const actuators: RoomActuatorsMap = {
+        minisplit: {
+          type: 'minisplit',
+          quantity: draft.actuatorQuantities.minisplit,
+          size: draft.actuatorSizes.minisplit,
+        },
+        purifier: {
+          type: 'purifier',
+          quantity: draft.actuatorQuantities.purifier,
+          size: draft.actuatorSizes.purifier,
+        },
+        extractor: {
+          type: 'extractor',
+          quantity: draft.actuatorQuantities.extractor,
+          size: draft.actuatorSizes.extractor,
+        },
+      };
+
+      const room: DashboardRoom = {
+        id: roomId,
+        name: normalizedName,
+        designation: normalizedName,
+        areaM2: draft.areaM2,
+        windowsCount: draft.windowsCount,
+        imageSrc: this.resolveDashboardImage(normalizedName),
+        controlImageSrc: 'assets/images/3d.png',
+        actuators,
+      };
+
+      return {
+        ok: true,
+        room,
+      };
+    } catch (error) {
+      console.error('Error al agregar habitacion en la API:', error);
+      return {
+        ok: false,
+        reason: 'invalid-room-data',
+      };
+    }
+  }
+
+  async removeRoom(roomId: string): Promise<RemoveRoomResult> {
+    if (environment.DASHBOARD_MODE !== 'api') {
+      return this.removeRoomMock(roomId);
+    }
+
+    try {
+      await this.apiClient.delete(`/api/v1/rooms/${roomId}`);
+      this.refreshRooms();
+      return {
+        ok: true,
+        roomId,
+      };
+    } catch (error) {
+      console.error('Error al eliminar la habitacion de la API:', error);
+      return {
+        ok: false,
+        reason: 'room-not-found',
+      };
+    }
+  }
+
+  refreshRooms(): void {
+    if (environment.DASHBOARD_MODE === 'api') {
+      this.loadRoomsFromApi()
+        .then((rooms) => {
+          this.roomsSubject.next(rooms);
+        })
+        .catch((error) => {
+          console.error('Error cargando habitaciones desde API:', error);
+        });
+    } else {
+      this.roomsSubject.next(this.loadRoomsMock());
+    }
+  }
+
+  private async getOrCreateInstanceId(): Promise<string> {
+    if (this.currentInstanceId) {
+      return this.currentInstanceId;
+    }
+
+    const instances = await this.apiClient.get<any[]>('/api/v1/instances');
+    let activeInstance = instances.find((instance) => instance.isActive);
+
+    if (!activeInstance && instances.length > 0) {
+      activeInstance = instances[0];
+    }
+
+    if (!activeInstance) {
+      const created = await this.apiClient.post<{ id: string }>('/api/v1/instances', {
+        name: 'Demo Instance',
+        description: 'Instancia principal de SafeAir',
+      });
+      this.currentInstanceId = created.id;
+      return created.id;
+    }
+
+    this.currentInstanceId = activeInstance.id;
+    return activeInstance.id;
+  }
+
+  private async loadRoomsFromApi(): Promise<readonly DashboardRoom[]> {
+    try {
+      const instanceId = await this.getOrCreateInstanceId();
+      const instanceDetail = await this.apiClient.get<any>(`/api/v1/instances/${instanceId}`);
+
+      if (!instanceDetail || !Array.isArray(instanceDetail.rooms)) {
+        return [];
+      }
+
+      return instanceDetail.rooms.map((room: any): DashboardRoom => {
+        const setup = room.setup || {
+          windowCount: 0,
+          minisplitCount: 1,
+          purifierCount: 1,
+          extractorCount: 1,
+          roomWidth: 10,
+          roomLength: 10,
+        };
+
+        const areaM2 = room.derivedSetup?.roomArea || (setup.roomWidth * setup.roomLength) || 100;
+
+        const actuators: RoomActuatorsMap = {
+          minisplit: {
+            type: 'minisplit',
+            quantity: setup.minisplitCount,
+            size: 'medium',
+          },
+          purifier: {
+            type: 'purifier',
+            quantity: setup.purifierCount,
+            size: 'medium',
+          },
+          extractor: {
+            type: 'extractor',
+            quantity: setup.extractorCount,
+            size: 'medium',
+          },
+        };
+
+        return {
+          id: room.id,
+          name: room.name,
+          designation: room.name,
+          areaM2: Math.round(areaM2),
+          windowsCount: setup.windowCount,
+          imageSrc: this.resolveDashboardImage(room.name),
+          controlImageSrc: 'assets/images/3d.png',
+          actuators,
+        };
+      });
+    } catch (error) {
+      console.error('Error al consultar habitaciones de API:', error);
+      return [];
+    }
+  }
+
+  // FALLBACK MOCK LOGIC (preservada por compatibilidad)
+
+  private addRoomMock(draft: CreateRoomDraft): AddRoomResult {
+    const currentRooms = this.loadRoomsMock();
     if (currentRooms.length >= MAX_ROOMS_PER_DASHBOARD) {
       return {
         ok: false,
@@ -106,8 +356,8 @@ export class DashboardMockStateService {
     };
   }
 
-  removeRoom(roomId: string): RemoveRoomResult {
-    const currentRooms = this.loadRooms();
+  private removeRoomMock(roomId: string): RemoveRoomResult {
+    const currentRooms = this.loadRoomsMock();
     const nextRooms = currentRooms.filter((room) => room.id !== roomId);
 
     if (nextRooms.length === currentRooms.length) {
@@ -126,8 +376,28 @@ export class DashboardMockStateService {
     };
   }
 
-  refreshRooms(): void {
-    this.roomsSubject.next(this.loadRooms());
+  public loadRoomsMock(): readonly DashboardRoom[] {
+    const key = this.getStorageKey();
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      return DASHBOARD_INITIAL_ROOMS;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) {
+        return DASHBOARD_INITIAL_ROOMS;
+      }
+
+      return parsed.filter(isDashboardRoom);
+    } catch {
+      return DASHBOARD_INITIAL_ROOMS;
+    }
+  }
+
+  private persistRooms(rooms: readonly DashboardRoom[]): void {
+    const key = this.getStorageKey();
+    localStorage.setItem(key, JSON.stringify(rooms));
   }
 
   private getCurrentUserId(): string | null {
@@ -184,30 +454,6 @@ export class DashboardMockStateService {
     }
 
     return null;
-  }
-
-  public loadRooms(): readonly DashboardRoom[] {
-    const key = this.getStorageKey();
-    const raw = localStorage.getItem(key);
-    if (!raw) {
-      return DASHBOARD_INITIAL_ROOMS;
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as unknown;
-      if (!Array.isArray(parsed)) {
-        return DASHBOARD_INITIAL_ROOMS;
-      }
-
-      return parsed.filter(isDashboardRoom);
-    } catch {
-      return DASHBOARD_INITIAL_ROOMS;
-    }
-  }
-
-  private persistRooms(rooms: readonly DashboardRoom[]): void {
-    const key = this.getStorageKey();
-    localStorage.setItem(key, JSON.stringify(rooms));
   }
 
   private createRoomId(): string {
@@ -289,7 +535,7 @@ const hasActuatorConfig = (
 };
 
 const isValidActuatorQuantityForSave = (quantity: unknown): boolean =>
-  typeof quantity === 'number' && Number.isInteger(quantity) && quantity >= 1 && quantity <= 3;
+  typeof quantity === 'number' && Number.isInteger(quantity) && quantity >= 0 && quantity <= 3;
 
 const isValidActuatorSize = (size: unknown): boolean =>
   size === 'small' || size === 'medium' || size === 'large';

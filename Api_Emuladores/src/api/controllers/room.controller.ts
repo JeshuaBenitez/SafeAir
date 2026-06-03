@@ -1,4 +1,4 @@
-﻿import type { Request, Response } from "express";
+import type { Request, Response } from "express";
 import { container } from "../../application/container";
 
 export class RoomController {
@@ -41,5 +41,11 @@ export class RoomController {
     const result = await container.deviceActionService.history(String(req.params.id));
     res.status(200).json(result);
   }
+
+  async delete(req: Request, res: Response): Promise<void> {
+    await container.roomService.delete(String(req.params.id));
+    res.status(204).send();
+  }
 }
+
 

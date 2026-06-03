@@ -217,7 +217,7 @@ export class RoomsPageComponent {
     this.windowsControl.setValue(clamped);
   }
 
-  onSaveRoom(): void {
+  async onSaveRoom(): Promise<void> {
     this.saveAttempted = true;
     this.saveError = null;
 
@@ -236,7 +236,7 @@ export class RoomsPageComponent {
     }
 
     const draft = this.toCreateRoomDraft();
-    const result = this.dashboardFacade.addRoom(draft);
+    const result = await this.dashboardFacade.addRoom(draft);
 
     if (!result.ok) {
       if (result.reason === 'max-rooms-reached') {
