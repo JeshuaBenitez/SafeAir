@@ -21,7 +21,7 @@ graph TD
     end
 
     subgraph Broker [Laptop Broker MQTT]
-        M_Broker((Mosquitto Broker))
+        M_Broker((EMQX Broker))
     end
 
     subgraph Backend [Laptop API Backend]
@@ -55,7 +55,7 @@ Este escenario es ideal para desarrollo rápido, depuración y pruebas locales d
 
 ### Paso 1: Levantar Infraestructura Auxiliar (Base de Datos y MQTT)
 
-Para evitar conflictos de puertos y asegurar que los servicios de aplicación corran de forma nativa en tu máquina, levantaremos **únicamente** la base de datos PostgreSQL y el broker Mosquitto MQTT usando Docker Compose:
+Para evitar conflictos de puertos y asegurar que los servicios de aplicación corran de forma nativa en tu máquina, levantaremos **únicamente** la base de datos PostgreSQL y el broker EMQX MQTT Broker usando Docker Compose:
 
 ```bash
 # Asegúrate de detener cualquier contenedor previo que genere conflicto
@@ -167,22 +167,19 @@ Este escenario simula un entorno productivo real donde la infraestructura está 
 ### 3. Configuración de Laptop C (Broker y Emuladores MQTT)
 
 > [!IMPORTANT]
-> **ARCHIVO ESPECIAL DE CONFIGURACIÓN MQTT (`mosquitto.conf`)**  
-> Para poder ejecutar el broker de mensajería en red local física distribuyendo servicios, se ha dispuesto un archivo especial en la raíz del proyecto llamado `mosquitto.conf`.
-> A partir de la versión 2.0 de Mosquitto, el contenedor Docker por defecto **bloquea todas las conexiones externas** (enlazándose solo a localhost interno) y **deniega conexiones anónimas** sin credenciales. Esto provocaría que la API y los Emuladores de otras laptops reciban errores de conexión instantáneos (`ECONNREFUSED` / socket error).
-> 
-> **¿Dónde debe ubicarse este archivo al ejecutar el contenedor?**
-> *   **En tu máquina física (Host):** El archivo `mosquitto.conf` ya se encuentra ubicado en la **raíz del proyecto**. Al ejecutar el comando de Docker con la variable `$(pwd)/mosquitto.conf`, la terminal buscará el archivo en tu directorio de trabajo actual. **Por lo tanto, debes abrir tu terminal y ejecutar el comando obligatoriamente desde la raíz del proyecto**. Si deseas ejecutarlo desde otra ubicación, debes cambiar `$(pwd)/mosquitto.conf` por la ruta absoluta al archivo (ej. `/home/usuario/DSR_Jorge/Proyecto/mosquitto.conf`).
-> *   **Dentro del contenedor de Docker (Destino):** Docker se encarga de montar el archivo automáticamente en la ruta interna fija `/mosquitto/config/mosquitto.conf` para que el broker de eclipse-mosquitto lo consuma por defecto al arrancar.
+> **CONFIGURACIÓN EMQX (`emqx.conf`)**  
+> Para ejecutar el broker EMQX en red distribuida, el proyecto incluye un archivo de configuración `emqx.conf` que habilita conexiones externas desde otros dispositivos. EMQX por defecto permite conexiones desde cualquier interfaz de red (0.0.0.0).
 
-1. Utiliza el archivo `mosquitto.conf` de la raíz del proyecto y levanta el broker en esta laptop ejecutando en la terminal **desde la raíz del proyecto** el comando de Docker modificado:
+1. En esta laptop, levanta el broker EMQX con Docker usando el archivo `emqx.conf`:
    ```bash
-   # Asegúrate de ejecutar este comando desde la raíz del proyecto para que $(pwd)/mosquitto.conf apunte al archivo real
+   # Asegúrate de ejecutar este comando desde la raíz del proyecto
    docker run -d --name safeair-mqtt \
      -p 1883:1883 \
      -p 8083:8083 \
-     -v $(pwd)/mosquitto.conf:/mosquitto/config/mosquitto.conf \
-     eclipse-mosquitto:2
+     -p 18083:18083 \
+     -v $(pwd)/emqx.conf:/opt/emqx/etc/emqx.conf \
+     -e EMQX_ALLOW_ANONYMOUS=true \
+     emqx/emqx:latest
    ```
 2. Abre una terminal y configura las variables para ejecutar el emulador de SafeAir:
    ```env
