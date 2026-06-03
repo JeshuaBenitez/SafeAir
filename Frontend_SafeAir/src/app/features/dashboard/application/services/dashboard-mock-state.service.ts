@@ -78,11 +78,11 @@ export class DashboardMockStateService {
       const normalizedName = draft.name.trim();
 
       // 1. Crear cuarto en API
-      const roomResult = await this.apiClient.post<{ id: string }>('/api/v1/rooms', {
+      const roomResponse = await this.apiClient.post<{ id: string }>('/api/v1/rooms', {
         instanceId,
         name: normalizedName,
-      });
-      const roomId = roomResult.id;
+      } as any);
+      const roomId = roomResponse.data.id;
 
       // 2. Configurar dimensiones físicas (el backend requiere ancho, largo, alto, etc.)
       const side = Math.sqrt(draft.areaM2);
@@ -220,20 +220,21 @@ export class DashboardMockStateService {
       return this.currentInstanceId;
     }
 
-    const instances = await this.apiClient.get<any[]>('/api/v1/instances');
-    let activeInstance = instances.find((instance) => instance.isActive);
+    const instancesResponse = await this.apiClient.get<any[]>('/api/v1/instances');
+    const instances = instancesResponse.data || [];
+    let activeInstance = instances.find((instance: any) => instance.isActive);
 
     if (!activeInstance && instances.length > 0) {
       activeInstance = instances[0];
     }
 
     if (!activeInstance) {
-      const created = await this.apiClient.post<{ id: string }>('/api/v1/instances', {
+      const createdResponse = await this.apiClient.post<{ id: string }>('/api/v1/instances', {
         name: 'Demo Instance',
         description: 'Instancia principal de SafeAir',
-      });
-      this.currentInstanceId = created.id;
-      return created.id;
+      } as any);
+      this.currentInstanceId = createdResponse.data.id;
+      return createdResponse.data.id;
     }
 
     this.currentInstanceId = activeInstance.id;
@@ -243,13 +244,13 @@ export class DashboardMockStateService {
   private async loadRoomsFromApi(): Promise<readonly DashboardRoom[]> {
     try {
       const instanceId = await this.getOrCreateInstanceId();
-      const instanceDetail = await this.apiClient.get<any>(`/api/v1/instances/${instanceId}`);
+      const instanceDetailResponse = await this.apiClient.get<any>(`/api/v1/instances/${instanceId}`);
 
-      if (!instanceDetail || !Array.isArray(instanceDetail.rooms)) {
+      if (!instanceDetailResponse?.data || !Array.isArray(instanceDetailResponse.data.rooms)) {
         return [];
       }
 
-      return instanceDetail.rooms.map((room: any): DashboardRoom => {
+      return instanceDetailResponse.data.rooms.map((room: any): DashboardRoom => {
         const setup = room.setup || {
           windowCount: 0,
           minisplitCount: 1,

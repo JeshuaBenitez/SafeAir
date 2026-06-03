@@ -8,28 +8,23 @@
   <div class="dashboard-topbar__actions">
     <div class="dashboard-topbar__date-wrapper" *ngIf="showDateTimeFilter">
       <button
-        class="dashboard-topbar__date-trigger"
+        class="dashboard-topbar__date-trigger dashboard-topbar__date-trigger--report"
         type="button"
-        aria-label="Seleccionar fecha"
+        aria-label="Generar reporte"
         (click)="togglePicker()"
       >
         <span class="dashboard-topbar__inline-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none">
-            <rect x="3.5" y="5.5" width="17" height="15" rx="3"></rect>
-            <path d="M7 3.5V7"></path>
-            <path d="M17 3.5V7"></path>
-            <path d="M3.5 9H20.5"></path>
-            <path d="M8 13H8.01"></path>
-            <path d="M12 13H12.01"></path>
-            <path d="M16 13H16.01"></path>
-            <path d="M8 17H8.01"></path>
-            <path d="M12 17H12.01"></path>
-            <path d="M16 17H16.01"></path>
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+            <polyline points="10 9 9 9 8 9"></polyline>
           </svg>
         </span>
 
         <span class="dashboard-topbar__date-text">
-          {{ formatDisplayDate(selectedDate) }}
+          Generar reporte
         </span>
       </button>
 

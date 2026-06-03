@@ -50,8 +50,10 @@ export class DashboardTopbarComponent {
   @Input() selectedDate = '';
   @Input() selectedTime = '';
   @Input() showDateTimeFilter = false;
+  @Input() showReportButton = false;
 
   @Output() dateTimeApplied = new EventEmitter<{ date: string; time: string }>();
+  @Output() generateReport = new EventEmitter<void>();
 
   readonly weekdays = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
   readonly todayIsoDate = this.formatDateForInput(new Date());
@@ -170,6 +172,11 @@ export class DashboardTopbarComponent {
   }
 
   togglePicker(): void {
+    if (this.showReportButton) {
+      this.generateReport.emit();
+      return;
+    }
+
     if (!this.isPickerOpen) {
       this.prepareDraftValues();
       this.pickerMode = 'calendar';

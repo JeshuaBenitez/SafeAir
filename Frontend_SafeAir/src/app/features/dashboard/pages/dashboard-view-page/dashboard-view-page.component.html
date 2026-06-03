@@ -7,9 +7,11 @@
       [breadcrumbRoot]="'Dashboard'"
       [breadcrumbCurrent]="'Monitoreo ambiental'"
       [showDateTimeFilter]="true"
+      [showReportButton]="!(isHistoryMode$ | async)"
       [selectedDate]="selectedTelemetryDate"
       [selectedTime]="selectedTelemetryTime"
       (dateTimeApplied)="onTelemetryDateTimeApplied($event)"
+      (generateReport)="openReportMode()"
     />
 
     <section class="section-page__content" *ngIf="environmentViewModel$ | async as envVm">
@@ -31,7 +33,7 @@
           <span class="history-status-bar__label">{{ historyRangeLabel }}</span>
         </div>
         <button class="history-status-bar__btn" (click)="clearHistoryFilter()">
-          Volver a Tiempo Real
+          ← Volver a Tiempo Real
         </button>
       </div>
 
@@ -62,19 +64,92 @@
 
       <!-- Tabla de Histórico -->
       <div class="history-table-container" *ngIf="(isHistoryMode$ | async) && envVm.selectedState">
-        <!-- Controles de Rango de Tiempo -->
+        <!-- Controles de Rango de Fecha y Hora -->
         <div class="history-range-controls">
-          <div class="range-inputs">
-            <div class="range-input-group">
-              <label for="start-time">Desde las</label>
-              <input id="start-time" type="time" [(ngModel)]="startTime" step="1" title="Hora de inicio" />
+          <!-- Selectores de Fecha y Hora en Formato 12H -->
+          <div class="range-inputs range-inputs--dates">
+            <!-- FECHA/HORA INICIO -->
+            <div class="range-group">
+              <label class="range-group__label">Fecha y Hora Inicio:</label>
+              <div class="range-datetime-picker">
+                <input
+                  type="date"
+                  [(ngModel)]="startDate"
+                  title="Fecha inicio"
+                  class="date-input"
+                />
+                <div class="time-picker">
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    [(ngModel)]="startHour"
+                    title="Hora (1-12)"
+                    placeholder="HH"
+                    class="time-input time-input--hour"
+                  />
+                  <span class="time-separator">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    [(ngModel)]="startMinute"
+                    title="Minuto (0-59)"
+                    placeholder="MM"
+                    class="time-input time-input--minute"
+                  />
+                  <select [(ngModel)]="startPeriod" class="period-select" title="AM/PM">
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <div class="range-input-group">
-              <label for="end-time">Hasta las</label>
-              <input id="end-time" type="time" [(ngModel)]="endTime" step="1" title="Hora de fin" />
+
+            <!-- FECHA/HORA FIN -->
+            <div class="range-group">
+              <label class="range-group__label">Fecha y Hora Fin:</label>
+              <div class="range-datetime-picker">
+                <input
+                  type="date"
+                  [(ngModel)]="endDate"
+                  title="Fecha fin"
+                  class="date-input"
+                />
+                <div class="time-picker">
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    [(ngModel)]="endHour"
+                    title="Hora (1-12)"
+                    placeholder="HH"
+                    class="time-input time-input--hour"
+                  />
+                  <span class="time-separator">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    [(ngModel)]="endMinute"
+                    title="Minuto (0-59)"
+                    placeholder="MM"
+                    class="time-input time-input--minute"
+                  />
+                  <select [(ngModel)]="endPeriod" class="period-select" title="AM/PM">
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <button type="button" class="btn btn--primary" (click)="applyTimeRange()">Aplicar Rango</button>
+
+            <button type="button" class="btn btn--primary" (click)="applyTimeRange()">
+              📊 Aplicar Rango
+            </button>
           </div>
+
+          <!-- Mensaje de Error -->
           <div class="range-error" *ngIf="rangeError">{{ rangeError }}</div>
         </div>
 

@@ -52,8 +52,17 @@ export class DashboardViewPageComponent {
   selectedTelemetryDate = this.formatDateForInput(new Date());
   selectedTelemetryTime = this.formatTimeForInput(new Date());
 
-  startTime = '00:00:00';
-  endTime = '23:59:59';
+  // Variables para el modo reporte
+  startDate = this.formatDateForInput(new Date());
+  startHour = '09';
+  startMinute = '00';
+  startPeriod: 'AM' | 'PM' = 'AM';
+
+  endDate = this.formatDateForInput(new Date());
+  endHour = '10';
+  endMinute = '00';
+  endPeriod: 'AM' | 'PM' = 'AM';
+
   rangeError = '';
 
   constructor(
@@ -90,6 +99,24 @@ export class DashboardViewPageComponent {
     this.environmentMockState.selectRoom(roomId);
   }
 
+  openReportMode(): void {
+    // Inicializar fechas con valores por defecto
+    this.startDate = this.formatDateForInput(new Date());
+    this.startHour = '09';
+    this.startMinute = '00';
+    this.startPeriod = 'AM';
+    this.endDate = this.formatDateForInput(new Date());
+    this.endHour = '10';
+    this.endMinute = '00';
+    this.endPeriod = 'AM';
+    this.rangeError = '';
+
+    this.environmentMockState.pauseTelemetry();
+    this.isHistoryMode$.next(true);
+    this.historyData$.next([]);
+    this.historyRangeLabel = 'Selecciona el rango de fechas y aplica para generar el reporte';
+  }
+
   onTelemetryDateTimeApplied(selection: { date: string; time: string }): void {
     this.selectedTelemetryDate = selection.date;
     this.selectedTelemetryTime = selection.time;
@@ -103,6 +130,7 @@ export class DashboardViewPageComponent {
 
     this.selectedTelemetryDate = this.formatDateForInput(new Date());
     this.selectedTelemetryTime = this.formatTimeForInput(new Date());
+    this.historyRangeLabel = '';
   }
 
   getTemperatureClass(value: number): string {
@@ -168,47 +196,119 @@ export class DashboardViewPageComponent {
 
   applyTimeRange(): void {
     this.rangeError = '';
-    const error = this.validateTimeRange(this.startTime, this.endTime);
+    const error = this.validateTimeRange();
 
     if (error) {
       this.rangeError = error;
       return;
     }
 
-    this.loadHistoryWithRange(this.selectedTelemetryDate, this.startTime, this.endTime);
+    const startDateTime = this.buildFullDateTime(this.startDate, this.startHour, this.startMinute, this.startPeriod);
+    const endDateTime = this.buildFullDateTime(this.endDate, this.endHour, this.endMinute, this.endPeriod);
+
+    this.loadHistoryWithRange(startDateTime, endDateTime);
   }
 
-  private validateTimeRange(start: string, end: string): string {
-    const [sH, sM, sS] = start.split(':').map(Number);
-    const [eH, eM, eS] = end.split(':').map(Number);
+  private validateTimeRange(): string {
+    // Construir fechas completas
+    const startDateTime = this.buildFullDateTimeObj(this.startDate, this.startHour, this.startMinute, this.startPeriod);
+    const endDateTime = this.buildFullDateTimeObj(this.endDate, this.endHour, this.endMinute, this.endPeriod);
 
-    const startMs = sH * 3600000 + sM * 60000 + sS * 1000;
-    const endMs = eH * 3600000 + eM * 60000 + eS * 1000;
-    const diffMs = endMs - startMs;
-
-    if (diffMs < 20 * 60 * 1000) {
-      return 'El rango mínimo es 20 minutos.';
+    // Validar que fin sea mayor que inicio
+    if (endDateTime <= startDateTime) {
+      return 'La fecha y hora de fin debe ser mayor que la fecha y hora de inicio.';
     }
 
-    if (diffMs > 24 * 3600 * 1000) {
-      return 'El rango máximo es un día completo.';
+    // Calcular diferencia en minutos
+    const diffMs = endDateTime.getTime() - startDateTime.getTime();
+    const diffMinutes = diffMs / (60 * 1000);
+
+    // Validar mínimo 20 minutos
+    if (diffMinutes < 20) {
+      return 'El rango mínimo permitido es de 20 minutos.';
+    }
+
+    // Validar máximo 30 días (límite razonable)
+    const maxMinutes = 30 * 24 * 60;
+    if (diffMinutes > maxMinutes) {
+      return `El rango máximo permitido es de 30 días (${maxMinutes} minutos).`;
     }
 
     return '';
   }
 
-  private loadHistoryWithRange(date: string, startTime: string, endTime: string): void {
-    if (!this.selectedRoomId) return;
+  private buildFullDateTime(dateStr: string, hour: string, minute: string, period: 'AM' | 'PM'): string {
+    const dateTime = this.buildFullDateTimeObj(dateStr, hour, minute, period);
+    return dateTime.toISOString();
+  }
 
-    const fromStr = `${date}T${startTime}.000Z`;
-    const toStr = `${date}T${endTime}.000Z`;
+  private buildFullDateTimeObj(dateStr: string, hour: string, minute: string, period: 'AM' | 'PM'): Date {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    let h = parseInt(hour, 10);
+    const m = parseInt(minute, 10);
+
+    // Convertir de 12h a 24h
+    if (period === 'AM' && h === 12) {
+      h = 0;
+    } else if (period === 'PM' && h !== 12) {
+      h += 12;
+    }
+
+    return new Date(year, month - 1, day, h, m, 0, 0);
+  }
+
+  private timeToMilliseconds(hour: string, minute: string, period: 'AM' | 'PM'): number {
+    let h = parseInt(hour, 10);
+    const m = parseInt(minute, 10);
+
+    // Convertir de 12h a 24h
+    if (period === 'AM' && h === 12) {
+      h = 0;
+    } else if (period === 'PM' && h !== 12) {
+      h += 12;
+    }
+
+    return h * 3600000 + m * 60000;
+  }
+
+  private convertTo24hFormat(hour: string, minute: string, period: 'AM' | 'PM'): string {
+    let h = parseInt(hour, 10);
+    const m = parseInt(minute, 10);
+
+    if (period === 'AM' && h === 12) {
+      h = 0;
+    } else if (period === 'PM' && h !== 12) {
+      h += 12;
+    }
+
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+  }
+
+  private loadHistoryWithRange(startDateTimeISO: string, endDateTimeISO: string): void {
+    if (!this.selectedRoomId) {
+      this.rangeError = 'Selecciona una habitación primero.';
+      return;
+    }
+
+    const fromStr = startDateTimeISO;
+    const toStr = endDateTimeISO;
 
     this.environmentMockState.pauseTelemetry();
     this.isHistoryMode$.next(true);
 
-    const parts = date.split('-');
-    const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
-    this.historyRangeLabel = `Historial del ${formattedDate} de ${startTime} a ${endTime}`;
+    // Formatear label para mostrar al usuario
+    const startDt = new Date(startDateTimeISO);
+    const endDt = new Date(endDateTimeISO);
+    const formatDateTime = (dt: Date) => {
+      const day = String(dt.getDate()).padStart(2, '0');
+      const month = String(dt.getMonth() + 1).padStart(2, '0');
+      const year = dt.getFullYear();
+      const hour = String(dt.getHours()).padStart(2, '0');
+      const minute = String(dt.getMinutes()).padStart(2, '0');
+      return `${day}/${month}/${year} ${hour}:${minute}`;
+    };
+
+    this.historyRangeLabel = `Reporte del ${formatDateTime(startDt)} al ${formatDateTime(endDt)}`;
 
     this.apiClient
       .get<any[]>(`/api/v1/rooms/${this.selectedRoomId}/metrics/history?from=${encodeURIComponent(fromStr)}&to=${encodeURIComponent(toStr)}`)

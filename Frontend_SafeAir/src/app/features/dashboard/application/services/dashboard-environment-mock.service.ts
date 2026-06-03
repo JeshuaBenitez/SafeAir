@@ -117,14 +117,15 @@ export class DashboardEnvironmentMockService {
 
     const promises = rooms.map(async (room) => {
       try {
-        const metrics = await this.apiClient.get<any>(`/api/v1/rooms/${room.id}/metrics/current`);
-        
-        if (!metrics) {
+        const response = await this.apiClient.get<any>(`/api/v1/rooms/${room.id}/metrics/current`);
+
+        if (!response || !response.data) {
           return;
         }
 
+        const metrics = response.data;
         const previousState = currentMap[room.id];
-        
+
         const temperatureC = metrics.temperature;
         const humidityPct = metrics.humidity;
         const co2Ppm = metrics.co2;
@@ -134,7 +135,7 @@ export class DashboardEnvironmentMockService {
         const co2History = previousState && Array.isArray(previousState.co2History)
           ? this.pushHistory(previousState.co2History, co2Ppm)
           : Array(10).fill(co2Ppm);
-        
+
         const pm25History = previousState && Array.isArray(previousState.pm25History)
           ? this.pushHistory(previousState.pm25History, pm25UgM3)
           : Array(10).fill(pm25UgM3);
