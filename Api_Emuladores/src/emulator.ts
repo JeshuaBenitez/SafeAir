@@ -3,24 +3,21 @@ import dotenv from "dotenv";
 import path from "path";
 import http from "http";
 
-// Cargar variables de entorno desde .env
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
 const MQTT_URL = process.env.MQTT_URL || "mqtt://localhost:1883";
 const API_URL = process.env.BACKEND_API_URL || "http://localhost:3000";
 const EMULATOR_ID = "emu-room-a";
 
-// Servidor HTTP falso para pasar el Health Check de Render en la capa gratuita (Web Service)
+// Servidor HTTP mínimo para el Health Check de Render (Web Service gratuito)
 const DUMMY_PORT = process.env.PORT || 10000;
 http.createServer((_req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("SafeAir Emulator Alive\n");
 }).listen(Number(DUMMY_PORT), "0.0.0.0", () => {
-  console.log(`[Emulator] Servidor de diagnóstico escuchando en puerto ${DUMMY_PORT}`);
+  console.log(`[Emulator] Servidor de diagnóstico en puerto ${DUMMY_PORT}`);
 });
 
-
-// Estado interno simulado del cuarto/emulador
 interface DeviceState {
   isOn: boolean;
   mode: string;
@@ -53,7 +50,6 @@ const state: EmulatorState = {
   }
 };
 
-// Colores de consola ansi
 const reset = "\x1b[0m";
 const green = "\x1b[32m";
 const yellow = "\x1b[33m";
@@ -67,6 +63,8 @@ function logHeader(msg: string): void {
   console.log(`\n${bold}${cyan}=== ${msg} ===${reset}`);
 }
 
+// Intenta obtener el roomId via API. No bloquea si falla o si hay 2FA activo.
+// Con EMULATOR_MISSING_STRATEGY=auto-provision la API asigna sala por emulatorId.
 async function loginAndGetRoomId(): Promise<string | null> {
   try {
     console.log(`${yellow}[API] Conectando a la API en ${API_URL}...${reset}`);
@@ -77,11 +75,18 @@ async function loginAndGetRoomId(): Promise<string | null> {
     });
 
     if (!loginRes.ok) {
-      console.log(`${red}[API] Fallo en la autenticación. Usando modo de aprovisionamiento automático.${reset}`);
+      console.log(`${yellow}[API] Login falló (${loginRes.status}). Modo auto-provision.${reset}`);
       return null;
     }
 
-    const loginData = await loginRes.json() as { accessToken: string };
+    const loginData = await loginRes.json() as { accessToken?: string; requiresOtp?: boolean };
+
+    // 2FA activo: no hay accessToken sin OTP interactivo - operar con auto-provision
+    if (loginData.requiresOtp || !loginData.accessToken) {
+      console.log(`${yellow}[API] 2FA requerido. Modo auto-provision: sala asignada por emulatorId="${EMULATOR_ID}".${reset}`);
+      return null;
+    }
+
     const token = loginData.accessToken;
 
     const instancesRes = await fetch(`${API_URL}/api/v1/instances`, {
@@ -94,7 +99,7 @@ async function loginAndGetRoomId(): Promise<string | null> {
 
     const instances = await instancesRes.json() as Array<{ id: string }>;
     if (instances.length === 0) {
-      console.log(`${yellow}[API] No se encontraron instancias de SafeAir en la base de datos.${reset}`);
+      console.log(`${yellow}[API] No hay instancias. Modo auto-provision.${reset}`);
       return null;
     }
 
@@ -110,19 +115,18 @@ async function loginAndGetRoomId(): Promise<string | null> {
     const details = await detailsRes.json() as { rooms: Array<{ id: string; name: string }> };
     const roomA = details.rooms.find(r => r.name === "Room A") || details.rooms[0];
     if (roomA) {
-      console.log(`${green}[API] Mapeado exitosamente a la sala "${roomA.name}" con ID: ${roomA.id}${reset}`);
+      console.log(`${green}[API] RoomId obtenido: "${roomA.name}" → ${roomA.id}${reset}`);
       return roomA.id;
     }
 
     return null;
-  } catch (error) {
-    console.log(`${red}[API] No se pudo conectar a la API (${API_URL}). El emulador operará con autoregistro en MQTT.${reset}`);
+  } catch {
+    console.log(`${yellow}[API] Sin conexión a la API. Modo auto-provision.${reset}`);
     return null;
   }
 }
 
 async function run(): Promise<void> {
-  console.clear();
   console.log(`${bold}${green}`);
   console.log("====================================================");
   console.log("      🚀 SAFEAIR - EMULADOR DE TELEMETRÍA MQTT     ");
@@ -130,6 +134,10 @@ async function run(): Promise<void> {
   console.log(reset);
 
   state.roomId = await loginAndGetRoomId();
+
+  if (!state.roomId) {
+    console.log(`${yellow}[Emulador] Modo auto-provision activo. La API asignará sala al recibir emulatorId="${EMULATOR_ID}".${reset}`);
+  }
 
   console.log(`${yellow}[MQTT] Conectando al broker en ${MQTT_URL}...${reset}`);
   const client = mqtt.connect(MQTT_URL, {
@@ -140,80 +148,67 @@ async function run(): Promise<void> {
   client.on("connect", () => {
     console.log(`${green}[MQTT] Conectado exitosamente!${reset}`);
 
-    // Si tenemos el roomId, nos suscribimos a las acciones específicas de la sala
-    if (state.roomId) {
-      const actionsTopic = `safeair/${state.roomId}/actions`;
-      client.subscribe(actionsTopic, { qos: 1 }, (err) => {
-        if (err) {
-          console.error(`${red}[MQTT] Error al suscribirse a las acciones: ${err}${reset}`);
-        } else {
-          console.log(`${cyan}[MQTT] Suscrito a topic de acciones: ${actionsTopic}${reset}`);
-        }
-      });
-    } else {
-      // Si no tenemos roomId, nos suscribimos usando comodín para detectar nuestro roomId cuando llegue un comando
-      const wildcardActions = "safeair/+/actions";
-      client.subscribe(wildcardActions, { qos: 1 }, (err) => {
-        if (err) {
-          console.error(`${red}[MQTT] Error al suscribirse a acciones comodín: ${err}${reset}`);
-        } else {
-          console.log(`${cyan}[MQTT] Suscrito a topic de acciones comodín: ${wildcardActions}${reset}`);
-        }
-      });
-    }
+    const actionsTopic = state.roomId
+      ? `safeair/${state.roomId}/actions`
+      : "safeair/+/actions";
 
-    // Publicar estado inicial de los actuadores
+    client.subscribe(actionsTopic, { qos: 1 }, (err) => {
+      if (err) {
+        console.error(`${red}[MQTT] Error suscripción: ${err}${reset}`);
+      } else {
+        console.log(`${cyan}[MQTT] Suscrito a: ${actionsTopic}${reset}`);
+      }
+    });
+
     publishActuatorState("minisplit");
     publishActuatorState("purifier");
     publishActuatorState("extractor");
 
-    // Iniciar bucle de simulación y publicación
     startSimulationLoop(client);
   });
 
   client.on("message", (topic, message) => {
     try {
       const payload = JSON.parse(message.toString());
-      logHeader("MENSAJE RECIBIDO (ACCIÓN DE ACTUADOR)");
+      logHeader("ACCIÓN RECIBIDA");
       console.log(`${bold}Topic:${reset} ${topic}`);
-      console.log(`${bold}Acción:${reset} ${magenta}${payload.action}${reset} para el dispositivo ${cyan}${payload.deviceType}${reset}`);
+      console.log(`${bold}Acción:${reset} ${magenta}${payload.action}${reset} → ${cyan}${payload.deviceType}${reset}`);
       console.log(`${bold}Razón:${reset} ${payload.reason}`);
 
-      // Actualizar el roomId si lo descubrimos a partir de la acción
+      // Capturar roomId del payload si aún no lo tenemos (auto-provision)
       if (!state.roomId && payload.roomId) {
         state.roomId = payload.roomId;
-        console.log(`${green}[Emulador] RoomId actualizado automáticamente a: ${state.roomId}${reset}`);
+        console.log(`${green}[Emulador] RoomId asignado por auto-provision: ${state.roomId}${reset}`);
       }
 
       const deviceType = payload.deviceType as "minisplit" | "purifier" | "extractor";
       if (state.devices[deviceType]) {
         const action = String(payload.action).toLowerCase();
-        
+
         if (action.endsWith("_on")) {
           state.devices[deviceType].isOn = true;
           if (deviceType === "minisplit") {
             state.devices[deviceType].mode = "cooling";
           }
-          console.log(`${green}[Estado] ${deviceType.toUpperCase()} encendido exitosamente!${reset}`);
+          console.log(`${green}[Estado] ${deviceType.toUpperCase()} ENCENDIDO${reset}`);
         } else if (action.endsWith("_off")) {
           state.devices[deviceType].isOn = false;
-          console.log(`${red}[Estado] ${deviceType.toUpperCase()} apagado exitosamente!${reset}`);
+          console.log(`${red}[Estado] ${deviceType.toUpperCase()} APAGADO${reset}`);
         }
 
-        // Publicar de inmediato el nuevo estado del actuador
         publishActuatorState(deviceType);
       }
     } catch (e) {
-      console.error(`${red}Error al decodificar la acción recibida: ${e}${reset}`);
+      console.error(`${red}Error decodificando acción: ${e}${reset}`);
     }
   });
 
   client.on("error", (error) => {
-    console.error(`${red}[MQTT] Error de conexión: ${error}${reset}`);
+    console.error(`${red}[MQTT] Error: ${error}${reset}`);
   });
 
   client.on("close", () => {
-    console.log(`${yellow}[MQTT] Conexión cerrada con el broker${reset}`);
+    console.log(`${yellow}[MQTT] Conexión cerrada${reset}`);
   });
 
   function publishActuatorState(deviceType: "minisplit" | "purifier" | "extractor"): void {
@@ -234,29 +229,21 @@ async function run(): Promise<void> {
     };
 
     client.publish(topic, JSON.stringify(payload), { qos: 1 }, (err) => {
-      if (err) {
-        console.error(`${red}Error al publicar estado de actuador ${deviceType}: ${err}${reset}`);
-      } else {
-        console.log(`${blue}[MQTT] Estado publicado de ${deviceType}: ${device.isOn ? green + "ON" : red + "OFF"}${reset}`);
+      if (!err) {
+        console.log(`${blue}[MQTT] Estado ${deviceType}: ${device.isOn ? green + "ON" : red + "OFF"}${reset}`);
       }
     });
   }
 
   function startSimulationLoop(mqttClient: mqtt.MqttClient): void {
     setInterval(() => {
-      // 1. Simular Dinámica Física basada en el estado de los actuadores
-      
       // Simular temperatura
       if (state.devices.minisplit.isOn) {
-        // Enfría el ambiente hacia la temperatura objetivo
         const diff = state.temperature - state.devices.minisplit.targetTemperature;
         state.temperature -= diff * 0.05 + (Math.random() - 0.5) * 0.05;
       } else {
-        // Calentamiento natural lento
         state.temperature += 0.02 + (Math.random() - 0.5) * 0.03;
       }
-
-      // Mantener temperatura en rangos realistas
       state.temperature = Math.max(16, Math.min(35, state.temperature));
 
       // Simular humedad
@@ -267,16 +254,15 @@ async function run(): Promise<void> {
       }
       state.humidity = Math.max(30, Math.min(90, state.humidity));
 
-      // Simular CO2 (ppm)
+      // Simular CO2
       if (state.devices.extractor.isOn) {
         state.co2 -= 15 + Math.random() * 10;
       } else {
-        // La gente respira e incrementa el CO2
         state.co2 += 5 + Math.random() * 8;
       }
       state.co2 = Math.max(400, Math.min(2500, state.co2));
 
-      // Simular PM2.5 (ug/m3)
+      // Simular PM2.5
       if (state.devices.purifier.isOn) {
         state.pm25 -= 0.5 + Math.random() * 0.5;
       } else {
@@ -284,7 +270,6 @@ async function run(): Promise<void> {
       }
       state.pm25 = Math.max(5, Math.min(120, state.pm25));
 
-      // 2. Publicar Telemetría
       const telemetryTopic = `safeair/${EMULATOR_ID}/telemetry`;
       const payload = {
         emulatorId: EMULATOR_ID,
@@ -297,9 +282,7 @@ async function run(): Promise<void> {
       };
 
       mqttClient.publish(telemetryTopic, JSON.stringify(payload), { qos: 1 }, (err) => {
-        if (err) {
-          console.error(`${red}Error al publicar telemetría: ${err}${reset}`);
-        } else {
+        if (!err) {
           logHeader("TELEMETRÍA PUBLICADA");
           console.log(`${bold}Temperatura:${reset} ${state.temperature.toFixed(2)} °C`);
           console.log(`${bold}Humedad:${reset} ${state.humidity.toFixed(2)} %`);
@@ -307,7 +290,6 @@ async function run(): Promise<void> {
           console.log(`${bold}PM2.5:${reset} ${state.pm25.toFixed(2)} ug/m3`);
         }
       });
-
     }, 5000);
   }
 }
