@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with CI for reproducible builds
-RUN npm ci
+# Install dependencies (npm install para evitar conflictos de lock)
+RUN npm install
 
 # Copy build config and source
 COPY angular.json ./
