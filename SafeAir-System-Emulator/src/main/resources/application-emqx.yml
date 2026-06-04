@@ -1,0 +1,14 @@
+spring:
+  config:
+    activate:
+      on-profile: emqx
+
+mqtt:
+  enabled: true
+  host: ${MQTT_HOST:}
+  port: ${MQTT_PORT:8883}
+  tls:
+    enabled: ${MQTT_TLS_ENABLED:true}
+  username: ${MQTT_USERNAME:}
+  password: ${MQTT_PASSWORD:}
+  console-log-enabled: ${MQTT_CONSOLE_LOG_ENABLED:true}

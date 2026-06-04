@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package safeair.mqtt;
+
+option java_package = "com.safeair.emulator.api.proto";
+option java_outer_classname = "TelemetryProto";
+
+message SensorValue {
+  string name = 1;
+  double value = 2;
+}
+
+message DeviceAttribute {
+  string key = 1;
+  int32 value = 2;
+}
+
+message DeviceStateMessage {
+  string deviceType = 1;
+  bool on = 2;
+  repeated DeviceAttribute attributes = 3;
+}
+
+message RoomStateMessage {
+  double temperatureC = 1;
+  double humidityPct = 2;
+  double co2Ppm = 3;
+  double pm25UgM3 = 4;
+  double dispersionRate = 5;
+  int32 roomSquareMeters = 6;
+  int32 windowCount = 7;
+}
+
+message TelemetryMessage {
+  string messageId = 1;
+  string emulatorId = 2;
+  int64 eventTimestampEpochMs = 3;
+  int64 tickDurationMs = 4;
+  int32 queueSize = 5;
+  int32 activeEmulatorCount = 6;
+  int64 droppedTelemetryCount = 7;
+  repeated SensorValue sensors = 8;
+  repeated DeviceStateMessage devices = 9;
+  RoomStateMessage roomState = 10;
+}

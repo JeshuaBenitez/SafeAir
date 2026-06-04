@@ -1,0 +1,33 @@
+spring:
+  config:
+    activate:
+      on-profile: profile1
+
+mqtt:
+  enabled: true
+  host: ${MQTT_HOST:localhost}
+  port: ${MQTT_PORT:1883}
+  tls:
+    enabled: ${MQTT_TLS_ENABLED:true}
+  username: ${MQTT_USERNAME:}
+  password: ${MQTT_PASSWORD:}
+  console-log-enabled: true
+
+safeair:
+  profile1:
+    emulators:
+      - emulatorId: EMU-0001
+        updateIntervalSec: 1
+        roomSquareMeters: 35
+        windowCount: 1
+        # Sensor types: 1=Humidity, 2=Temperature, 3=PM2.5, 4=CO2
+        sensorTypes: [1, 2, 3, 4]
+        # Device types: 1=MiniSplit, 2=HumidifierPurifier, 3=AirExtractor
+        deviceTypes: [1, 2, 3]
+
+      - emulatorId: EMU-0002
+        updateIntervalSec: 2
+        roomSquareMeters: 60
+        windowCount: 3
+        sensorTypes: [2, 4]
+        deviceTypes: [1, 3]

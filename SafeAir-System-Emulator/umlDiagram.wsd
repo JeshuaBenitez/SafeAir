@@ -1,0 +1,340 @@
+@startuml
+
+title Safe Air Emulator - Current Class Architecture
+
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam wrapWidth 220
+
+package "com.safeair.emulator" {
+  class SafeAirEmulatorApplication
+}
+
+package "com.safeair.emulator.abstracts" {
+  abstract class Sensor
+  abstract class Electrodomestic {
+    +getType(): String
+    +isOn(): boolean
+    +setState(value: int)
+    +getNormalizedState(): int
+  }
+  abstract class SendInfo {
+    +send(data: Object)
+  }
+}
+
+package "com.safeair.emulator.api.client" {
+  interface Request {
+    +getSetup(emulatorId: String): DtoSetup
+  }
+  class ApiStorageClient
+  Request <|.. ApiStorageClient
+}
+
+package "com.safeair.emulator.api.dto" {
+  class DtoSetup {
+    -emulatorId: String
+    -updateIntervalSec: int
+    -roomSquareMeters: int
+    -windowCount: int
+    -sensorTypes: int[]
+    -deviceTypes: int[]
+  }
+
+  class ConfigCommand {
+    -commandId: String
+    -scope: Scope
+    -targetEmulatorId: String
+    -receivedAtUtc: Instant
+    -sequence: long
+    -payload: Map<String,String>
+    +isGlobal(): boolean
+    +isSpecific(): boolean
+  }
+
+  enum Scope {
+    GLOBAL
+    EMULATOR
+  }
+
+  class MqttEnvelope
+  ConfigCommand --> Scope
+}
+
+package "com.safeair.emulator.api.adapter" {
+  class TelemetryAdapter {
+    +toProtobuf(payload: TelemetryPayload): byte[]
+    +toMessage(payload: TelemetryPayload): TelemetryMessage
+  }
+
+  class ConfigAdapter {
+    +toCommand(payload: byte[]): ConfigCommand
+    +fromMessage(msg: ConfigCommandMessage): ConfigCommand
+  }
+}
+
+package "com.safeair.emulator.api.mqtt" {
+  interface Subject {
+    +publish(topic: String, payload: Object)
+  }
+
+  class MqttTopics {
+    {static} TELEMETRY_TEMPLATE
+    {static} EMULATOR_CONFIG_TEMPLATE
+    {static} GLOBAL_CONFIG_TOPIC
+    {static} TELEMETRY_QOS = 0
+    {static} CONFIG_QOS = 1
+    {static} telemetryTopic(emulatorId: String): String
+    {static} emulatorConfigTopic(emulatorId: String): String
+  }
+
+  class MQTTConnector {
+    -properties: MqttProperties
+    -client: MqttClient
+    -subscriptions: List<Subscription>
+    -handlers: List<BiConsumer<String, byte[]>>
+    +start()
+    +stop()
+    +isEnabled(): boolean
+    +registerHandler(handler)
+    +subscribe(topic: String, qos: int)
+    +publish(topic: String, payload: byte[], qos: int)
+  }
+
+  class MQTTPublisher {
+    -connector: MQTTConnector
+    -telemetryAdapter: TelemetryAdapter
+    +send(data: Object)
+    +publish(topic: String, payload: Object)
+  }
+
+  class MQTTSubscriber {
+    -connector: MQTTConnector
+    -adapter: ConfigAdapter
+    -dispatcher: ConfigDispatcher
+    +start()
+    +stop()
+    +onMessage(topic: String, payload: byte[])
+  }
+
+  class ConsolePublisher {
+    +send(data: Object)
+  }
+
+  class MQTTBroker <<external>>
+
+  Subject <|.. MQTTPublisher
+  SendInfo <|-- MQTTPublisher
+  SendInfo <|-- ConsolePublisher
+  MQTTConnector --> MQTTBroker
+}
+
+package "com.safeair.emulator.config" {
+  class MqttProperties {
+    -enabled: boolean
+    -host: String
+    -port: int
+    -username: String
+    -password: String
+    -consoleLogEnabled: boolean
+    -tls: Tls
+  }
+
+  class Tls {
+    -enabled: boolean
+  }
+
+  class ExecutorConfig {
+    +emulatorManagerExecutor(): ExecutorService
+    +telemetryDispatcherExecutor(): ExecutorService
+    +configDispatcherExecutor(): ExecutorService
+  }
+
+  class LocalModeConfig
+  class LocalDemoProfileConfig
+  class Profile1YamlDemoConfig
+  class Profile1EmulatorProperties
+
+  MqttProperties *-- Tls
+}
+
+package "com.safeair.emulator.emulation.core" {
+  class Emulator {
+    -emulatorId: String
+    -telemetryQueue: TelemetryQueue
+    -state: EmulatorLifecycleState
+    -activeEmulatorCount: int
+    +applySetup(dto: DtoSetup)
+    +start()
+    +stop()
+    +applyConfig(command: ConfigCommand)
+    +collectData(): Map<String, Double>
+    +sendData(sensorData, tickDurationMs)
+    +state(): EmulatorLifecycleState
+  }
+
+  class TelemetryQueue {
+    -capacity: int
+    -droppedCount: long
+    +offer(payload: TelemetryPayload)
+    +poll(timeoutMillis: long): TelemetryPayload
+    +size(): int
+    +droppedCount(): long
+  }
+
+  class TelemetryPayload {
+    -timestamp: Instant
+    -emulatorId: String
+    -tickDurationMs: long
+    -queueSize: int
+    -activeEmulatorCount: int
+    -droppedTelemetryCount: long
+    -roomState: RoomStateSnapshot
+    -sensors: Map<String,Double>
+    -devices: Map<String,DeviceState>
+  }
+
+  class DeviceState {
+    -on: boolean
+    -attributes: Map<String,Integer>
+  }
+
+  class RoomStateSnapshot {
+    -temperature: double
+    -humidity: double
+    -co2: double
+    -pm25: double
+    -dispersionRate: double
+    -area: int
+    -windows: int
+  }
+
+  class DomainConstants {
+    {static} TELEMETRY_QUEUE_CAPACITY = 1024
+    {static} CONFIG_QUEUE_CAPACITY = 1024
+  }
+}
+
+package "com.safeair.emulator.emulation.impl" {
+  class SensorFactory
+  class ElectrodomesticFactory
+  class MiniSplit
+  class HumidifierPurifier
+  class AirExtractor
+}
+
+package "com.safeair.emulator.emulation.simulation" {
+  class Room {
+    -roomSquareMeters: int
+    -windowCount: int
+    -updateIntervalSec: int
+    -dispersionRate: double
+  }
+
+  class SimulationEngine {
+    +tick(room: Room, devices: List<Electrodomestic>, randomSource: RandomSource)
+    +convergedAll(): boolean
+  }
+
+  class RoomEnvironmentHelper
+  class ConvergenceEvaluator
+  interface RandomSource
+}
+
+package "com.safeair.emulator.manager" {
+  enum EmulatorLifecycleState {
+    CREATED
+    CONFIGURED
+    RUNNING
+    STOPPING
+    STOPPED
+  }
+
+  class EmulatorManager {
+    -emulators: Map<String, Emulator>
+    -requestInfo: Request
+    +addEmulator(emulator: Emulator)
+    +removeEmulator(emulatorId: String)
+    +setupAll()
+    +setup(emulatorId: String)
+    +startAll()
+    +stopAll()
+    +applyConfig(command: ConfigCommand)
+    +getEmulatorCount(): int
+  }
+
+  class TelemetryDispatcher {
+    -queue: TelemetryQueue
+    -channels: List<SendInfo>
+    +run()
+    +stop()
+  }
+
+  class ConfigDispatcher {
+    -queue: Deque<ConfigCommand>
+    -droppedCount: long
+    +enqueue(command: ConfigCommand)
+    +poll(timeoutMillis: long): ConfigCommand
+    +size(): int
+    +droppedCount(): long
+    +run()
+    +stop()
+  }
+}
+
+EmulatorManager --> Request
+EmulatorManager "1" o--> "*" Emulator
+Emulator --> SensorFactory
+Emulator --> ElectrodomesticFactory
+Emulator --> TelemetryQueue
+Emulator --> SimulationEngine
+Emulator --> Room
+Emulator --> EmulatorLifecycleState
+
+TelemetryDispatcher --> TelemetryQueue
+TelemetryDispatcher --> SendInfo
+ConfigDispatcher --> ConfigCommand
+ConfigDispatcher --> EmulatorManager
+
+TelemetryAdapter --> TelemetryPayload
+ConfigAdapter --> ConfigCommand
+
+MQTTPublisher --> MQTTConnector
+MQTTPublisher --> TelemetryAdapter
+MQTTSubscriber --> MQTTConnector
+MQTTSubscriber --> ConfigAdapter
+MQTTSubscriber --> ConfigDispatcher
+
+LocalModeConfig --> MqttProperties
+LocalModeConfig --> MQTTConnector
+LocalModeConfig --> MQTTPublisher
+LocalModeConfig --> MQTTSubscriber
+LocalModeConfig --> TelemetryDispatcher
+LocalModeConfig --> ConfigDispatcher
+Profile1YamlDemoConfig --> EmulatorManager
+Profile1YamlDemoConfig --> Profile1EmulatorProperties
+
+note right of MQTTConnector
+  Transport/availability behavior:
+  - TLS mandatory
+  - KeepAlive = 30s
+  - Controlled reconnect to avoid duplicate clients
+  - Telemetry QoS 0, Config QoS 1
+end note
+
+note bottom of ConfigDispatcher
+  Queue policy:
+  - fixed capacity 1024
+  - drop oldest on overflow
+  - specific command removes pending global
+  - newest command wins per same scope/target
+end note
+
+note bottom of ExecutorConfig
+  Concurrency model:
+  - Virtual thread executors
+  - dedicated execution lanes for manager/dispatchers
+end note
+
+@enduml
