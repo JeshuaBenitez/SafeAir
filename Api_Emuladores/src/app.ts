@@ -12,7 +12,14 @@ export function createApp(): Express {
   const app = express();
 
   app.use(helmet());
-  app.use(cors());
+  app.use(cors({
+    origin: [
+      "https://safeair-frontend.onrender.com",
+      "http://localhost:4200",
+      "http://localhost:8080"
+    ],
+    credentials: true
+  }));
   app.use(express.json({ limit: "1mb" }));
   app.use(requestAuditMiddleware);
   app.use(requestLoggerMiddleware);

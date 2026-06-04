@@ -1,0 +1,23 @@
+# Dockerfile para EMQX en Producción
+# Safe Air System - MQTT Broker
+
+FROM emqx/emqx:latest
+
+# Configurar variables de entorno para producción
+ENV EMQX_ALLOW_ANONYMOUS=false \
+    EMQX_LOG_LEVEL=warning \
+    EMQX_DASHBOARD__SECRETS__JWT_SECRET=${EMQX_DASHBOARD_JWT_SECRET} \
+    EMQX_DEFAULT_ADMIN_PASSWORD=${EMQX_ADMIN_PASSWORD}
+
+# Copiar configuración personalizada (si existe)
+# COPY emqx.prod.conf /etc/emqx/emqx.conf
+
+# Exponer puertos
+EXPOSE 1883 8883 8083 8084 18083
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD ["emqx", "ctl", "status"]
+
+# Comando de inicio
+CMD ["emqx", "start"]

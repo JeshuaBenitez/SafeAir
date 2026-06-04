@@ -61,6 +61,10 @@ npm run build
 # Emulator
 npm run build
 # Mismo output
+
+# EMQX (solo verificar que levanta)
+docker-compose up -d mqtt
+docker logs safeair-mqtt | grep "started"
 ```
 
 ---
@@ -129,6 +133,39 @@ npm run build
 
 ---
 
+#### D) EMQX (MQTT Broker) - Nuevo Servicio
+1. Ve a **Render Dashboard** → Creates New → **Web Service**
+2. Configura:
+   - **Name:** `safeair-mqtt`
+   - **Docker Image:** `emqx/emqx:latest`
+   - **Region:** Elige la más cercana
+   - **Plan:** `Standard` (requiere puerto abierto)
+
+3. **Environment Variables:**
+   ```bash
+   # Desarrollo
+   EMQX_ALLOW_ANONYMOUS=true
+   EMQX_LOG_LEVEL=info
+
+   # Producción - CAMBIAR ESTOS VALORES
+   EMQX_ALLOW_ANONYMOUS=false
+   EMQX_DEFAULT_ADMIN_PASSWORD=TuPasswordFuerte2024!
+   EMQX_JWT_SECRET=jwt_secret_generado_con_openssl
+   ```
+
+4. **Puertos a exposer:**
+   - `1883` (MQTT TCP)
+   - `8883` (MQTT TLS)
+   - `8084` (WebSocket)
+
+5. **Verificar:**
+   ```bash
+   curl http://<tu-mqtt-render-url>:1883/api/v2/healthcheck
+   # Debe responder {"status":"ok"}
+   ```
+
+---
+
 ## 🔧 Configuración de Variables de Entorno
 
 ### Frontend (Render Environment Variables)
@@ -166,6 +203,19 @@ JWT_SECRET=<tu-secret>
 BACKEND_API_URL=https://<tu-api-render-url>
 MQTT_URL=mqtt://<tu-mqtt-host>:1883
 NODE_ENV=production
+```
+
+### EMQX Broker (Render Environment Variables)
+```
+# Desarrollo
+EMQX_ALLOW_ANONYMOUS=true
+EMQX_LOG_LEVEL=info
+
+# Producción - OBLIGATORIO CAMBIAR
+EMQX_ALLOW_ANONYMOUS=false
+EMQX_DEFAULT_ADMIN_PASSWORD=TuPasswordFuerte2024!
+# Generar con: openssl rand -hex 32
+EMQX_JWT_SECRET=a1b2c3d4e5f6... (64 caracteres hex)
 ```
 
 ---
