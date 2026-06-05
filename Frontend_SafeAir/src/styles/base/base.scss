@@ -1,0 +1,26 @@
+@use '../tokens/index' as tokens;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  background: tokens.$color-bg;
+  color: tokens.$color-text-primary;
+  line-height: 1.4;
+}
+
+a,
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}

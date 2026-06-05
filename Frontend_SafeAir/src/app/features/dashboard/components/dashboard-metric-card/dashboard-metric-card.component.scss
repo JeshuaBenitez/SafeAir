@@ -1,0 +1,143 @@
+:host {
+  display: block;
+  height: 100%;
+}
+
+/* =========================
+   CONTROLES RAPIDOS
+   ========================= */
+.metric-card {
+  --card-height: 132px;          /* alto total */
+  --card-padding-y: 98px;        /* espacio arriba/abajo */
+  --card-padding-x: 20px;        /* espacio izquierda/derecha */
+  --card-radius: 18px;           /* esquinas */
+  --card-shift-x: 0px;           /* derecha + / izquierda - */
+  --card-shift-y: 10px;          /* abajo + / arriba - */
+
+  --label-max-width: 150px;
+  --label-font-size: 20px;
+
+  --icon-size: 28px;
+
+  --value-font-size: 30px;
+  --unit-font-size: 15px;
+  --unit-padding-bottom: 3px;
+
+  /* =========================
+     NUEVOS CONTROLES
+     ========================= */
+
+  /* bloque superior */
+  --top-row-shift-x: 0px;
+  --top-row-shift-y: 0px;
+  --top-row-gap: 14px;
+
+  /* titulo */
+  --label-shift-x: 0px;
+  --label-shift-y: -70px;
+  --label-line-height: 1.35;
+  --label-letter-spacing: 0px;
+  --label-white-space: nowrap;   /* normal | nowrap */
+  --label-width-mode: 260px;     /* ancho real del label */
+  --label-overflow: visible;     /* visible | hidden */
+  --label-text-overflow: clip;   /* clip | ellipsis */
+
+  /* icono */
+  --icon-shift-x: 0px;
+  --icon-shift-y: -70px;
+
+  /* fila del valor */
+  --value-row-shift-x: 0px;
+  --value-row-shift-y: -50px;
+  --value-row-gap: 8px;
+  --top-to-value-gap: 0px;
+
+  /* numero */
+  --value-shift-x: 0px;
+  --value-shift-y: 0px;
+  --value-line-height: 1;
+
+  /* unidad */
+  --unit-shift-x: 0px;
+  --unit-shift-y: 0px;
+
+  height: var(--card-height);
+  border-radius: var(--card-radius);
+  padding: var(--card-padding-y) var(--card-padding-x);
+  background: rgba(47, 49, 68, 0.96);
+  border: 1px solid rgba(111, 255, 217, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+
+  transform: translate(var(--card-shift-x), var(--card-shift-y));
+}
+
+.metric-card__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--top-row-gap);
+
+  transform: translate(var(--top-row-shift-x), var(--top-row-shift-y));
+}
+
+.metric-card__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: var(--label-width-mode);
+  color: #bfc5de;
+  font-size: var(--label-font-size);
+  line-height: var(--label-line-height);
+  font-weight: 600;
+  letter-spacing: var(--label-letter-spacing);
+  white-space: var(--label-white-space);
+  overflow: var(--label-overflow);
+  text-overflow: var(--label-text-overflow);
+
+  transform: translate(var(--label-shift-x), var(--label-shift-y));
+}
+
+.metric-card__icon {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  min-width: var(--icon-size);
+  flex-shrink: 0;
+
+  transform: translate(var(--icon-shift-x), var(--icon-shift-y));
+
+  img {
+    width: var(--icon-size);
+    height: var(--icon-size);
+    object-fit: contain;
+    display: block;
+  }
+}
+
+.metric-card__value-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--value-row-gap);
+
+  margin-top: var(--top-to-value-gap);
+  transform: translate(var(--value-row-shift-x), var(--value-row-shift-y));
+}
+
+.metric-card__value {
+  font-size: var(--value-font-size);
+  line-height: var(--value-line-height);
+  font-weight: 800;
+  color: #ffffff;
+
+  transform: translate(var(--value-shift-x), var(--value-shift-y));
+}
+
+.metric-card__unit {
+  color: #bfc5de;
+  font-size: var(--unit-font-size);
+  font-weight: 600;
+  padding-bottom: var(--unit-padding-bottom);
+
+  transform: translate(var(--unit-shift-x), var(--unit-shift-y));
+}

@@ -1,0 +1,185 @@
+@use 'tokens/index' as tokens;
+
+.widget-card {
+  border-radius: 1.05rem;
+  border: 1px solid rgba(tokens.$color-border, 0.68);
+  background: linear-gradient(160deg, #282a3d 0%, #222437 62%, #1f2133 100%);
+  box-shadow: 0 18px 36px rgba(8, 9, 18, 0.28);
+  min-height: 20.9rem;
+  padding: 1rem 1.05rem;
+  display: grid;
+  align-content: start;
+  gap: 1.1rem;
+}
+
+.widget-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  h3 {
+    margin: 0;
+    color: tokens.$color-text-primary;
+    font-size: 1.28rem; // más grande
+    font-weight: 700;
+  }
+
+  span {
+    color: tokens.$color-accent;
+    font-weight: 700;
+    font-size: 1.46rem; // más grande el °C
+    line-height: 1;
+  }
+}
+
+.temperature-widget {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 1.65rem;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(1rem);
+}
+
+.temperature-widget__left {
+  display: grid;
+  grid-template-columns: auto auto;
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.temperature-widget__thermometer {
+  width: 3.95rem;
+  height: 14.4rem;
+  position: relative;
+}
+
+.temperature-widget__stem {
+  width: 1.52rem;
+  height: 11.55rem;
+  margin: 0 auto;
+  border-radius: 999px;
+  border: 1px solid rgba(tokens.$color-border, 0.7);
+  background: linear-gradient(180deg, rgba(#1a1d2d, 0.98), rgba(#111424, 0.95));
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0.42rem;
+    left: 0.22rem;
+    width: 0.2rem;
+    height: calc(100% - 0.84rem);
+    border-radius: 999px;
+    background: rgba(#d9fef4, 0.26);
+    pointer-events: none;
+  }
+}
+
+.temperature-widget__stem-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 999px 999px 0.3rem 0.3rem;
+  background: linear-gradient(180deg, #cbfff3 0%, #9dfde7 34%, tokens.$color-accent 100%);
+  box-shadow: inset 0 -4px 10px rgba(8, 44, 41, 0.34), 0 0 18px rgba(tokens.$color-accent, 0.42);
+  transition: height 0.8s ease;
+}
+
+.temperature-widget__bulb {
+  width: 3.45rem;
+  height: 3.45rem;
+  margin: -0.76rem auto 0;
+  border-radius: 50%;
+  border: 1px solid rgba(tokens.$color-border, 0.68);
+  background: radial-gradient(circle at 35% 30%, rgba(#2b3651, 0.95), rgba(#121625, 0.98));
+  display: grid;
+  place-items: center;
+  box-shadow: 0 0 0 2px rgba(#111425, 0.78), 0 0 20px rgba(tokens.$color-accent, 0.14);
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -0.28rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1.02rem;
+    height: 0.32rem;
+    border-radius: 0.35rem;
+    background: linear-gradient(180deg, rgba(#b9fff0, 0.9), rgba(tokens.$color-accent, 0.7));
+    box-shadow: 0 0 9px rgba(tokens.$color-accent, 0.4);
+  }
+}
+
+.temperature-widget__bulb-core {
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, #ddfff8 0%, #a7ffec 30%, tokens.$color-accent 72%);
+  box-shadow: inset 0 -5px 8px rgba(7, 45, 42, 0.3), 0 0 16px rgba(tokens.$color-accent, 0.54);
+}
+
+.temperature-widget__scale {
+  height: 11.55rem;
+  display: grid;
+  align-content: space-between;
+
+  span {
+    color: rgba(tokens.$color-text-muted, 0.9);
+    font-size: 0.78rem;
+    font-weight: 700;
+    position: relative;
+    padding-left: 0.7rem;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0.56rem;
+      height: 1px;
+      background: rgba(tokens.$color-text-muted, 0.7);
+    }
+  }
+}
+
+.temperature-widget__meta {
+  display: grid;
+  gap: 0.75rem; // más separación entre valor, label y confort
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.temperature-widget__value {
+  margin: 0;
+  color: #f8fbff;
+  font-size: 2.5rem; // más grande el 23.4°C
+  font-weight: 800;
+  line-height: 1;
+}
+
+.temperature-widget__label {
+  margin: 0;
+  color: rgba(tokens.$color-text-muted, 0.9);
+  font-size: 0.96rem; // más grande "Promedio instantáneo"
+}
+
+.temperature-widget__state {
+  margin: 0;
+  width: fit-content;
+  min-height: 2rem; // más alto
+  border-radius: 999px;
+  border: 1px solid rgba(tokens.$color-accent, 0.45);
+  background: rgba(tokens.$color-accent, 0.13);
+  color: #defff4;
+  padding: 0 0.9rem; // más ancho
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.92rem; // más grande "Confort"
+  font-weight: 700;
+}

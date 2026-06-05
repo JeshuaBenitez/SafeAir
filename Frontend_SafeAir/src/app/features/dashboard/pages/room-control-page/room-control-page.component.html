@@ -1,0 +1,182 @@
+<section class="room-control-layout">
+  <sa-dashboard-sidebar
+    class="room-control-layout__sidebar"
+    [user]="user">
+  </sa-dashboard-sidebar>
+
+  <div class="room-control-main">
+    <sa-dashboard-topbar
+  [locationLabel]="locationLabel"
+  [breadcrumbRoot]="'Cuartos'"
+  [breadcrumbCurrent]="room?.name || 'Control de habitación'">
+</sa-dashboard-topbar>
+
+    <section class="room-control-content">
+      <div class="room-control-grid">
+        <div class="room-control-left">
+          <section class="metrics-grid">
+            <article
+              class="metric-card"
+              *ngFor="let metric of environmentMetrics">
+              <div class="metric-card__top">
+                <span class="metric-card__label">{{ metric.title }}</span>
+                <img [src]="metric.icon" [alt]="metric.title" />
+              </div>
+
+              <div class="metric-card__value">{{ metric.value }}</div>
+              <div class="metric-card__status">{{ metric.status }}</div>
+            </article>
+          </section>
+
+          <section class="room-visual-section">
+            <h2 class="section-title">3D Habitación Emulada</h2>
+
+            <div class="room-visual-board">
+              <img
+                class="room-visual-board__image"
+                [src]="roomImage"
+                [alt]="room?.name || 'Habitación'" />
+
+              <button
+                type="button"
+                class="room-visual-actuator"
+                *ngFor="let actuator of availableActuators"
+                [class.is-selected]="isSelectedActuator(actuator.key)"
+                [style.top]="actuator.top || null"
+                [style.right]="actuator.right || null"
+                [style.bottom]="actuator.bottom || null"
+                [style.left]="actuator.left || null"
+                (click)="selectActuator(actuator.key)">
+                <img
+                  [src]="getBadgeIcon(actuator)"
+                  [alt]="actuator.label" />
+
+                <span class="room-visual-actuator__badge">
+                  {{ actuator.quantity }}
+                </span>
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <aside class="room-control-right">
+          <h2 class="right-title">Control de Actuadores</h2>
+
+          <div
+  class="actuator-panel"
+  [class.actuator-panel--simple]="selectedActuatorKey !== 'minisplit'"
+  *ngIf="selectedActuator; else emptyPanel"
+>
+  <div class="actuator-panel__header">
+    <img
+      class="actuator-panel__header-icon"
+      [src]="getPanelIcon()"
+      [alt]="getPanelTitle()" />
+
+    <h3>{{ getPanelTitle() }}</h3>
+  </div>
+
+  <ng-container *ngIf="selectedActuatorKey === 'minisplit'; else simpleActuators">
+    <div class="actuator-panel__units">
+      <div class="actuator-unit" *ngFor="let unit of selectedUnits">
+        <div class="actuator-unit__top">
+          <div>
+            <h4>{{ unitTitle(unit) }}</h4>
+            <p>{{ sizeLabel(getActuatorSize('minisplit')) }}</p>
+          </div>
+
+          <button
+            type="button"
+            class="power-toggle"
+            [class.is-on]="isUnitOn(unit)"
+            (click)="toggleUnit(unit)">
+            <span>{{ isUnitOn(unit) ? 'ON' : 'OFF' }}</span>
+            <span class="power-toggle__dot"></span>
+          </button>
+        </div>
+
+       <div class="actuator-slider">
+  <div class="actuator-slider__control">
+    <input
+      type="range"
+      min="19"
+      max="30"
+      [value]="getUnitValue(unit)"
+      (input)="setUnitValue(unit, $event)" />
+
+    <span
+      class="actuator-slider__temperature-indicator"
+      [style.left.%]="getTemperaturePercent(getUnitValue(unit), 19, 30)"
+    >
+      {{ getUnitValue(unit) }}°C
+    </span>
+  </div>
+
+  <div class="actuator-slider__labels">
+    <span>19°C</span>
+    <span>30°C</span>
+  </div>
+</div>
+      </div>
+    </div>
+  </ng-container>
+
+  <ng-template #simpleActuators>
+    <div class="actuator-panel__units actuator-panel__units--simple">
+      <div class="actuator-unit actuator-unit--simple" *ngFor="let unit of selectedUnits">
+        <div class="actuator-unit__simple-main">
+          <div>
+            <h4>{{ unitTitle(unit) }}</h4>
+            <p>{{ sizeLabel(getActuatorSize(selectedActuatorKey!)) }}</p>
+          </div>
+
+          <button
+            type="button"
+            class="power-toggle"
+            [class.is-on]="isUnitOn(unit)"
+            (click)="toggleUnit(unit)">
+            <span>{{ isUnitOn(unit) ? 'ON' : 'OFF' }}</span>
+            <span class="power-toggle__dot"></span>
+          </button>
+        </div>
+
+       <p class="actuator-unit__description">
+  Estado del sistema:
+  <strong
+    [class.is-active]="isUnitOn(unit)"
+    [class.is-off]="!isUnitOn(unit)"
+  >
+    {{ isUnitOn(unit) ? 'Activo' : 'Apagado' }}
+  </strong>
+</p>
+      </div>
+
+      <div
+        class="actuator-unit actuator-unit--placeholder"
+        *ngFor="let placeholder of simpleUnitPlaceholders">
+      </div>
+    </div>
+  </ng-template>
+
+  <button
+    type="button"
+    class="activate-all-button"
+    [class.activate-all-button--off]="areAllSelectedUnitsOn()"
+    (click)="toggleAllSelected()">
+    {{ areAllSelectedUnitsOn() ? 'DESACTIVAR TODOS' : 'ACTIVAR TODOS' }}
+  </button>
+</div>
+
+          <ng-template #emptyPanel>
+            <div class="actuator-panel actuator-panel--empty">
+              <h3>Selecciona un actuador</h3>
+              <p>
+                Haz clic en uno de los iconos del plano para abrir su panel de control.
+              </p>
+            </div>
+          </ng-template>
+        </aside>
+      </div>
+    </section>
+  </div>
+</section>

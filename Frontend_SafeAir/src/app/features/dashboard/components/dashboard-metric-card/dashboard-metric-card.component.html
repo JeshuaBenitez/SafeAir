@@ -1,0 +1,14 @@
+<article class="metric-card">
+  <div class="metric-card__top">
+    <div class="metric-card__label">{{ label }}</div>
+
+    <div class="metric-card__icon" *ngIf="icon">
+      <img [src]="icon" [alt]="label" />
+    </div>
+  </div>
+
+  <div class="metric-card__value-row">
+    <span class="metric-card__value">{{ value }}</span>
+    <span class="metric-card__unit" *ngIf="unit">{{ unit }}</span>
+  </div>
+</article>

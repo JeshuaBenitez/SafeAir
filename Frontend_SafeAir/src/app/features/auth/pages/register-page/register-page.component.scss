@@ -1,0 +1,103 @@
+@use 'tokens/index' as tokens;
+
+:host {
+  display: block;
+}
+
+.register-page {
+  width: min(100%, 70rem);
+  margin: 0 auto;
+  display: grid;
+  align-content: center;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.register-page__card {
+  display: block;
+  width: min(100%, 40.2rem);
+  margin: 0 auto;
+  --sa-auth-card-min-height: 0;
+  --sa-auth-card-padding: 1.1rem 1.35rem 1.05rem;
+  --sa-auth-input-label-gap: 0.35rem;
+  --sa-auth-input-min-height: 3rem;
+  --sa-auth-input-control-min-height: 2.9rem;
+  --sa-auth-button-min-height: 3.08rem;
+}
+
+.register-page__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-self: start;
+  margin: -1rem 0 0.2rem -0.45rem;
+  color: tokens.$color-text-muted;
+  font-size: 0.96rem;
+  line-height: 1;
+  text-decoration: none;
+
+  &:hover,
+  &:focus-visible {
+    color: tokens.$color-text-secondary;
+  }
+}
+
+.register-page__identity {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  margin-bottom: 0.2rem;
+}
+
+.register-page__logo {
+  width: 2.35rem;
+  height: 2.35rem;
+  object-fit: contain;
+  border-radius: 0.65rem;
+  border: 1px solid rgba(tokens.$color-border, 0.75);
+  padding: 0.4rem;
+  background: #111322;
+}
+
+.register-page__title {
+  margin: 0.36rem 0 0;
+  color: tokens.$color-text-primary;
+  font-size: clamp(1.45rem, 1.95vw, 1.78rem);
+  font-weight: 700;
+}
+
+.register-page__subtitle {
+  margin: 0.15rem 0 0;
+  color: tokens.$color-text-muted;
+  font-size: 0.9rem;
+}
+
+.register-page__feedback {
+  display: block;
+  margin-top: 0.65rem;
+  color: tokens.$color-accent;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .register-page {
+    width: min(100%, 31rem);
+  }
+
+  .register-page__card {
+    width: min(100%, 31rem);
+    --sa-auth-card-padding: 1.5rem 1.2rem 1.4rem;
+    --sa-auth-input-min-height: 3.5rem;
+    --sa-auth-input-control-min-height: 3.4rem;
+    --sa-auth-button-min-height: 3.5rem;
+  }
+
+  .register-page__back {
+    font-size: 1.35rem;
+    margin: 0 0 0.75rem;
+  }
+
+  .register-page__subtitle {
+    font-size: 0.92rem;
+  }
+}

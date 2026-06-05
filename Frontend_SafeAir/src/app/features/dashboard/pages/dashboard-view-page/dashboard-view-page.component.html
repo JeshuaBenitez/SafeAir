@@ -1,0 +1,222 @@
+<section class="section-page" *ngIf="viewModel$ | async as vm">
+  <sa-dashboard-sidebar class="section-page__sidebar" [user]="vm.user" />
+
+  <section class="section-page__main">
+    <sa-dashboard-topbar
+      [locationLabel]="'Dashboard'"
+      [breadcrumbRoot]="'Dashboard'"
+      [breadcrumbCurrent]="'Monitoreo ambiental'"
+      [showDateTimeFilter]="true"
+      [showReportButton]="!(isHistoryMode$ | async)"
+      [selectedDate]="selectedTelemetryDate"
+      [selectedTime]="selectedTelemetryTime"
+      (dateTimeApplied)="onTelemetryDateTimeApplied($event)"
+      (generateReport)="openReportMode()"
+    />
+
+    <section class="section-page__content" *ngIf="environmentViewModel$ | async as envVm">
+      <header class="section-page__header">
+        <h1>Dashboard Ambiental</h1>
+        <p>Monitoreo inteligente por habitación con actualización reactiva en tiempo real.</p>
+      </header>
+
+      <sa-dashboard-room-selector
+        [rooms]="envVm.rooms"
+        [selectedRoomId]="envVm.selectedRoomId"
+        (roomSelected)="selectRoom($event)"
+      />
+
+      <!-- Barra de Estado del Modo Historial -->
+      <div class="history-status-bar" *ngIf="isHistoryMode$ | async">
+        <div class="history-status-bar__info">
+          <span class="history-status-bar__icon">📅</span>
+          <span class="history-status-bar__label">{{ historyRangeLabel }}</span>
+        </div>
+        <button class="history-status-bar__btn" (click)="clearHistoryFilter()">
+          ← Volver a Tiempo Real
+        </button>
+      </div>
+
+      <!-- Modo Tiempo Real (Grid Habitual) -->
+      <section class="dashboard-grid" *ngIf="!(isHistoryMode$ | async) && envVm.selectedState as state">
+        <div class="dashboard-grid__item dashboard-grid__item--temperature">
+          <sa-dashboard-temperature-widget [temperatureC]="state.temperatureC" />
+        </div>
+
+        <div class="dashboard-grid__item dashboard-grid__item--humidity">
+          <sa-dashboard-humidity-widget [humidityPct]="state.humidityPct" />
+        </div>
+
+        <div class="dashboard-grid__item dashboard-grid__item--co2">
+          <sa-dashboard-co2-widget
+            [co2Ppm]="state.co2Ppm"
+            [history]="state.co2History"
+          />
+        </div>
+
+        <div class="dashboard-grid__item dashboard-grid__item--pm25">
+          <sa-dashboard-pm25-widget
+            [pm25UgM3]="state.pm25UgM3"
+            [history]="state.pm25History"
+          />
+        </div>
+      </section>
+
+      <!-- Tabla de Histórico -->
+      <div class="history-table-container" *ngIf="(isHistoryMode$ | async) && envVm.selectedState">
+        <!-- Controles de Rango de Fecha y Hora -->
+        <div class="history-range-controls">
+          <!-- Selectores de Fecha y Hora en Formato 12H -->
+          <div class="range-inputs range-inputs--dates">
+            <!-- FECHA/HORA INICIO -->
+            <div class="range-group">
+              <label class="range-group__label">Fecha y Hora Inicio:</label>
+              <div class="range-datetime-picker">
+                <input
+                  type="date"
+                  [(ngModel)]="startDate"
+                  title="Fecha inicio"
+                  class="date-input"
+                />
+                <div class="time-picker">
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    [(ngModel)]="startHour"
+                    title="Hora (1-12)"
+                    placeholder="HH"
+                    class="time-input time-input--hour"
+                  />
+                  <span class="time-separator">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    [(ngModel)]="startMinute"
+                    title="Minuto (0-59)"
+                    placeholder="MM"
+                    class="time-input time-input--minute"
+                  />
+                  <select [(ngModel)]="startPeriod" class="period-select" title="AM/PM">
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <!-- FECHA/HORA FIN -->
+            <div class="range-group">
+              <label class="range-group__label">Fecha y Hora Fin:</label>
+              <div class="range-datetime-picker">
+                <input
+                  type="date"
+                  [(ngModel)]="endDate"
+                  title="Fecha fin"
+                  class="date-input"
+                />
+                <div class="time-picker">
+                  <input
+                    type="number"
+                    min="1"
+                    max="12"
+                    [(ngModel)]="endHour"
+                    title="Hora (1-12)"
+                    placeholder="HH"
+                    class="time-input time-input--hour"
+                  />
+                  <span class="time-separator">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    [(ngModel)]="endMinute"
+                    title="Minuto (0-59)"
+                    placeholder="MM"
+                    class="time-input time-input--minute"
+                  />
+                  <select [(ngModel)]="endPeriod" class="period-select" title="AM/PM">
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <button type="button" class="btn btn--primary" (click)="applyTimeRange()">
+              📊 Aplicar Rango
+            </button>
+          </div>
+
+          <!-- Mensaje de Error -->
+          <div class="range-error" *ngIf="rangeError">{{ rangeError }}</div>
+        </div>
+
+        <!-- Botones de Exportación -->
+        <div class="history-export-actions">
+          <button type="button" class="btn btn--secondary" (click)="exportToCsv()">📥 Descargar CSV</button>
+          <button type="button" class="btn btn--secondary" (click)="exportToPdf()">📄 Imprimir PDF</button>
+        </div>
+
+        <table class="history-table" *ngIf="historyData$ | async as data">
+          <thead>
+            <tr>
+              <th>Fecha y Hora</th>
+              <th>Temperatura</th>
+              <th>Humedad</th>
+              <th>CO2</th>
+              <th>PM2.5</th>
+              <th>Dispositivos en el Período</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let item of data">
+              <td class="history-table__date">{{ item.measuredAt | date: 'dd/MM/yyyy HH:mm:ss' }}</td>
+              <td>
+                <span class="metric-badge" [class]="getTemperatureClass(item.temperature)">
+                  {{ item.temperature }} °C
+                </span>
+              </td>
+              <td class="history-table__value">{{ item.humidity }} %</td>
+              <td>
+                <span class="metric-badge" [class]="getCo2Class(item.co2)">
+                  {{ item.co2 }} ppm
+                </span>
+              </td>
+              <td>
+                <span class="metric-badge" [class]="getPm25Class(item.pm25)">
+                  {{ item.pm25 }} µg/m³
+                </span>
+              </td>
+              <td class="history-table__devices">
+                <span class="device-tag device-tag--minisplit" *ngIf="item.minisplitCount > 0">
+                  {{ item.minisplitCount }} Minisplits
+                </span>
+                <span class="device-tag device-tag--purifier" *ngIf="item.purifierCount > 0">
+                  {{ item.purifierCount }} Purificadores
+                </span>
+                <span class="device-tag device-tag--extractor" *ngIf="item.extractorCount > 0">
+                  {{ item.extractorCount }} Extractores
+                </span>
+                <span class="device-tag device-tag--none" *ngIf="!item.minisplitCount && !item.purifierCount && !item.extractorCount">
+                  Sin dispositivos
+                </span>
+              </td>
+            </tr>
+            <tr *ngIf="data.length === 0">
+              <td colspan="6" class="history-table__empty">
+                No hay mediciones registradas en el rango de fechas seleccionado.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <section class="section-page__empty" *ngIf="!envVm.selectedState">
+        <h2>Sin habitaciones disponibles</h2>
+        <p>Agrega habitaciones en la sección Cuartos para habilitar el monitoreo ambiental.</p>
+      </section>
+    </section>
+  </section>
+</section>

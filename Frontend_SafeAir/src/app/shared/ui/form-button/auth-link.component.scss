@@ -1,0 +1,12 @@
+@use 'tokens/index' as tokens;
+
+.auth-link {
+  color: tokens.$color-accent;
+  font-weight: 600;
+  text-decoration: none;
+
+  &:hover,
+  &:focus-visible {
+    text-decoration: underline;
+  }
+}

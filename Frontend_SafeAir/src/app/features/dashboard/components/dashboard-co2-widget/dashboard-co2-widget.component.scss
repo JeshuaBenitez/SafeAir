@@ -1,0 +1,232 @@
+@use 'tokens/index' as tokens;
+
+:host {
+  display: block;
+  height: 100%;
+}
+
+.widget-card {
+  /* =========================
+     CONTROLES DE TAMAÑO CARD
+     ========================= */
+  --widget-height: 25.9rem;
+  --widget-padding-y: 0.85rem;
+  --widget-padding-x: 1rem;
+  --widget-gap: 0.45rem;
+
+  border-radius: 1.05rem;
+  border: 1px solid rgba(tokens.$color-border, 0.68);
+  background: linear-gradient(165deg, #27293d 0%, #212436 100%);
+  box-shadow: 0 18px 36px rgba(8, 9, 18, 0.28);
+
+  height: var(--widget-height);
+  min-height: var(--widget-height);
+  padding: var(--widget-padding-y) var(--widget-padding-x);
+
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-content: stretch;
+  gap: var(--widget-gap);
+  overflow: hidden;
+}
+
+.widget-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  h3 {
+    margin: 0;
+    color: tokens.$color-text-primary;
+    font-size: 1.28rem;
+  }
+}
+
+.widget-card__chip {
+  border-radius: 99rem;
+  border: 1px solid rgba(tokens.$color-accent, 0.4);
+  background: rgba(tokens.$color-accent, 0.14);
+  color: tokens.$color-accent;
+  min-height: 1.45rem;
+  padding: 0 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.widget-card__metrics {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.widget-card__value {
+  margin: 0;
+  color: #f9fcff;
+  font-size: 2.0rem;
+  font-weight: 800;
+
+  small {
+    font-size: 1.2rem;
+    color: tokens.$color-text-muted;
+    font-weight: 700;
+  }
+}
+
+.widget-card__trend {
+  margin: 0;
+  color: tokens.$color-text-secondary;
+  font-size: 1.05rem;
+  width: fit-content;
+  min-height: 1.55rem;
+  border-radius: 99rem;
+  border: 1px solid rgba(tokens.$color-border, 0.8);
+  background: rgba(#141726, 0.75);
+  padding: 0 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 700;
+}
+
+.widget-card__chart {
+  width: 100%;
+  height: 100%;
+  min-height: 12.8rem;
+  border-radius: 0.85rem;
+  background:
+    radial-gradient(circle at 50% 15%, rgba(tokens.$color-accent, 0.08), transparent 34%),
+    linear-gradient(180deg, rgba(#1b1e30, 0.76), rgba(#191b2b, 0.24));
+  overflow: visible;
+  user-select: none;
+  cursor: default;
+}
+
+.widget-card__hit-area {
+  fill: transparent;
+  cursor: default;
+  pointer-events: none;
+}
+
+.widget-card__grid {
+  line {
+    stroke: rgba(#9ea5bf, 0.18);
+    stroke-width: 1;
+  }
+
+  text {
+    fill: rgba(#c3cbed, 0.82);
+    font-size: 11px;
+    font-weight: 700;
+    text-anchor: end;
+  }
+}
+
+.widget-card__axis-line {
+  stroke: rgba(#c4cce7, 0.34);
+  stroke-width: 1.2;
+}
+
+.widget-card__x-axis {
+  text {
+    fill: rgba(#c3cbed, 0.78);
+    font-size: 10px;
+    font-weight: 700;
+    text-anchor: middle;
+  }
+}
+
+.widget-card__area {
+  fill: url(#co2AreaGradient);
+}
+
+.widget-card__line {
+  fill: none;
+  stroke: #9cf8e1;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 10px rgba(112, 255, 217, 0.38));
+}
+
+.widget-card__points {
+  pointer-events: auto;
+}
+
+.widget-card__point {
+  fill: rgba(#9cf8e1, 0.45);
+  stroke: rgba(#9cf8e1, 0.75);
+  stroke-width: 1.4;
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity 0.16s ease,
+    fill 0.16s ease;
+}
+
+.widget-card__chart:hover .widget-card__point {
+  opacity: 0.5;
+}
+
+.widget-card__point.is-selected {
+  opacity: 1;
+  fill: #9cf8e1;
+}
+
+.widget-card__selector-line {
+  stroke: rgba(#9cf8e1, 0.38);
+  stroke-width: 1.2;
+  stroke-dasharray: 4 5;
+  pointer-events: none;
+}
+
+/*
+  Esta es el área invisible encima del indicador.
+  Aquí sí usamos grab para que se sienta como "agarrar".
+*/
+.widget-card__selector-hover-area {
+  fill: transparent;
+  stroke: transparent;
+  cursor: grab;
+  pointer-events: auto;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.widget-card__selector-ring {
+  fill: rgba(#111425, 0.85);
+  stroke: #9cf8e1;
+  stroke-width: 2.8;
+  filter: drop-shadow(0 0 10px rgba(112, 255, 217, 0.45));
+  pointer-events: none;
+}
+
+.widget-card__selector-dot {
+  fill: #9cf8e1;
+  pointer-events: none;
+}
+
+.widget-card__tooltip {
+  pointer-events: none;
+
+  rect {
+    fill: rgba(#101426, 0.94);
+    stroke: rgba(#9cf8e1, 0.38);
+    stroke-width: 1;
+    filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.28));
+  }
+}
+
+.widget-card__tooltip-title {
+  fill: #f8fbff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.widget-card__tooltip-subtitle {
+  fill: rgba(#c3cbed, 0.78);
+  font-size: 10px;
+  font-weight: 700;
+}

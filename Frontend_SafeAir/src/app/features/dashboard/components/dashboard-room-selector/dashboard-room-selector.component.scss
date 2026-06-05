@@ -1,0 +1,82 @@
+@use 'tokens/index' as tokens;
+
+.room-selector {
+  /* =========================
+     CONTROLES SELECTOR HABITACIONES
+     ========================= */
+  --selector-gap: 1rem;
+
+  --pill-height: 3.35rem;
+  --pill-padding-y: 0.65rem;
+  --pill-padding-x: 1.35rem;
+  --pill-gap: 0.85rem;
+  --pill-radius: 999px;
+
+  --name-font-size: 1.05rem;
+  --name-font-weight: 800;
+
+  --status-height: 1.75rem;
+  --status-padding-x: 0.75rem;
+  --status-font-size: 0.82rem;
+  --status-font-weight: 800;
+
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--selector-gap);
+}
+
+.room-selector__pill {
+  min-height: var(--pill-height);
+  border-radius: var(--pill-radius);
+  border: 1px solid rgba(tokens.$color-border, 0.78);
+  background: linear-gradient(165deg, rgba(#24263a, 0.95), rgba(#1f2132, 0.95));
+  color: tokens.$color-text-secondary;
+  padding: var(--pill-padding-y) var(--pill-padding-x);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pill-gap);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+
+  &:hover {
+    border-color: rgba(tokens.$color-accent, 0.45);
+    transform: translateY(-1px);
+    box-shadow: 0 10px 24px rgba(8, 10, 22, 0.35);
+  }
+}
+
+.room-selector__pill.is-active {
+  border-color: rgba(tokens.$color-accent, 0.82);
+  background: linear-gradient(165deg, rgba(tokens.$color-accent, 0.2), rgba(#2a3045, 0.95));
+  color: #eafff8;
+  box-shadow:
+    0 0 0 1px rgba(tokens.$color-accent, 0.2),
+    0 12px 28px rgba(6, 22, 22, 0.32);
+}
+
+.room-selector__name {
+  font-size: var(--name-font-size);
+  font-weight: var(--name-font-weight);
+  line-height: 1;
+  color: inherit;
+}
+
+.room-selector__status {
+  min-height: var(--status-height);
+  border-radius: 99rem;
+  border: 1px solid rgba(tokens.$color-accent, 0.4);
+  background: rgba(tokens.$color-accent, 0.14);
+  color: tokens.$color-accent;
+  padding: 0 var(--status-padding-x);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--status-font-size);
+  font-weight: var(--status-font-weight);
+  line-height: 1;
+  white-space: nowrap;
+}

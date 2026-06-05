@@ -1,0 +1,72 @@
+@use 'tokens/index' as tokens;
+
+.form-field {
+  display: grid;
+  gap: var(--sa-auth-input-label-gap, tokens.$space-2);
+}
+
+.form-field__label {
+  color: tokens.$color-text-secondary;
+  font-size: 1.02rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.form-field__input-wrap {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  background: tokens.$color-input;
+  border: 1px solid tokens.$color-border;
+  border-radius: 0.96rem;
+  min-height: var(--sa-auth-input-min-height, 3.5rem);
+  padding: 0 1rem;
+
+  &:focus-within {
+    outline: 2px solid rgba(tokens.$color-accent, 0.8);
+    outline-offset: 1px;
+    border-color: rgba(tokens.$color-accent, 0.88);
+  }
+}
+
+.form-field__icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  opacity: 0.74;
+  object-fit: contain;
+  margin-right: 0.7rem;
+}
+
+.form-field__input {
+  background: transparent;
+  color: tokens.$color-text-primary;
+  border: 0;
+  outline: none;
+  min-height: var(--sa-auth-input-control-min-height, 3.4rem);
+  padding: 0;
+  width: 100%;
+  font-size: 1.04rem;
+
+  &::placeholder {
+    color: rgba(tokens.$color-text-muted, 0.8);
+  }
+
+  &:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+}
+
+.form-field__hint {
+  font-size: 0.8125rem;
+  color: tokens.$color-text-muted;
+}
+
+.is-error {
+  color: tokens.$color-danger;
+}
+
+.form-field__input-wrap.is-invalid {
+  border-color: tokens.$color-danger;
+}

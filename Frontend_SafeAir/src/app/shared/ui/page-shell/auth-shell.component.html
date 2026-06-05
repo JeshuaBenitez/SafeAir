@@ -1,0 +1,19 @@
+<main
+  class="auth-shell"
+  [class.auth-shell--headerless]="!showBrandHeader"
+  [class.auth-shell--compact]="compact"
+  aria-label="Authentication area"
+>
+  <header class="brand-header" *ngIf="showBrandHeader">
+    <div class="brand-header__inner">
+      <img class="brand-mark" src="assets/icons/cuadros.png" alt="SafeAir logo" />
+      <span class="brand-name">SafeAir</span>
+    </div>
+  </header>
+
+  <section class="auth-content">
+    <ng-content></ng-content>
+  </section>
+
+  <footer class="auth-footer" [innerHTML]="footerText"></footer>
+</main>

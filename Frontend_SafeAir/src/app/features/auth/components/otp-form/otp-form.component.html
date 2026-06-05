@@ -1,0 +1,66 @@
+<div class="otp-container">
+  <div class="otp-header">
+    <h2 class="otp-title">Verificación de Correo</h2>
+    <p class="otp-subtitle">
+      Hemos enviado un código OTP de 6 dígitos a la dirección:<br/>
+      <span class="otp-email-highlight">{{ email }}</span>
+    </p>
+  </div>
+
+  <form [formGroup]="otpForm" (ngSubmit)="onSubmit()" novalidate>
+    <div class="otp-inputs-wrapper" formArrayName="digits">
+      <input
+        *ngFor="let control of digitsFormArray.controls; let i = index"
+        [id]="'otp-digit-' + i"
+        type="text"
+        inputmode="numeric"
+        maxlength="1"
+        pattern="[0-9]*"
+        class="otp-digit-input"
+        [class.is-expired]="isExpired"
+        [formControlName]="i"
+        (input)="onInput($event, i)"
+        (keydown)="onKeyDown($event, i)"
+        (paste)="onPaste($event)"
+        autocomplete="one-time-code"
+      />
+    </div>
+
+    <!-- Mensajes de feedback -->
+    <div class="otp-feedback" *ngIf="error || resent">
+      <p class="otp-feedback__error" *ngIf="error">{{ error.message || 'Código incorrecto.' }}</p>
+      <p class="otp-feedback__success" *ngIf="resent">¡Código reenviado con éxito!</p>
+    </div>
+
+    <div class="otp-timer-section">
+      <p class="otp-timer-text" *ngIf="!isExpired">
+        El código expira en <span class="otp-timer-highlight">{{ formattedTime }}</span>
+      </p>
+      <p class="otp-timer-text otp-timer-expired" *ngIf="isExpired">
+        El código ha expirado. Solicita uno nuevo.
+      </p>
+    </div>
+
+    <div class="otp-actions">
+      <button
+        type="button"
+        class="otp-resend-button"
+        [class.is-active]="canResend"
+        [disabled]="!canResend || loading"
+        (click)="onResendClick()"
+      >
+        <span *ngIf="canResend">Reenviar código</span>
+        <span *ngIf="!canResend">Reenviar código ({{ resendCooldownFormatted }})</span>
+      </button>
+
+      <button
+        type="button"
+        class="otp-cancel-button"
+        [disabled]="loading"
+        (click)="onCancelClick()"
+      >
+        Volver al inicio
+      </button>
+    </div>
+  </form>
+</div>

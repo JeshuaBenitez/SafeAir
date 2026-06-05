@@ -1,0 +1,15 @@
+@use '../tokens/index' as tokens;
+
+:root {
+  color-scheme: dark;
+  --sa-color-bg: #{tokens.$color-bg};
+  --sa-color-surface: #{tokens.$color-surface};
+  --sa-color-input: #{tokens.$color-input};
+  --sa-color-border: #{tokens.$color-border};
+  --sa-color-accent: #{tokens.$color-accent};
+  --sa-color-text-primary: #{tokens.$color-text-primary};
+  --sa-color-text-secondary: #{tokens.$color-text-secondary};
+  --sa-color-text-muted: #{tokens.$color-text-muted};
+  --sa-shadow-soft: #{tokens.$shadow-soft};
+  --sa-shadow-accent: #{tokens.$shadow-accent};
+}

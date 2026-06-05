@@ -1,0 +1,25 @@
+<sa-auth-shell [compact]="true" footerText="&copy; 2026 SafeAir emulator">
+  <section class="register-page">
+    <a class="register-page__back" routerLink="/auth/login">&#8592; Regresar al inicio</a>
+
+    <sa-auth-card class="register-page__card" title="" subtitle="">
+      <div class="register-page__identity">
+        <img class="register-page__logo" src="assets/icons/cuadros.png" alt="SafeAir logo" />
+        <h1 class="register-page__title">Safe Air System</h1>
+        <p class="register-page__subtitle">Crea una cuenta para empezar a controlar tus dispositivos.</p>
+      </div>
+
+      <ng-container *ngIf="state$ | async as state">
+        <sa-register-form
+          [loading]="state.loading"
+          [formError]="state.formError || undefined"
+          (submitRegister)="onRegisterSubmit($event)"
+        />
+
+        <output *ngIf="state.feedback" class="register-page__feedback" aria-live="polite">
+          {{ state.feedback }}
+        </output>
+      </ng-container>
+    </sa-auth-card>
+  </section>
+</sa-auth-shell>

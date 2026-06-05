@@ -1,0 +1,9 @@
+@use '../tokens/index' as tokens;
+
+.sa-field-is-invalid {
+  border-color: tokens.$color-danger !important;
+}
+
+.sa-field-is-disabled {
+  opacity: 0.6;
+}

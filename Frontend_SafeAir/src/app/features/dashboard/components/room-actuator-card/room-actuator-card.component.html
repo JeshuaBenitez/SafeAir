@@ -1,0 +1,64 @@
+<article
+  class="actuator-card"
+  [class.actuator-card--active]="isActive"
+  [class.actuator-card--error]="showError"
+>
+ <button
+  class="actuator-card__check"
+  type="button"
+  [class.actuator-card__check--active]="isActive"
+  [attr.aria-label]="isActive ? 'Desactivar actuador' : 'Activar actuador'"
+  (click)="toggleSelected(); $event.stopPropagation()"
+>
+  <svg viewBox="0 0 24 24" fill="none" *ngIf="isActive">
+    <path d="M5 12.5L9.4 17L19 7"></path>
+  </svg>
+</button>
+
+  <header class="actuator-card__header">
+    <div class="actuator-card__icon-wrap">
+      <img [src]="iconSrc" [alt]="title" class="actuator-card__icon" />
+    </div>
+
+    <div class="actuator-card__title-block">
+      <h3 class="actuator-card__title">{{ title }}</h3>
+      <p class="actuator-card__subtitle">{{ subtitle }}</p>
+    </div>
+  </header>
+
+  <section class="actuator-card__section">
+    <span class="actuator-card__section-label">Cantidad de sistemas</span>
+
+    <div class="actuator-card__segmented" role="group" aria-label="Cantidad de sistemas">
+  <button
+    type="button"
+    *ngFor="let item of quantities"
+    class="actuator-card__segment"
+    [class.actuator-card__segment--active]="quantity === item && isActive"
+    (click)="setQuantity(item)"
+  >
+    {{ item }}
+  </button>
+</div>
+  </section>
+
+  <section class="actuator-card__section">
+    <span class="actuator-card__section-label">Tamaño de chasis</span>
+
+    <div class="actuator-card__segmented" role="group" aria-label="Tamaño de chasis">
+  <button
+    type="button"
+    *ngFor="let item of sizes"
+    class="actuator-card__segment"
+    [class.actuator-card__segment--active]="size === item && isActive"
+    (click)="setSize(item)"
+  >
+    {{ labelForSize(item) }}
+  </button>
+</div>
+  </section>
+
+  <p class="actuator-card__hint" *ngIf="showError">
+    Cada actuador debe tener entre 1 y 3 unidades.
+  </p>
+</article>

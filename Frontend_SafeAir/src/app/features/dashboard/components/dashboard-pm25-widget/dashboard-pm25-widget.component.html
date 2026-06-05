@@ -1,0 +1,139 @@
+<article class="widget-card">
+  <header class="widget-card__header">
+    <h3>PM2.5</h3>
+    <span class="widget-card__unit">μg/m³</span>
+  </header>
+
+  <div class="widget-card__metrics">
+    <p class="widget-card__value">
+      {{ pm25UgM3 | number: '1.0-0' }}
+      <small>μg/m³</small>
+    </p>
+
+    <p
+      class="widget-card__trend"
+      [class.is-up]="trendTone === 'up'"
+      [class.is-down]="trendTone === 'down'"
+    >
+      {{ trendLabel }}
+    </p>
+  </div>
+
+  <svg
+    class="widget-card__sparkline"
+    viewBox="0 0 520 240"
+    role="img"
+    aria-label="Gráfica histórica de PM2.5"
+  >
+    <defs>
+      <linearGradient id="pm25AreaGradient" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#9cf8e1" stop-opacity="0.58"></stop>
+        <stop offset="100%" stop-color="#9cf8e1" stop-opacity="0"></stop>
+      </linearGradient>
+    </defs>
+
+    <rect
+      class="widget-card__hit-area"
+      [attr.x]="marginLeft"
+      [attr.y]="marginTop"
+      [attr.width]="plotWidth"
+      [attr.height]="plotHeight"
+    ></rect>
+
+    <g class="widget-card__grid">
+      <g *ngFor="let tick of yTicks">
+        <line
+          [attr.x1]="marginLeft"
+          [attr.y1]="tick.y"
+          [attr.x2]="chartWidth - marginRight"
+          [attr.y2]="tick.y"
+        ></line>
+
+        <text [attr.x]="marginLeft - 10" [attr.y]="tick.y + 4">
+          {{ tick.value }}
+        </text>
+      </g>
+    </g>
+
+    <path class="widget-card__area" [attr.d]="areaPath"></path>
+    <path class="widget-card__line" [attr.d]="sparklinePath"></path>
+
+    <line
+      class="widget-card__axis-line"
+      [attr.x1]="marginLeft"
+      [attr.y1]="marginTop"
+      [attr.x2]="marginLeft"
+      [attr.y2]="marginTop + plotHeight"
+    ></line>
+
+    <line
+      class="widget-card__axis-line"
+      [attr.x1]="marginLeft"
+      [attr.y1]="marginTop + plotHeight"
+      [attr.x2]="marginLeft + plotWidth"
+      [attr.y2]="marginTop + plotHeight"
+    ></line>
+
+    <g class="widget-card__x-axis">
+      <text *ngFor="let tick of xTicks" [attr.x]="tick.x" [attr.y]="chartHeight - 8">
+        {{ tick.label }}
+      </text>
+    </g>
+
+    <g class="widget-card__points">
+      <circle
+        *ngFor="let point of chartPoints; trackBy: trackByPoint"
+        class="widget-card__point"
+        [class.is-selected]="point.index === activePoint.index"
+        [attr.cx]="point.x"
+        [attr.cy]="point.y"
+        r="4"
+      ></circle>
+    </g>
+
+    <line
+      class="widget-card__selector-line"
+      [attr.x1]="activePoint.x"
+      [attr.y1]="marginTop"
+      [attr.x2]="activePoint.x"
+      [attr.y2]="marginTop + plotHeight"
+    ></line>
+
+    <!-- Solo esta zona permite agarrar y mover el indicador -->
+    <circle
+      class="widget-card__selector-hover-area"
+      [attr.cx]="activePoint.x"
+      [attr.cy]="activePoint.y"
+      r="16"
+      (mouseenter)="showTooltip()"
+      (mouseleave)="hideTooltip()"
+      (pointerdown)="startIndicatorDrag($event)"
+    ></circle>
+
+    <circle
+      class="widget-card__selector-ring"
+      [attr.cx]="activePoint.x"
+      [attr.cy]="activePoint.y"
+      r="8"
+    ></circle>
+
+    <circle
+      class="widget-card__selector-dot"
+      [attr.cx]="activePoint.x"
+      [attr.cy]="activePoint.y"
+      r="4"
+    ></circle>
+
+    <g class="widget-card__tooltip" *ngIf="isTooltipVisible" [attr.transform]="tooltipTransform">
+      <rect width="150" height="50" rx="10"></rect>
+
+      <text x="12" y="20" class="widget-card__tooltip-title">
+        {{ activePoint.value | number: '1.0-0' }} μg/m³
+      </text>
+
+      <text x="12" y="37" class="widget-card__tooltip-subtitle">
+        {{ activePoint.timeLabel }}
+      </text>
+    </g>
+  </svg>
+</article>

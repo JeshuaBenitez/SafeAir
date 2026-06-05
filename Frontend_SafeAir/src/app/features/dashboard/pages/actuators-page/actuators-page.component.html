@@ -1,0 +1,12 @@
+<section class="section-page" *ngIf="viewModel$ | async as vm">
+  <sa-dashboard-sidebar class="section-page__sidebar" [user]="vm.user" />
+
+  <section class="section-page__main">
+    <sa-dashboard-topbar [locationLabel]="'Actuators'" />
+
+    <section class="section-page__content">
+      <h1>Actuators</h1>
+      <p>Seccion placeholder: aqui se mostrara el control de actuadores.</p>
+    </section>
+  </section>
+</section>

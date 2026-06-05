@@ -1,0 +1,37 @@
+@use 'tokens/index' as tokens;
+
+.auth-card {
+  width: min(100%, 40.2rem);
+  min-height: var(--sa-auth-card-min-height, 29rem);
+  background: tokens.$color-surface;
+  border-radius: 1.45rem;
+  border: 1px solid rgba(tokens.$color-border, 0.72);
+  box-shadow: tokens.$shadow-soft;
+  padding: var(--sa-auth-card-padding, 2rem 1.75rem 2.1rem);
+}
+
+.auth-card__header {
+  margin-bottom: tokens.$space-4;
+}
+
+.auth-card__title {
+  margin: 0;
+  color: tokens.$color-text-primary;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.auth-card__subtitle {
+  margin: tokens.$space-2 0 0;
+  color: tokens.$color-text-muted;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 640px) {
+  .auth-card {
+    width: min(100%, 31rem);
+    min-height: auto;
+    border-radius: 1.2rem;
+    padding: 1.5rem 1.1rem 1.6rem;
+  }
+}

@@ -1,0 +1,53 @@
+<article class="room-card" (click)="goToControl()">
+  <div class="room-card__image" [style.background-image]="'url(' + imageUrl + ')'">
+    <div class="room-card__overlay"></div>
+
+    <div class="room-card__status" [class.room-card__status--active]="isActive">
+      {{ isActive ? 'ACTIVADO / OPTIMIZADO' : 'DESACTIVADO' }}
+    </div>
+
+    <button
+      class="room-card__delete"
+      type="button"
+      aria-label="Eliminar habitación"
+      title="Eliminar habitación"
+      (click)="requestDelete($event)">
+      <img src="assets/icons/trash.svg" alt="" aria-hidden="true" />
+    </button>
+
+    <div class="room-card__content">
+      <h3>{{ room.name || room.designation || 'Habitación' }}</h3>
+
+      <div class="room-card__inline-stats">
+        <span>
+          <img src="assets/icons/temperatura.png" alt="Temperatura" />
+          {{ displayTemperature }}
+        </span>
+
+        <span>
+          <img src="assets/icons/ventana.png" alt="Ventanas" />
+          {{ room.windowsCount || room.windows || 0 }}
+        </span>
+
+        <span>
+          <img src="assets/icons/actuador.png" alt="Actuadores" />
+          {{ actuatorsCount }}
+        </span>
+      </div>
+
+      <button
+        class="room-card__arrow"
+        type="button"
+        aria-label="Ver habitación"
+        (click)="goToControl(); $event.stopPropagation()">
+        →
+      </button>
+    </div>
+  </div>
+
+  <div class="room-card__footer">
+    <span>{{ room.areaM2 || room.area || 0 }} m2</span>
+    <span>{{ room.windowsCount || room.windows || 0 }} ventanas</span>
+    <span>{{ actuatorsCount }} actuadores</span>
+  </div>
+</article>

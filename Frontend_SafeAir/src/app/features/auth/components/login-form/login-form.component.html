@@ -1,0 +1,69 @@
+<form class="login-form" (ngSubmit)="onSubmit()" [formGroup]="form" novalidate>
+  <sa-form-input
+    id="login-email"
+    label="Correo electronico"
+    type="email"
+    autocomplete="email"
+    placeholder="nombre@empresa.com"
+    leftIconSrc="assets/icons/correo.png"
+    [control]="emailControl"
+    [error]="getEmailError()"
+  />
+
+  <label class="login-password">
+    <span class="login-password__label">Contrasena</span>
+
+    <div
+      class="login-password__field"
+      [class.has-error]="getPasswordError()"
+    >
+      <img
+        class="login-password__left-icon"
+        src="assets/icons/candado.png"
+        alt=""
+        aria-hidden="true"
+      />
+
+      <input
+        id="login-password"
+        [type]="showPassword ? 'text' : 'password'"
+        autocomplete="current-password"
+        placeholder="********"
+        [formControl]="passwordControl"
+      />
+
+      <button
+        class="login-password__toggle"
+        type="button"
+        [attr.aria-label]="showPassword ? 'Ocultar contrasena' : 'Mostrar contrasena'"
+        (click)="togglePasswordVisibility()"
+      >
+        <img
+          [src]="showPassword ? 'assets/icons/ojocerrado.png' : 'assets/icons/ojo.png'"
+          alt=""
+          aria-hidden="true"
+        />
+      </button>
+    </div>
+
+    <span class="login-password__error" *ngIf="getPasswordError()">
+      {{ getPasswordError() }}
+    </span>
+  </label>
+
+  <p *ngIf="error" class="login-form__error" role="alert">{{ error.message }}</p>
+
+  <sa-primary-button
+    type="submit"
+    label="Iniciar sesi&oacute;n"
+    [loading]="loading"
+    [disabled]="form.invalid || loading"
+  />
+
+  <div class="login-form__links">
+    <p class="login-form__register">
+      &iquest;A&uacute;n no tienes cuenta?
+      <sa-auth-link to="/auth/register" label="Crear una cuenta" />
+    </p>
+  </div>
+</form>

@@ -1,0 +1,15 @@
+<button
+  class="primary-button"
+  [class.is-loading]="loading"
+  [class.has-trailing-icon]="!!rightIconSrc || !!rightGlyph"
+  [attr.type]="type"
+  [disabled]="disabled || loading"
+  [attr.aria-busy]="loading"
+>
+  <span *ngIf="!loading" class="primary-button__content">
+    <span>{{ label }}</span>
+    <img *ngIf="rightIconSrc" class="primary-button__icon" [src]="rightIconSrc" alt="" aria-hidden="true" />
+    <span *ngIf="!rightIconSrc && rightGlyph" class="primary-button__glyph" aria-hidden="true">{{ rightGlyph }}</span>
+  </span>
+  <span *ngIf="loading">Loading...</span>
+</button>
