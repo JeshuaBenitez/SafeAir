@@ -1,300 +1,343 @@
 # 🌬️ SafeAir: Sistema de Monitoreo de Calidad de Aire y Climatización
 
-SafeAir es una plataforma de IoT de última generación y de nivel empresarial diseñada para la telemetría, el monitoreo y el control inteligente de la calidad del aire y la climatización en salas cerradas. Su arquitectura desacoplada y orientada a eventos permite procesar mediciones ambientales críticas en tiempo real y coordinar acciones automáticas sobre actuadores físicos para mantener entornos saludables.
+SafeAir es una plataforma de IoT diseñada para el monitoreo y control de la calidad del aire en espacios cerrados. El sistema procesa mediciones ambientales en tiempo real y permite el control bidireccional de dispositivos (actuadores).
 
-Este repositorio está estructurado en dos servicios principales:
-*   **`Api_Emuladores` (Backend)**: API robusta desarrollada con Node.js, Express, Sequelize ORM (PostgreSQL) y comunicación en tiempo real vía MQTT.
-*   **`Frontend_SafeAir` (Frontend)**: Interfaz de usuario moderna y responsiva construida con Angular 19.
+## 📋 Descripción del Proyecto
+
+**SafeAir** es un sistema distribuido que demuestra arquitecturas modernas de comunicación en red:
+
+- **Frontend**: Interfaz Angular 19 para visualización y control
+- **API/Backend**: TypeScript/Node.js/Express con persistencia PostgreSQL
+- **Broker MQTT**: EMQX (no Mosquitto) para comunicación pub/sub
+- **Emuladores**: Java Spring Boot simulando dispositivos IoT
+- **Base de datos**: PostgreSQL 16
 
 ---
 
-## 🏗️ Diagrama de Arquitectura de Red
-
-La comunicación del sistema forma un lazo cerrado de control (Control Loop) continuo y ultra-eficiente:
+## 🏗️ Arquitectura del Sistema
 
 ```mermaid
-graph TD
-    subgraph Emulador [Laptop de Emulación]
-        E[Emulador MQTT] -->|1. Publica Telemetría| M_Broker
-        E -->|5. Cambia Estado Físico| A[Actuadores]
-        A -->|6. Reporta Nuevo Estado| M_Broker
+flowchart LR
+    subgraph Frontend [Frontend Angular]
+        FE[Angular App<br/>:8080] 
     end
 
-    subgraph Broker [Laptop Broker MQTT]
-        M_Broker((EMQX Broker))
+    subgraph Backend [API TypeScript]
+        API[Express API<br/>:3000]
     end
 
-    subgraph Backend [Laptop API Backend]
-        M_Broker -->|2. Ingesta Telemetría| API[Express API]
-        API -->|3. Evalúa Reglas de Calidad| DB[(PostgreSQL)]
-        API -->|4. Publica Acción de Actuador| M_Broker
+    subgraph Database [PostgreSQL]
+        DB[(PostgreSQL<br/>:5432)]
     end
 
-    subgraph UI [Laptop Frontend]
-        FE[Angular App] -->|Consulta HTTP Polling| API
+    subgraph Broker [EMQX]
+        MQ[EMQX Broker<br/>:1883, :8084]
     end
+
+    subgraph Emuladores [Java Spring Boot]
+        EM[Emuladores<br/>:8081]
+    end
+
+    FE -->|HTTP REST| API
+    API -->|PostgreSQL| DB
+    API -->|MQTT Pub/Sub| MQ
+    EM -->|MQTT| MQ
+    MQ -->|MQTT| API
+    API -->|HTTP| FE
     
-    style E fill:#e1f5fe,stroke:#03a9f4,stroke-width:2px
-    style M_Broker fill:#ede7f6,stroke:#673ab7,stroke-width:2px
-    style API fill:#e8f5e9,stroke:#4caf50,stroke-width:2px
-    style DB fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    style FE fill:#fce4ec,stroke:#e91e63,stroke-width:2px
+    style FE fill:#e1f5fe,stroke:#03a9f4
+    style API fill:#e8f5e9,stroke:#4caf50
+    style DB fill:#fff3e0,stroke:#ff9800
+    style MQ fill:#ede7f6,stroke:#673ab7
+    style EM fill:#fce4ec,stroke:#e91e63
 ```
 
 ---
 
-## 💻 Escenario 1: Ejecución Monolítica Local (1 Sola Máquina)
+## 📊 Flujos de Datos
 
-Este escenario es ideal para desarrollo rápido, depuración y pruebas locales del flujo de datos en un único computador.
+### Telemetría (Emulador → Frontend)
+```
+Emulador Java → EMQX (:1883) → API → PostgreSQL → Frontend
+```
 
-### 📋 Prerrequisitos
-*   **Node.js**: Versión 18 o superior.
-*   **Docker Desktop**: Instalado y corriendo (para servicios auxiliares de base de datos y broker MQTT).
+### Control (Frontend → Emulador)
+```
+Frontend → API → PostgreSQL → EMQX → Emulador Java
+```
+
+### Consulta
+```
+Frontend → API → PostgreSQL → Frontend
+```
 
 ---
 
-### Paso 1: Levantar Infraestructura Auxiliar (Base de Datos y MQTT)
+## 🚀 Inicio Rápido
 
-Para evitar conflictos de puertos y asegurar que los servicios de aplicación corran de forma nativa en tu máquina, levantaremos **únicamente** la base de datos PostgreSQL y el broker EMQX MQTT Broker usando Docker Compose:
+### Prerrequisitos
+- Docker y Docker Compose instalados
+- Puertos libres: 3000, 5432, 6543, 8080, 8081, 1883, 8084, 18083
+
+### Ejecución en una máquina
 
 ```bash
-# Asegúrate de detener cualquier contenedor previo que genere conflicto
-docker stop safeair-frontend safeair-api safeair-db safeair-mqtt 2>/dev/null || true
+# 1.进入 proyecto
+cd /home/jbenitez/DSR_Jorge/Proyecto
 
-# Levantar únicamente los servicios de base de datos y MQTT
-docker compose up -d db mqtt
+# 2. Configurar modo demo (sin OTP)
+echo "AUTH_SKIP_OTP=true" >> .env
+
+# 3. Levantar servicios
+docker compose up -d --build
+
+# 4. Verificar servicios
+docker compose ps
 ```
 
-> [!TIP]
-> La base de datos PostgreSQL estará accesible localmente en el puerto `6543` y el broker MQTT en el puerto `1883`.
-
----
-
-### Paso 2: Inicializar y Configurar el Backend API
-
-1. Accede al directorio del backend e instala las dependencias:
-    ```bash
-    cd Api_Emuladores
-    npm install
-    ```
-2. Crea tu archivo de configuración de entorno:
-    ```bash
-    cp .env.example .env
-    ```
-3. Ejecuta el script de semilla para crear la base de datos, las tablas y poblar los datos iniciales del administrador y de la sala de demostración:
-    ```bash
-    npm run seed
-    ```
-4. Inicia el servidor de desarrollo nativo:
-    ```bash
-    npm run dev
-    ```
-
-El servidor estará escuchando en `http://localhost:3000`. Puedes verificar su estado en `http://localhost:3000/health`.
-
----
-
-### Paso 3: Iniciar el Emulador MQTT Interactivo Nactivo
-
-Hemos desarrollado un **emulador interactivo en consola** que simula cambios ambientales realistas y responde a comandos automáticos del backend.
-
-En una nueva terminal, accede a la carpeta del backend y ejecuta:
-```bash
-cd Api_Emuladores
-npm run emulator
-```
-
-El emulador iniciará inmediatamente:
-1. Se autenticará automáticamente en la API local.
-2. Obtendrá dinámicamente la configuración y ID de la sala (`Room A`).
-3. Se conectará al Broker MQTT local.
-4. Comenzará a publicar telemetría de sensores cada 5 segundos y responderá a acciones de climatización.
-
----
-
-### Paso 4: Inicializar y Configurar el Frontend
-
-1. En una nueva terminal, navega al directorio del frontend e instala las dependencias:
-    ```bash
-    cd Frontend_SafeAir
-    npm install
-    ```
-2. Inicia la aplicación en el servidor local de Angular:
-    ```bash
-    npm start
-    ```
-
-Abre tu navegador en `http://localhost:4200` para interactuar con la interfaz gráfica. 
-*   **Credenciales de acceso predeterminadas:**
-    *   **Usuario:** `admin@safeair.local`
-    *   **Contraseña:** `admin123`
-
----
-
-## 🌐 Escenario 2: Ejecución Distribuida en Red (Multi-Laptop)
-
-Este escenario simula un entorno productivo real donde la infraestructura está distribuida a través de la red local física mediante múltiples dispositivos independientes (laptops).
-
-### 🎛️ Distribución de Roles por Laptop
-
-| Laptop | Componente | Software Requerido | Configuración Clave |
-| :--- | :--- | :--- | :--- |
-| **Laptop A** | Base de Datos (PostgreSQL) | Docker o Postgres Nativo | Habilitar acceso externo en `pg_hba.conf` y `listen_addresses = '*'` |
-| **Laptop B** | API Backend | Node.js 18+ | `BACKEND_BIND_HOST=0.0.0.0`, `DB_HOST=IP_LAPTOP_A` |
-| **Laptop C** | Emuladores MQTT | Node.js 18+ | `BACKEND_API_URL=http://IP_LAPTOP_B:3000`, `MQTT_URL=mqtt://IP_LAPTOP_C:1883` |
-| **Laptop D** | Frontend Angular | Node.js 18+ | `API_BASE_URL: 'http://IP_LAPTOP_B:3000'` en `environment.ts` |
-
----
-
-### 1. Configuración de Laptop A (Base de Datos)
-1. Levanta la base de datos mapeando el puerto `6543`:
-   ```bash
-   docker run -d --name safeair-db -p 6543:5432 -e POSTGRES_DB=safeair -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16
-   ```
-2. Asegúrate de que el firewall permita conexiones entrantes en el puerto `6543`.
-
-### 2. Configuración de Laptop B (API Backend)
-1. Edita el archivo `.env` para apuntar a la IP de la Laptop A:
-   ```env
-   DB_HOST=IP_DE_LAPTOP_A  # Ejemplo: 192.168.1.50
-   DB_PORT=6543
-   BACKEND_BIND_HOST=0.0.0.0
-   BACKEND_PORT=3000
-   MQTT_URL=mqtt://IP_DE_LAPTOP_C:1883 # Broker en Laptop C
-   ```
-2. Ejecuta el backend con `npm run dev`. Ahora la API aceptará peticiones entrantes en el puerto `3000` de cualquier laptop de la red.
-
-### 3. Configuración de Laptop C (Broker y Emuladores MQTT)
-
-> [!IMPORTANT]
-> **CONFIGURACIÓN EMQX (`emqx.conf`)**  
-> Para ejecutar el broker EMQX en red distribuida, el proyecto incluye un archivo de configuración `emqx.conf` que habilita conexiones externas desde otros dispositivos. EMQX por defecto permite conexiones desde cualquier interfaz de red (0.0.0.0).
-
-1. En esta laptop, levanta el broker EMQX con Docker usando el archivo `emqx.conf`:
-   ```bash
-   # Asegúrate de ejecutar este comando desde la raíz del proyecto
-   docker run -d --name safeair-mqtt \
-     -p 1883:1883 \
-     -p 8083:8083 \
-     -p 18083:18083 \
-     -v $(pwd)/emqx.conf:/opt/emqx/etc/emqx.conf \
-     -e EMQX_ALLOW_ANONYMOUS=true \
-     emqx/emqx:latest
-   ```
-2. Abre una terminal y configura las variables para ejecutar el emulador de SafeAir:
-   ```env
-   export BACKEND_API_URL=http://IP_DE_LAPTOP_B:3000  # Ejemplo: 192.168.1.51:3000
-   export MQTT_URL=mqtt://localhost:1883
-   ```
-3. Ejecuta el comando:
-   ```bash
-   npm run emulator
-   ```
-
-### 4. Configuración de Laptop D (Frontend Angular)
-1. Abre `Frontend_SafeAir/src/environments/environment.ts`.
-2. Modifica la variable `API_BASE_URL` para que apunte a la IP de la Laptop B (Backend):
-   ```typescript
-   API_BASE_URL: 'http://IP_DE_LAPTOP_B:3000', // Ejemplo: http://192.168.1.51:3000
-   ```
-3. Ejecuta la aplicación de frontend para que sea accesible desde la red local:
-   ```bash
-   npm start -- --host 0.0.0.0 --disable-host-check
-   ```
-
-Cualquier laptop de la red ahora podrá ingresar a `http://IP_DE_LAPTOP_D:4200` y ver el flujo en vivo del sistema.
-
----
-
-## 🛠️ Resolución de Problemas (Troubleshooting)
-
-> [!WARNING]
-> **El puerto 4200 ya está en uso**  
-> Si recibes este error al iniciar el frontend, se debe a que tienes corriendo otro frontend de Angular (como `empleados-frontend` o contenedores de Docker previos). Detén el servicio que genera conflicto con:  
-> `docker stop empleados-frontend safeair-frontend 2>/dev/null || true`
-
-> [!IMPORTANT]
-> **Error de Conexión de Base de Datos (Connection Refused)**  
-> Asegúrate de que el contenedor de la base de datos está arriba ejecutando `docker ps`. Si estás en red, verifica que la laptop del backend pueda comunicarse con la laptop de la base de datos ejecutando `ping IP_DE_LAPTOP_A` y que el firewall no esté bloqueando el puerto `6543`.
-
-> [!TIP]
-> **¿Cómo reiniciar los datos por completo?**  
-> Puedes limpiar la base de datos y volver a sembrar los datos originales en cualquier momento deteniendo la API y ejecutando `npm run seed` en el backend.
-
----
-
-## 🧪 Comandos de Pruebas y Validación
-
-*   **Verificar API en línea:** `curl http://localhost:3000/health`
-*   **Validación de tipos de TypeScript:** `npm run typecheck` (Ejecutar en la carpeta `Api_Emuladores`)
-*   **Pruebas unitarias de Frontend:** `npm test` (Ejecutar en la carpeta `Frontend_SafeAir`)
-
----
-
-## 🚀 Referencia Rápida para Demo
-
-### URLs Essentiales
+### URLs de Acceso
 
 | Servicio | URL |
 |----------|-----|
-| Frontend | http://localhost:8080 |
-| API Health | http://localhost:3000/health |
-| Logs visuales | http://localhost:3000/debug/logs.html |
-| Dashboard emuladores | http://localhost:3000/debug/emulators.html |
-| EMQX Dashboard | http://localhost:18083 |
+| **Frontend** | http://localhost:8080 |
+| **API** | http://localhost:3000 |
+| **API Health** | http://localhost:3000/health |
+| **Logs Visuales** | http://localhost:3000/debug/logs.html |
+| **Emuladores** | http://localhost:3000/debug/emulators.html |
+| **EMQX Dashboard** | http://localhost:18083 |
 
-### Comandos Docker Compose
+### Credenciales por Defecto
+- Email: `admin@safeair.io`
+- Password: `admin123`
+
+---
+
+## 📁 Estructura del Proyecto
+
+```
+SafeAir/
+├── Frontend_SafeAir/          # Frontend Angular 19
+├── Api_Emuladores/             # API TypeScript/Node.js
+├── SafeAir-System-Emulator/    # Emulador Java Spring Boot
+├── specs/                     # Documentación técnica
+├── docker-compose.yml         # Orquestación Docker
+├── .env.docker               # Variables Docker
+└── README.md                  # Este archivo
+```
+
+---
+
+## 🔧 Componentes
+
+### Frontend (Angular)
+Documentación: [Frontend_SafeAir/README.md](Frontend_SafeAir/README.md)
+
+- Angular 19 + Nginx
+- Dashboard con métricas en tiempo real
+- Reportes históricos con filtros
+- Exportación CSV/PDF
+- Control de actuadores
+
+### API/Backend (TypeScript)
+Documentación: [Api_Emuladores/README.md](Api_Emuladores/README.md)
+
+- Node.js + Express
+- Persistencia PostgreSQL
+- Cliente MQTT (EMQX)
+- Autenticación JWT (+ OTP opcional)
+- Logs visuales debug
+
+### Emuladores (Java Spring Boot)
+Documentación: [SafeAir-System-Emulator/README.md](SafeAir-System-Emulator/README.md)
+
+- Java 17 + Spring Boot
+- Simulación de sensores
+- Publicación MQTT
+- Recepción de comandos
+- Perfiles configurables (1, 2, etc.)
+
+### Broker MQTT (EMQX)
+- Puerto 1883: MQTT TCP
+- Puerto 8084: MQTT WebSocket
+- Puerto 18083: Dashboard
+
+---
+
+## 🔌 Endpoints Principales
+
+### Autenticación
+```
+POST /api/v1/auth/login          # Iniciar sesión
+POST /api/v1/auth/register      # Registrar usuario
+POST /api/v1/auth/verify-otp    # Verificar OTP
+```
+
+### Habitaciones
+```
+GET    /api/v1/rooms                    # Listar
+GET    /api/v1/rooms/:id               # Obtener por ID
+```
+
+### Métricas
+```
+GET /api/v1/rooms/:id/metrics/current           # Estado actual
+GET /api/v1/rooms/:id/metrics/history         # Reporte histórico
+GET /api/v1/rooms/:id/metrics/history/export  # Exportar CSV/HTML
+```
+
+### Control de Dispositivos
+```
+POST /api/v1/rooms/:roomId/actuators/:deviceType/command
+```
+
+### Debug (Visuales)
+```
+GET /debug/logs.html       # Logs del sistema
+GET /debug/emulators.html # Estado de emuladores
+GET /debug/status         # Estado del servidor
+```
+
+---
+
+## 🐳 Docker Compose
+
+### Servicios Levantados
+
+| Servicio | Puerto | Imagen |
+|----------|--------|--------|
+| **db** | 5432/6543 | postgres:16 |
+| **mqtt** | 1883, 8084, 18083 | emqx/emqx:latest |
+| **api** | 3000 | build local |
+| **frontend** | 8080 | build local |
+| **emulator-java** | 8081 | build local |
+
+### Comandos Útiles
 
 ```bash
 # Levantar todo
 docker compose up -d --build
 
-# Ver servicios
-docker compose ps
-
 # Ver logs de un servicio
 docker logs safeair-api
 docker logs safeair-mqtt
 docker logs safeair-frontend
+
+# Detener todo
+docker compose down
+
+# Rebuild single service
+docker compose build api
+docker compose up -d api
 ```
 
-### Modo Demo (sin OTP)
+---
+
+## ⚙️ Variables de Entorno
+
+### Para Docker Compose (.env.docker)
 
 ```bash
-# Activar modo demo
-echo "AUTH_SKIP_OTP=true" >> .env
+# Base de datos
+DB_HOST=db
+DB_PORT=5432
+DB_NAME=safeair
+DB_USER=postgres
+DB_PASSWORD=postgres
+
+# MQTT
+MQTT_URL=mqtt://mqtt:1883
+
+# API
+AUTH_SKIP_OTP=true
+CORS_ORIGINS=http://localhost:4200,http://localhost:8080
+
+# Seguridad
+JWT_SECRET=minimo-32-caracteres-secret
 ```
 
-### Control de Actuadpres
+### Para LAN (IP Manual)
+
+Cambiar en archivos de entorno correspondientes:
+- `Frontend_SafeAir/src/environments/environment.ts`
+- `Api_Emuladores/src/shared/config/env.ts`
+
+Ejemplo para LAN:
+```typescript
+API_BASE_URL: 'http://192.168.1.100:3000'  // IP de la laptop con API
+```
+
+---
+
+## 📖 Documentación
+
+| Documento | Descripción |
+|-----------|-------------|
+| [Documentación Final](specs/001-safeair-integration/documentacion-final-safeair.md) | Guía completa del sistema |
+| [Frontend README](Frontend_SafeAir/README.md) | Documentación del frontend |
+| [API README](Api_Emuladores/README.md) | Documentación del backend |
+| [Emulador README](SafeAir-System-Emulator/README.md) | Documentación del emulador Java |
+
+---
+
+## ✅ Checklist de Verificación
 
 ```bash
-# Obtener token (si AUTH_SKIP_OTP=true)
-TOKEN=$(curl -s -X POST http://localhost:3000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@safeair.io","password":"admin123"}' | jq -r '.accessToken')
+# 1. API responde
+curl http://localhost:3000/health
 
-# Obtener roomId
-ROOM_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
-  http://localhost:3000/api/v1/rooms | jq -r '.[0].id')
+# 2. Frontend carga
+curl http://localhost:8080
 
-# Encender minisplit
-curl -X POST "http://localhost:3000/api/v1/rooms/$ROOM_ID/actuators/minisplit/command" \
+# 3. EMQX opera
+# Abrir: http://localhost:18083
+
+# 4. Login funciona
+curl -X POST http://localhost:3000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
+  -d '{"email":"admin@safeair.io","password":"admin123"}'
+
+# 5. Enviar comando de control (obtener token primero)
+curl -X POST "http://localhost:3000/api/v1/rooms/{ROOM_ID}/actuators/minisplit/command" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer TOKEN" \
   -d '{"action":"turn_on","value":true,"source":"frontend"}'
-
-# Establecer temperatura
-curl -X POST "http://localhost:3000/api/v1/rooms/$ROOM_ID/actuators/minisplit/command" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"action":"set_temperature","value":24,"source":"frontend"}'
 ```
 
-### Tecnologías del Proyecto
+---
 
-- **Frontend**: Angular 19
-- **Backend**: TypeScript / Node.js / Express
-- **Broker MQTT**: EMQX (no Mosquitto)
-- **Emuladores**: Java Spring Boot
-- **Base de datos**: PostgreSQL
-- **Contenedores**: Docker / Docker Compose
+## 🛠️ Tecnologías
+
+| Componente | Tecnología | Versión |
+|------------|------------|---------|
+| Frontend | Angular | 19.x |
+| Backend | TypeScript/Node.js | 20.x |
+| API | Express | 4.x |
+| Broker MQTT | EMQX | latest |
+| Emuladores | Java/Spring Boot | 17/3.x |
+| Base de datos | PostgreSQL | 16 |
+| Contenedores | Docker | - |
+
+---
+
+## 📝 Notas Importantes
+
+1. **Broker MQTT**: Se usa EMQX, NO Mosquitto
+2. **Modo demo**: Usar `AUTH_SKIP_OTP=true` para evitar verificación por correo
+3. **Persistencia**: Los reportes históricosvan directamente a PostgreSQL, no a memoria
+4. **Debug**: Visitar `/debug/logs.html` y `/debug/emulators.html` para evidencia visual
+5. **LAN**: Cambiar IPs en archivos de entorno cuando se usaen múltiples máquinas
+
+---
+
+## 🔗 Recursos
+
+- [Angular Documentation](https://angular.io/docs)
+- [Node.js](https://nodejs.org/)
+- [EMQX](https://www.emqx.io/)
+- [Spring Boot](https://spring.io/projects/spring-boot)
+- [PostgreSQL](https://www.postgresql.org/)
+
+---
+
+*SafeAir - Proyecto de Desarrollo de Sistemas en Red*
+*Última actualización: Junio 2026*
