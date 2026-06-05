@@ -5,6 +5,10 @@ export class EmulatorRepository {
     return EmulatorModel.findOne({ where: { emulatorExternalId: externalId } });
   }
 
+  async findByRoomId(roomId: string): Promise<EmulatorModel | null> {
+    return EmulatorModel.findOne({ where: { roomId } });
+  }
+
   async create(data: { roomId: string; emulatorExternalId: string; status?: "online" | "offline" }): Promise<EmulatorModel> {
     return EmulatorModel.create({
       roomId: data.roomId,

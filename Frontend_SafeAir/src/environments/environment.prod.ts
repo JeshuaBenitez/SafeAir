@@ -18,7 +18,7 @@ export const environment = {
    * Angular Build: ng build --configuration production --define API_BASE_URL=...
    * Or environment variable: process.env.API_BASE_URL
    */
-  API_BASE_URL: process.env['API_BASE_URL'] || 'https://api.safeair.local',
+  API_BASE_URL: 'https://safeair-api.onrender.com',
   
   /**
    * MQTT Broker WebSocket URL for emulator telemetry subscriptions

@@ -7,17 +7,14 @@ import { requestAuditMiddleware } from "./api/middlewares/request-audit.middlewa
 import { notFoundMiddleware } from "./api/middlewares/not-found.middleware";
 import { errorMiddleware } from "./api/middlewares/error.middleware";
 import { v1Router } from "./api/routes/v1";
+import { debugRouter } from "./api/routes/debug.routes";
 
 export function createApp(): Express {
   const app = express();
 
   app.use(helmet());
   app.use(cors({
-    origin: [
-      "https://safeair-frontend.onrender.com",
-      "http://localhost:4200",
-      "http://localhost:8080"
-    ],
+    origin: env.corsOrigins,
     credentials: true
   }));
   app.use(express.json({ limit: "1mb" }));
@@ -27,6 +24,9 @@ export function createApp(): Express {
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
   });
+
+  // Debug endpoints (accessible in development/demo mode)
+  app.use("/debug", debugRouter);
 
   app.use(env.apiPrefix, v1Router);
   app.use(notFoundMiddleware);

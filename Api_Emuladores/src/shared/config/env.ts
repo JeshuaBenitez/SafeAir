@@ -5,11 +5,14 @@ dotenv.config();
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  AUTH_SKIP_OTP: z.string().default("false"),  // Skip OTP verification in demo mode
   PORT: z.coerce.number().default(3000),
   API_PREFIX: z.string().default("/api/v1"),
+  API_HOST: z.string().default("0.0.0.0"),  // Host para bind (0.0.0.0 = todas las interfaces)
   TELEMETRY_API_KEY: z.string().min(8).default("dev-telemetry-key"),
   JWT_SECRET: z.string().min(8),
   JWT_EXPIRES_IN: z.string().default("24h"),
+  CORS_ORIGINS: z.string().default("http://localhost:4200,http://localhost:8080,http://127.0.0.1:8080"),  // Orígenes permitidos para CORS (separados por coma)
   DB_HOST: z.string(),
   DB_PORT: z.coerce.number().default(5432),
   DB_NAME: z.string(),
@@ -47,9 +50,11 @@ if (!parsed.success) {
 
 export const env = {
   nodeEnv: parsed.data.NODE_ENV,
-  isProduction: parsed.data.NODE_ENV === "production",
+  authSkipOtp: parsed.data.AUTH_SKIP_OTP === "true",
   port: parsed.data.PORT,
   apiPrefix: parsed.data.API_PREFIX,
+  apiHost: parsed.data.API_HOST,
+  corsOrigins: parsed.data.CORS_ORIGINS.split(",").map(o => o.trim()),
   telemetryApiKey: parsed.data.TELEMETRY_API_KEY,
   jwtSecret: parsed.data.JWT_SECRET,
   jwtExpiresIn: parsed.data.JWT_EXPIRES_IN,

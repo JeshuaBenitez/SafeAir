@@ -28,3 +28,8 @@ metricsRouter.get("/rooms/:id/metrics/history", authMiddleware, (req, res, next)
 metricsRouter.get("/rooms/:id/actuators/state", authMiddleware, (req, res, next) => {
   controller.actuatorState(req, res).catch(next);
 });
+
+// Export endpoints for CSV/PDF
+metricsRouter.get("/rooms/:id/metrics/history/export", authMiddleware, (req, res, next) => {
+  controller.export(req, res).catch(next);
+});

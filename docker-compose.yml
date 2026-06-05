@@ -1,18 +1,33 @@
 services:
+  # =============================================
+  # PostgreSQL - Base de datos
+  # =============================================
   db:
     image: postgres:16
     container_name: safeair-db
     restart: unless-stopped
     env_file:
       - ./.env.docker
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-safeair}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "6543:5432"
+      - "6543:5432"  # Puerto externo: interno
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./Api_Emuladores/database/sql:/docker-entrypoint-initdb.d:Z
     networks:
       - safeair-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # =============================================
+  # EMQX - Broker MQTT (OBLIGATORIO, no cambiar a Mosquitto)
+  # =============================================
   mqtt:
     image: emqx/emqx:latest
     container_name: safeair-mqtt
@@ -20,16 +35,19 @@ services:
     env_file:
       - ./.env.emqx
     environment:
-      # Configuración de producción - valores por defecto安全感
-      EMQX_ALLOW_ANONYMOUS: "${EMQX_ALLOW_ANONYMOUS:-false}"
-      EMQX_LOG_LEVEL: "${EMQX_LOG_LEVEL:-warning}"
+      # EMQX permite conexiones anónimas para desarrollo local
+      EMQX_ALLOW_ANONYMOUS: "${EMQX_ALLOW_ANONYMOUS:-true}"
+      EMQX_LOG_LEVEL: "${EMQX_LOG_LEVEL:-info}"
+      # Dashboard JWT (cambiar en producción)
       EMQX_DASHBOARD__SECRETS__JWT_SECRET: "${EMQX_JWT_SECRET:-change_this_to_a_secure_random_string}"
       EMQX_DEFAULT_ADMIN_PASSWORD: "${EMQX_ADMIN_PASSWORD:-}"
+      # Puertos expuestos para red local
+      EMQX_DASHBOARD__LISTENERS__HTTP__INET6: "false"
     ports:
-      - "1883:1883"      # MQTT TCP (externo solo si es necesario en producción)
-      - "8883:8883"      # MQTT over TLS
-      - "8084:8084"      # WebSocket MQTT
-      # - "18083:18083"  # Dashboard - NO exponer en producción sin VPN
+      - "1883:1883"    # MQTT TCP - para emuladores
+      - "8883:8883"    # MQTT over TLS - para producción segura
+      - "8084:8084"    # MQTT WebSocket - para frontend/suscriptores web
+      - "18083:18083"  # Dashboard EMQX - solo para debugging local
     volumes:
       - mqtt_data:/opt/emqx/data
       - mqtt_log:/opt/emqx/log
@@ -42,6 +60,9 @@ services:
     networks:
       - safeair-network
 
+  # =============================================
+  # API / Backend - Servicio principal
+  # =============================================
   api:
     build:
       context: ./Api_Emuladores
@@ -50,35 +71,48 @@ services:
     env_file:
       - ./.env.docker
     environment:
+      NODE_ENV: ${NODE_ENV:-production}
       DB_HOST: db
       DB_PORT: 5432
-      MQTT_URL: mqtt://mqtt:1883
-      BACKEND_BIND_HOST: 0.0.0.0
+      MQTT_URL: ${MQTT_URL:-mqtt://mqtt:1883}
+      BACKEND_BIND_HOST: ${API_HOST:-0.0.0.0}
       BACKEND_PORT: 3000
       PORT: 3000
+      # CORS dinámico desde .env
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:8080}
     depends_on:
       db:
         condition: service_healthy
       mqtt:
         condition: service_healthy
     ports:
-      - "3000:3000"
+      - "3000:3000"  # Puerto para acceder desde otra laptop en LAN
     networks:
       - safeair-network
 
+  # =============================================
+  # Frontend - Interfaz de usuario
+  # =============================================
   frontend:
     build:
       context: ./Frontend_SafeAir
+      args:
+        # Por defecto conecta al API en la misma máquina
+        # Para LAN, cambiar a: --build-arg API_BASE_URL=http://192.168.x.x:3000
+        API_BASE_URL: ${API_BASE_URL:-api:3000}
     container_name: safeair-frontend
     restart: unless-stopped
     depends_on:
       - api
     ports:
-      - "8080:80"
+      - "8080:80"  # Puerto HTTP
+      - "8443:443" # Puerto HTTPS (si se configura SSL)
     networks:
       - safeair-network
 
-  # Emuladores Java (Spring Boot) - coexisten con emulador TypeScript
+  # =============================================
+  # Emuladores - Dispositivos IoT simulados
+  # =============================================
   emulator-java:
     build:
       context: ./SafeAir-System-Emulator
@@ -86,7 +120,7 @@ services:
     container_name: safeair-emulator-java
     restart: unless-stopped
     environment:
-      # Usar MQTT del broker EMQX local (sin TLS para desarrollo local)
+      # Conectar a EMQX en el mismo equipo (docker-compose)
       MQTT_HOST: mqtt
       MQTT_PORT: 1883
       MQTT_TLS_ENABLED: "false"
@@ -99,15 +133,21 @@ services:
       mqtt:
         condition: service_healthy
     ports:
-      - "8081:8080"  # Puerto diferente al frontend (80) y API (3000)
+      - "8081:8080"  # Puerto para debugging del emulador Java
     networks:
       - safeair-network
 
+# =============================================
+# Volumes persistentes
+# =============================================
 volumes:
   db_data:
   mqtt_data:
   mqtt_log:
 
+# =============================================
+# Red de Docker
+# =============================================
 networks:
   safeair-network:
     driver: bridge

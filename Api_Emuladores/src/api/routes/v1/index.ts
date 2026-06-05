@@ -6,6 +6,7 @@ import { cycleRouter } from "./cycle.routes";
 import { instanceRouter } from "./instance.routes";
 import { metricsRouter } from "./metrics.routes";
 import { roomRouter } from "./room.routes";
+import { actuatorRouter } from "./actuator.routes";
 
 export const v1Router = Router();
 
@@ -16,3 +17,4 @@ v1Router.use(metricsRouter);
 v1Router.use(cycleRouter);
 v1Router.use(alarmRouter);
 v1Router.use(configurationRouter);
+v1Router.use(actuatorRouter);

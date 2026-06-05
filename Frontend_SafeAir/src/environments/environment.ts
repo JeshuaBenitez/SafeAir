@@ -3,6 +3,9 @@
  * 
  * Usado para desarrollo local en una sola máquina
  * Used for local development on a single machine
+ * 
+ * Para ejecutar en RED LOCAL (LAN), cambia API_BASE_URL por la IP de la laptop de la API:
+ * API_BASE_URL: 'http://192.168.1.100:3000'  (ajusta la IP según tu red)
  */
 
 export const environment = {
@@ -10,25 +13,21 @@ export const environment = {
   
   /**
    * Backend API Base URL
-   * Development: http://localhost:3000 (same machine)
-   * Multi-device: http://192.168.x.x:3000 (different machine IP)
+   * Desarrollo local: http://localhost:3000
+   * Red local (LAN): http://192.168.x.x:3000 (usa la IP de la laptop donde corre la API)
+   * Render producción: https://safeair-api.onrender.com
    * 
-   * Configure via:
-   * - Direct edit (dev only)
-   * - Build-time substitution
-   * - Runtime injection (e.g., from index.html or config server)
+   * CONFIGURAR: Si vas a usar en LAN, cambia 'localhost' por la IP real de la API
    */
-  // IMPORTANTE: Si estás ejecutando en red (ejercicio multi-laptop), cambia 'localhost' por la IP de la laptop que corre la API (ej: 'http://192.168.1.52:3000')
-  API_BASE_URL: 'http://localhost:3000',
+  API_BASE_URL: (window as any).__env?.API_BASE_URL || 'http://localhost:3000',
   
   /**
    * MQTT Broker WebSocket URL for emulator telemetry subscriptions
-   * Default: localhost:1883 (must support WebSocket)
-   * 
-   * Nota / Note: Not all MQTT brokers support WebSocket by default.
-   * EMQX (default in this project) does. Configure port 8083 for WS.
+   * Desarrollo: ws://localhost:8084/mqtt (EMQX WebSocket port)
+   * Red local: ws://192.168.x.x:8084/mqtt
+   * Producción: wss://safeair-mqtt.onrender.com/mqtt
    */
-  MQTT_BROKER_URL: 'ws://localhost:1883/mqtt',
+  MQTT_BROKER_URL: (window as any).__env?.MQTT_BROKER_URL || 'ws://localhost:8084/mqtt',
   
   /**
    * Authentication source

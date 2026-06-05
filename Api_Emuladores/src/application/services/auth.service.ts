@@ -4,6 +4,7 @@ import { AppError } from "../../shared/errors/app-error";
 import { signToken } from "../../shared/security/jwt";
 import { UserRepository } from "../../infrastructure/repositories/user.repository";
 import { EmailService } from "./email.service";
+import { env } from "../../shared/config/env";
 import type { LoginInput, LoginResponse, LoginResult, RegisterInput } from "../../domain/types/auth.types";
 
 export class AuthService {
@@ -52,7 +53,27 @@ export class AuthService {
       throw new AppError("Invalid credentials", 401, "INVALID_CREDENTIALS");
     }
 
-    // Generar OTP de 6 dígitos aleatorio
+    // Modo demo: AUTH_SKIP_OTP=true omite la verificación OTP
+    if (env.authSkipOtp) {
+      console.log(`[AUTH] Modo demo: login directo sin OTP para ${user.email}`);
+      const accessToken = signToken({ sub: user.id, role: user.role, email: user.email });
+      const decoded = jwt.decode(accessToken) as jwt.JwtPayload | null;
+      const jwtExpiresAt = decoded?.exp
+        ? new Date(decoded.exp * 1000).toISOString()
+        : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+      return {
+        authenticated: true,
+        userId: user.id,
+        displayName: user.fullName,
+        email: user.email,
+        tokenType: "Bearer",
+        accessToken,
+        expiresAt: jwtExpiresAt
+      };
+    }
+
+    // Modo normal: generar OTP de 6 dígitos aleatorio
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutos de validez
 
@@ -60,6 +81,9 @@ export class AuthService {
     user.otpCode = code;
     user.otpExpiresAt = expiresAt;
     await user.save();
+
+    // Log de debug para verificar OTP generado
+    console.log(`[AUTH DEBUG] OTP generado para ${user.email}: ${code}, expira: ${expiresAt.toISOString()}`);
 
     // Enviar correo con OTP
     await this.emailService.sendOtpEmail(user.email, user.fullName, code);
@@ -71,21 +95,30 @@ export class AuthService {
   }
 
   async verifyOtp(email: string, code: string): Promise<LoginResponse> {
+    // Log de debug
+    console.log(`[AUTH DEBUG] verifyOtp recibido - email: ${email}, code: ${code}`);
+
     const user = await this.userRepository.findByEmail(email);
 
     if (!user) {
+      console.log(`[AUTH DEBUG] verifyOtp - usuario no encontrado para email: ${email}`);
       throw new AppError("User not found", 404, "USER_NOT_FOUND");
     }
 
+    console.log(`[AUTH DEBUG] verifyOtp - usuario encontrado: ${user.email}, otpCode: ${user.otpCode ? 'existe' : 'NULL'}, otpExpiresAt: ${user.otpExpiresAt}`);
+
     if (!user.otpCode || !user.otpExpiresAt) {
+      console.log(`[AUTH DEBUG] verifyOtp - no hay código OTP activo para usuario: ${email}`);
       throw new AppError("No active verification code found. Request a new one.", 400, "NO_OTP_CODE");
     }
 
     if (new Date(user.otpExpiresAt).getTime() <= Date.now()) {
+      console.log(`[AUTH DEBUG] verifyOtp - código expirado para usuario: ${email}`);
       throw new AppError("Verification code has expired. Request a new one.", 400, "OTP_EXPIRED");
     }
 
     if (user.otpCode !== code) {
+      console.log(`[AUTH DEBUG] verifyOtp - código inválido. Esperado: ${user.otpCode}, recibido: ${code}`);
       throw new AppError("Invalid verification code.", 400, "INVALID_OTP");
     }
 

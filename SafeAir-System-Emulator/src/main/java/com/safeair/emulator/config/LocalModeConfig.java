@@ -18,6 +18,7 @@ import com.safeair.emulator.api.mqtt.ConsolePublisher;
 import com.safeair.emulator.api.mqtt.MQTTConnector;
 import com.safeair.emulator.api.mqtt.MqttPublisher;
 import com.safeair.emulator.api.mqtt.MQTTSubscriber;
+import com.safeair.emulator.api.mqtt.ActuatorCommandSubscriber;
 import com.safeair.emulator.emulation.core.DomainConstants;
 import com.safeair.emulator.emulation.core.TelemetryQueue;
 import com.safeair.emulator.manager.ConfigDispatcher;
@@ -88,6 +89,15 @@ public class LocalModeConfig {
             ConfigAdapter configAdapter,
             ConfigDispatcher configDispatcher) {
         return new MQTTSubscriber(connector, configAdapter, configDispatcher);
+    }
+
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    @ConditionalOnBean(EmulatorManager.class)
+    public ActuatorCommandSubscriber actuatorCommandSubscriber(
+            MQTTConnector connector,
+            EmulatorManager emulatorManager,
+            MqttPublisher mqttPublisher) {
+        return new ActuatorCommandSubscriber(connector, emulatorManager, mqttPublisher);
     }
 
     @Bean(initMethod = "startDispatch", destroyMethod = "stopDispatch")

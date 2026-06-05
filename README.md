@@ -228,3 +228,73 @@ Cualquier laptop de la red ahora podrá ingresar a `http://IP_DE_LAPTOP_D:4200` 
 *   **Verificar API en línea:** `curl http://localhost:3000/health`
 *   **Validación de tipos de TypeScript:** `npm run typecheck` (Ejecutar en la carpeta `Api_Emuladores`)
 *   **Pruebas unitarias de Frontend:** `npm test` (Ejecutar en la carpeta `Frontend_SafeAir`)
+
+---
+
+## 🚀 Referencia Rápida para Demo
+
+### URLs Essentiales
+
+| Servicio | URL |
+|----------|-----|
+| Frontend | http://localhost:8080 |
+| API Health | http://localhost:3000/health |
+| Logs visuales | http://localhost:3000/debug/logs.html |
+| Dashboard emuladores | http://localhost:3000/debug/emulators.html |
+| EMQX Dashboard | http://localhost:18083 |
+
+### Comandos Docker Compose
+
+```bash
+# Levantar todo
+docker compose up -d --build
+
+# Ver servicios
+docker compose ps
+
+# Ver logs de un servicio
+docker logs safeair-api
+docker logs safeair-mqtt
+docker logs safeair-frontend
+```
+
+### Modo Demo (sin OTP)
+
+```bash
+# Activar modo demo
+echo "AUTH_SKIP_OTP=true" >> .env
+```
+
+### Control de Actuadpres
+
+```bash
+# Obtener token (si AUTH_SKIP_OTP=true)
+TOKEN=$(curl -s -X POST http://localhost:3000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@safeair.io","password":"admin123"}' | jq -r '.accessToken')
+
+# Obtener roomId
+ROOM_ID=$(curl -s -H "Authorization: Bearer $TOKEN" \
+  http://localhost:3000/api/v1/rooms | jq -r '.[0].id')
+
+# Encender minisplit
+curl -X POST "http://localhost:3000/api/v1/rooms/$ROOM_ID/actuators/minisplit/command" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"action":"turn_on","value":true,"source":"frontend"}'
+
+# Establecer temperatura
+curl -X POST "http://localhost:3000/api/v1/rooms/$ROOM_ID/actuators/minisplit/command" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"action":"set_temperature","value":24,"source":"frontend"}'
+```
+
+### Tecnologías del Proyecto
+
+- **Frontend**: Angular 19
+- **Backend**: TypeScript / Node.js / Express
+- **Broker MQTT**: EMQX (no Mosquitto)
+- **Emuladores**: Java Spring Boot
+- **Base de datos**: PostgreSQL
+- **Contenedores**: Docker / Docker Compose

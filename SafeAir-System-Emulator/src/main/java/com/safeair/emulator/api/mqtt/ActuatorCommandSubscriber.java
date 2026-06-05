@@ -1,0 +1,117 @@
+package com.safeair.emulator.api.mqtt;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.safeair.emulator.manager.EmulatorManager;
+import com.safeair.emulator.emulation.impl.MiniSplit;
+import com.safeair.emulator.abstracts.Electrodomestic;
+import com.safeair.emulator.emulation.core.Emulator;
+import com.safeair.emulator.abstracts.Electrodomestic;
+
+/**
+ * Subscriber for actuator commands from MQTT.
+ * Listens to: safeair/+/actuator-state
+ */
+public class ActuatorCommandSubscriber {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ActuatorCommandSubscriber.class);
+    
+    private final MQTTConnector connector;
+    private final EmulatorManager emulatorManager;
+    private final MqttPublisher publisher;
+    private ActuatorCommandHandler handler;
+    
+    public ActuatorCommandSubscriber(MQTTConnector connector, EmulatorManager emulatorManager, MqttPublisher publisher) {
+        this.connector = connector;
+        this.emulatorManager = emulatorManager;
+        this.publisher = publisher;
+    }
+    
+    public void start() {
+        if (!connector.isEnabled()) {
+            LOGGER.warn("MQTT not enabled, skipping actuator command subscriber");
+            return;
+        }
+        
+        // Create handler with callback to emulator manager
+        handler = new ActuatorCommandHandler(new ActuatorCommandHandler.EmulatorCommandCallback() {
+            @Override
+            public void onCommand(String emulatorId, String deviceType, String action, Object value) {
+                processCommand(emulatorId, deviceType, action, value);
+            }
+        });
+        
+        // Register message handler with connector
+        connector.registerHandler(handler::onMessage);
+        
+        // Subscribe to actuator state topic (wildcard for all emulators)
+        connector.subscribe(MqttTopics.ACTUATOR_STATE_WILDCARD, MqttTopics.ACTUATOR_QOS);
+        LOGGER.info("Subscribed to actuator commands: {}", MqttTopics.ACTUATOR_STATE_WILDCARD);
+    }
+    
+    private void processCommand(String emulatorId, String deviceType, String action, Object value) {
+        LOGGER.info("Processing command: {} {} -> {} for emulator {}", deviceType, action, value, emulatorId);
+        
+        Emulator emulator = emulatorManager.getEmulator(emulatorId);
+        if (emulator == null) {
+            LOGGER.warn("Emulator not found: {}", emulatorId);
+            return;
+        }
+        
+        // Apply command to device
+        try {
+            applyDeviceCommand(emulator, deviceType, action, value);
+            
+            // Publish confirmation/state update
+            publishStateUpdate(emulatorId);
+            
+        } catch (Exception e) {
+            LOGGER.error("Failed to apply command to device", e);
+        }
+    }
+    
+    private void applyDeviceCommand(Emulator emulator, String deviceType, String command, Object value) {
+        // Find device by type in emulator's electrodomestics list
+        for (Electrodomestic device : emulator.getElectrodomestics()) {
+            String type = device.getType().toLowerCase();
+            
+            if (type.contains(deviceType.toLowerCase()) || 
+                (deviceType.equalsIgnoreCase("purifier") && type.equals("humidifierpurifier")) ||
+                (deviceType.equalsIgnoreCase("extractor") && type.equals("airextractor"))) {
+                
+                if ("turn_on".equals(command)) {
+                    // Use toggle to turn on (if off, turns on; if on, turns off)
+                    if (!device.isOn()) {
+                        device.toggle();
+                    }
+                    LOGGER.info("{} turned ON for emulator {}", device.getType(), emulator.emulatorId());
+                } else if ("turn_off".equals(command)) {
+                    // Use toggle to turn off (if on, turns off)
+                    if (device.isOn()) {
+                        device.toggle();
+                    }
+                    LOGGER.info("{} turned OFF for emulator {}", device.getType(), emulator.emulatorId());
+                } else if ("set_temperature".equals(command) && value instanceof Integer && device instanceof MiniSplit) {
+                    ((MiniSplit) device).setState((Integer) value);
+                    LOGGER.info("{} temperature set to {} for emulator {}", device.getType(), value, emulator.emulatorId());
+                }
+                
+                return; // Device found and processed
+            }
+        }
+        
+        LOGGER.warn("Device type {} not found in emulator {}", deviceType, emulator.emulatorId());
+    }
+    
+    private void publishStateUpdate(String emulatorId) {
+        try {
+            // Get updated state and publish as telemetry
+            Emulator emulator = emulatorManager.getEmulator(emulatorId);
+            if (emulator != null && publisher != null) {
+                LOGGER.debug("State updated for emulator {}, will be published in next telemetry cycle", emulatorId);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to publish state update", e);
+        }
+    }
+}

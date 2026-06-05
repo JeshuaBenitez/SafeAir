@@ -178,4 +178,11 @@ public class Emulator {
     public EmulatorLifecycleState state() {
         return state;
     }
+
+    /**
+     * Get all electrodomestic devices (for actuator command processing)
+     */
+    public List<Electrodomestic> getElectrodomestics() {
+        return List.copyOf(electrodomestics);
+    }
 }

@@ -9,6 +9,7 @@ import { container } from "./application/container";
 import { mapTelemetryPayload } from "./infrastructure/mappers/telemetry.mapper";
 import { mapActuatorStatePayload } from "./infrastructure/mappers/actuator-state.mapper";
 import { runDatabaseSeed } from "./infrastructure/database/seeders/seed-fn";
+import { logMqttReceived, logError, updateEmulatorState } from "./application/services/debug-logs.service";
 
 export async function startServer(): Promise<void> {
   try {
@@ -26,8 +27,23 @@ export async function startServer(): Promise<void> {
 
     mqttGateway.onTelemetry(async (message) => {
       try {
+        // Log MQTT message received
+        logMqttReceived(message.topic, message.payload, message.emulatorId);
+
         const payload = mapTelemetryPayload({ ...message.payload, emulatorId: message.emulatorId });
         await container.telemetryIngestionService.handleIncomingTelemetry(payload, "mqtt");
+
+        // Update emulator state for dashboard
+        const roomId = payload.roomId || null;
+        const metrics = {
+          temperature: payload.temperature,
+          humidity: payload.humidity,
+          co2: payload.co2,
+          pm25: payload.pm25,
+        };
+        updateEmulatorState(message.emulatorId, roomId, metrics);
+
+        logMqttReceived(message.topic, { processed: true, emulatorId: message.emulatorId }, message.emulatorId);
 
         const embeddedStates = Array.isArray((message.payload as Record<string, unknown>).deviceStates)
           ? ((message.payload as Record<string, unknown>).deviceStates as Array<Record<string, unknown>>)
@@ -56,10 +72,27 @@ export async function startServer(): Promise<void> {
 
     mqttGateway.onActuatorState(async (message) => {
       try {
+        // Log MQTT actuator state received
+        logMqttReceived(message.topic, message.payload, message.emulatorId);
+
         const payload = mapActuatorStatePayload({ ...message.payload, emulatorId: message.emulatorId });
         await container.actuatorStateIngestionService.handleIncomingState(payload, "mqtt");
+
+        // Update emulator state for dashboard
+        updateEmulatorState(
+          message.emulatorId,
+          payload.roomId || null,
+          {},
+          {
+            [payload.deviceType]: {
+              isOn: payload.isOn,
+              targetTemperature: payload.targetTemperature,
+            }
+          }
+        );
       } catch (error: unknown) {
         logger.error("Actuator state ingestion from MQTT failed", error);
+        logError("mqtt", "actuator-state-failed", error);
       }
     });
 
