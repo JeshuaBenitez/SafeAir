@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: safe-air-emulator
+  profiles:
+    active: production
+
+mqtt:
+  enabled: false
+  host: localhost
+  port: 8883
+  tls:
+    enabled: true
+  username: safeair
+  password: safeair
+  console-log-enabled: true
+  validation:
+    availability-target: 0.995
+    reconnect-window-seconds: 10

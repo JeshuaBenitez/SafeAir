@@ -1,0 +1,21 @@
+# VCS
+.git/
+
+# Build output
+target/
+
+# IDE and local metadata
+.idea/
+.vscode/
+
+# Logs and env
+*.log*
+.env*
+coverage/
+
+# Docker build metadata
+Dockerfile*
+.dockerignore
+
+# Keep build context small for Java/Maven
+**/.DS_Store

@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package safeair.mqtt;
+
+option java_package = "com.safeair.emulator.api.proto";
+option java_outer_classname = "ConfigProto";
+
+message ConfigEntry {
+  string key = 1;
+  string value = 2;
+}
+
+message ConfigCommandMessage {
+  enum Scope {
+    GLOBAL = 0;
+    EMULATOR = 1;
+  }
+
+  string commandId = 1;
+  Scope scope = 2;
+  string targetEmulatorId = 3;
+  int64 receivedAtEpochMs = 4;
+  int64 sequence = 5;
+  repeated ConfigEntry payload = 6;
+}

@@ -1,0 +1,14 @@
+spring:
+  config:
+    activate:
+      on-profile: test
+
+mqtt:
+  enabled: false
+  host: localhost
+  port: 8883
+  tls:
+    enabled: true
+  username: test
+  password: test
+  console-log-enabled: false
