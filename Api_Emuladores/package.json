@@ -1,0 +1,51 @@
+{
+  "name": "safeair-api",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "seed": "node -r ts-node/register/transpile-only src/infrastructure/database/seeders/seed.ts",
+    "clean-users": "node -r ts-node/register/transpile-only src/infrastructure/database/seeders/clean-users.ts",
+    "emulator": "ts-node-dev --respawn --transpile-only src/emulator.ts",
+    "test:mapping": "node -r ts-node/register/transpile-only src/infrastructure/mappers/actuator-state.mapper.test.ts",
+    "lint": "echo \"Add eslint config when ready\"",
+    "test": "echo \"Tests not configured yet\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "SafeAir backend API with modular event-oriented architecture",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "morgan": "^1.10.1",
+    "mqtt": "^5.15.1",
+    "nodemailer": "^8.0.10",
+    "pg": "^8.20.0",
+    "pg-hstore": "^2.3.4",
+    "protobufjs": "^8.0.1",
+    "sequelize": "^6.37.8",
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^25.5.0",
+    "@types/nodemailer": "^8.0.0",
+    "cypress": "^15.15.0",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^6.0.2"
+  }
+}

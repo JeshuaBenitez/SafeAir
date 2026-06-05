@@ -1,0 +1,30 @@
+@startuml
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "Frontend" as FE
+node "Emulator" as EMU
+node "EMQX Broker" as EMQX
+node "SafeAir API" as API
+database "PostgreSQL" as DB
+
+rectangle "HTTP API" {
+  FE --> API : REST /api/v1/*\nAuthorization: Bearer <jwt>
+  EMU --> API : POST /api/v1/metrics/telemetry\nx-api-key: <TELEMETRY_API_KEY>
+}
+
+rectangle "MQTT" {
+  EMU --> EMQX : publish safeair/{emulatorId}/telemetry
+  API --> EMQX : subscribe safeair/+/telemetry
+  API --> EMQX : publish safeair/{roomId}/actions
+  API --> EMQX : publish safeair/{roomId}/alarms
+}
+
+API --> DB : persist measurements, actions, alarms
+
+note right of API
+Telemetry HTTP requires x-api-key.
+Other protected endpoints use JWT.
+end note
+
+@enduml
