@@ -6,6 +6,7 @@ import { CycleRepository } from "../../infrastructure/repositories/cycle.reposit
 import { mqttGateway } from "../../infrastructure/mqtt/mqtt.gateway";
 import { actuatorStateTopic } from "../../infrastructure/mqtt/topics";
 import { logMqttPublished, logFrontend, logError, logPostgres } from "../../application/services/debug-logs.service";
+import { AppError } from "../../shared/errors/app-error";
 
 /**
  * Body for actuator command
@@ -13,7 +14,7 @@ import { logMqttPublished, logFrontend, logError, logPostgres } from "../../appl
 interface ActuatorCommandBody {
   action: "turn_on" | "turn_off" | "set_temperature";
   value: boolean | number;
-  source?: "frontend" | "api" | "rule-engine";
+  source?: "frontend" | "api" | "rule-engine" | "debug-dashboard";
 }
 
 /**
@@ -28,6 +29,11 @@ export async function sendActuatorCommand(
   const roomId = String(req.params.roomId);
   const deviceType = String(req.params.deviceType);
   const { action, value, source = "frontend" } = req.body as ActuatorCommandBody;
+  const userId = req.auth?.sub;
+
+  if (!userId) {
+    throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+  }
 
   // 1. Log: Received action from frontend
   logFrontend(`Command received: ${deviceType} ${action} for room ${roomId}`, {
@@ -58,7 +64,7 @@ export async function sendActuatorCommand(
   try {
     // 3. Get room (just to verify it exists)
     const roomRepository = new RoomRepository();
-    const room = await roomRepository.findById(roomId);
+    const room = await roomRepository.findById(roomId, userId);
 
     if (!room) {
       res.status(404).json({
@@ -122,7 +128,7 @@ export async function sendActuatorCommand(
         deviceType: deviceType as "minisplit" | "purifier" | "extractor",
         action: commandAction,
         reason: `Command from ${source}`,
-        requestedBy: source as "rule-engine" | "manual",
+        requestedBy: source === "rule-engine" ? "rule-engine" : "manual",
       });
 
       // Log: PostgreSQL insert

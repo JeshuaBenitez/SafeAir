@@ -37,6 +37,7 @@ export class DashboardMockStateService {
   private readonly apiClient = inject(API_CLIENT);
   private readonly roomsSubject = new BehaviorSubject<readonly DashboardRoom[]>([]);
   private currentInstanceId: string | null = null;
+  private currentInstanceUserId: string | null = null;
 
   readonly rooms$ = this.roomsSubject.asObservable();
 
@@ -74,7 +75,14 @@ export class DashboardMockStateService {
         };
       }
 
-      const instanceId = await this.getOrCreateInstanceId();
+      const instanceId = await this.getOrCreateInstanceId(true);
+      if (!instanceId) {
+        return {
+          ok: false,
+          reason: 'invalid-room-data',
+        };
+      }
+
       const normalizedName = draft.name.trim();
 
       // 1. Crear cuarto en API
@@ -215,7 +223,9 @@ export class DashboardMockStateService {
     }
   }
 
-  private async getOrCreateInstanceId(): Promise<string> {
+  private async getOrCreateInstanceId(createIfMissing = true): Promise<string | null> {
+    this.resetCachedInstanceIfUserChanged();
+
     if (this.currentInstanceId) {
       return this.currentInstanceId;
     }
@@ -228,22 +238,32 @@ export class DashboardMockStateService {
       activeInstance = instances[0];
     }
 
-    if (!activeInstance) {
+    if (!activeInstance && createIfMissing) {
       const createdResponse = await this.apiClient.post<{ id: string }>('/api/v1/instances', {
-        name: 'Demo Instance',
+        name: 'Mi instancia SafeAir',
         description: 'Instancia principal de SafeAir',
       } as any);
       this.currentInstanceId = createdResponse.data.id;
+      this.currentInstanceUserId = this.getCurrentUserId();
       return createdResponse.data.id;
     }
 
+    if (!activeInstance) {
+      return null;
+    }
+
     this.currentInstanceId = activeInstance.id;
+    this.currentInstanceUserId = this.getCurrentUserId();
     return activeInstance.id;
   }
 
   private async loadRoomsFromApi(): Promise<readonly DashboardRoom[]> {
     try {
-      const instanceId = await this.getOrCreateInstanceId();
+      const instanceId = await this.getOrCreateInstanceId(false);
+      if (!instanceId) {
+        return [];
+      }
+
       const instanceDetailResponse = await this.apiClient.get<any>(`/api/v1/instances/${instanceId}`);
 
       if (!instanceDetailResponse?.data || !Array.isArray(instanceDetailResponse.data.rooms)) {
@@ -408,6 +428,15 @@ export class DashboardMockStateService {
     } catch {
       return null;
     }
+  }
+
+  private resetCachedInstanceIfUserChanged(): void {
+    const userId = this.getCurrentUserId();
+    if (this.currentInstanceUserId && this.currentInstanceUserId !== userId) {
+      this.currentInstanceId = null;
+    }
+
+    this.currentInstanceUserId = userId;
   }
 
   private getStorageKey(): string {

@@ -64,11 +64,18 @@ export class CycleRepository {
   }
 
   async getHistory(roomId: string, from?: Date, to?: Date): Promise<CycleMeasurementModel[]> {
+    const measuredAtRange: Record<symbol, Date> = {};
+    if (from) {
+      measuredAtRange[Op.gte] = from;
+    }
+    if (to) {
+      measuredAtRange[Op.lte] = to;
+    }
+
     return CycleMeasurementModel.findAll({
       where: {
         roomId,
-        ...(from ? { measuredAt: { [Op.gte]: from } } : {}),
-        ...(to ? { measuredAt: { [Op.lte]: to } } : {})
+        ...(from || to ? { measuredAt: measuredAtRange } : {})
       },
       order: [["measuredAt", "DESC"]],
       limit: 500

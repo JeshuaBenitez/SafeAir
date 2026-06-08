@@ -81,11 +81,11 @@
                 <div class="time-picker">
                   <input
                     type="number"
-                    min="1"
-                    max="12"
+                    min="0"
+                    max="23"
                     [(ngModel)]="startHour"
-                    title="Hora (1-12)"
-                    placeholder="HH"
+                    title="Hora (0-23)"
+                    placeholder="00-23"
                     class="time-input time-input--hour"
                   />
                   <span class="time-separator">:</span>
@@ -98,10 +98,6 @@
                     placeholder="MM"
                     class="time-input time-input--minute"
                   />
-                  <select [(ngModel)]="startPeriod" class="period-select" title="AM/PM">
-                    <option value="AM">AM</option>
-                    <option value="PM">PM</option>
-                  </select>
                 </div>
               </div>
             </div>
@@ -119,11 +115,11 @@
                 <div class="time-picker">
                   <input
                     type="number"
-                    min="1"
-                    max="12"
+                    min="0"
+                    max="23"
                     [(ngModel)]="endHour"
-                    title="Hora (1-12)"
-                    placeholder="HH"
+                    title="Hora (0-23)"
+                    placeholder="00-23"
                     class="time-input time-input--hour"
                   />
                   <span class="time-separator">:</span>
@@ -136,10 +132,6 @@
                     placeholder="MM"
                     class="time-input time-input--minute"
                   />
-                  <select [(ngModel)]="endPeriod" class="period-select" title="AM/PM">
-                    <option value="AM">AM</option>
-                    <option value="PM">PM</option>
-                  </select>
                 </div>
               </div>
             </div>
@@ -172,7 +164,7 @@
           </thead>
           <tbody>
             <tr *ngFor="let item of data">
-              <td class="history-table__date">{{ item.measuredAt | date: 'dd/MM/yyyy HH:mm:ss' }}</td>
+              <td class="history-table__date">{{ formatDateLocal(item.measuredAt) }}</td>
               <td>
                 <span class="metric-badge" [class]="getTemperatureClass(item.temperature)">
                   {{ item.temperature }} °C

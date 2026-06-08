@@ -2,17 +2,21 @@ import { fn, col } from "sequelize";
 import { InstanceModel, RoomModel, RoomSetupDerivedModel } from "../database/models";
 
 export class InstanceRepository {
-  async create(data: { name: string; description?: string }): Promise<InstanceModel> {
-    return InstanceModel.create({ name: data.name, description: data.description ?? null });
+  async create(data: { name: string; description?: string; userId?: string | null }): Promise<InstanceModel> {
+    return InstanceModel.create({ name: data.name, description: data.description ?? null, userId: data.userId ?? null });
   }
 
-  async findAll(): Promise<InstanceModel[]> {
-    return InstanceModel.findAll({ order: [["createdAt", "DESC"]] });
+  async findAll(userId?: string): Promise<InstanceModel[]> {
+    return InstanceModel.findAll({
+      where: userId ? { userId } : undefined,
+      order: [["createdAt", "DESC"]]
+    });
   }
 
-  async findById(id: string): Promise<InstanceModel | null> {
+  async findById(id: string, userId?: string): Promise<InstanceModel | null> {
     const { RoomSetupModel, DeviceModel } = await import("../database/models");
-    return InstanceModel.findByPk(id, {
+    return InstanceModel.findOne({
+      where: userId ? { id, userId } : { id },
       include: [
         {
           model: RoomModel,
@@ -28,8 +32,11 @@ export class InstanceRepository {
   }
 
 
-  async findFirstActive(): Promise<InstanceModel | null> {
-    return InstanceModel.findOne({ where: { isActive: true }, order: [["createdAt", "ASC"]] });
+  async findFirstActive(userId?: string): Promise<InstanceModel | null> {
+    return InstanceModel.findOne({
+      where: userId ? { isActive: true, userId } : { isActive: true },
+      order: [["createdAt", "ASC"]]
+    });
   }
 
   async countRooms(instanceId: string): Promise<number> {

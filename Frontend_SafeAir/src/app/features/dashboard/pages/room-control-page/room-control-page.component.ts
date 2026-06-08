@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
-import { combineLatest } from 'rxjs';
+import { combineLatest, interval } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { DashboardFacade } from '@features/dashboard/application/facades/dashboard.facade';
@@ -18,6 +18,7 @@ import { DashboardRoom } from '@features/dashboard/domain/models/dashboard-room.
 import { DashboardUser } from '@features/dashboard/domain/models/dashboard-user.model';
 import { DashboardSidebarComponent } from '@features/dashboard/components/dashboard-sidebar/dashboard-sidebar.component';
 import { DashboardTopbarComponent } from '@features/dashboard/components/dashboard-topbar/dashboard-topbar.component';
+import { API_CLIENT } from '@core/config/api-client.token';
 
 type ActuatorKey = 'minisplit' | 'purifier' | 'extractor';
 
@@ -45,6 +46,15 @@ interface EnvironmentMetricCard {
   icon: string;
 }
 
+interface ActuatorSnapshot {
+  isOn: boolean | null;
+  targetTemperature: number | null;
+}
+
+interface ActuatorStateResponse {
+  actuators?: Partial<Record<ActuatorKey, ActuatorSnapshot>>;
+}
+
 @Component({
   selector: 'app-room-control-page',
   standalone: true,
@@ -59,6 +69,7 @@ export class RoomControlPageComponent implements OnInit {
   private readonly environmentMockState = inject(DashboardEnvironmentMockService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly cdr = inject(ChangeDetectorRef);
+  private readonly apiClient = inject(API_CLIENT);
 
   user: DashboardUser = {
     displayName: 'Admin',
@@ -96,6 +107,7 @@ export class RoomControlPageComponent implements OnInit {
 
         this.ensureSelectedActuator();
         this.ensureUnitStates();
+        this.refreshActuatorState();
 
         this.cdr.markForCheck();
       });
@@ -105,6 +117,12 @@ export class RoomControlPageComponent implements OnInit {
       .subscribe((environmentVm) => {
         this.selectedEnvironmentState = environmentVm.selectedState;
         this.cdr.markForCheck();
+      });
+
+    interval(2200)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.refreshActuatorState();
       });
   }
 
@@ -252,16 +270,21 @@ export class RoomControlPageComponent implements OnInit {
     return this.getUnitState(this.selectedActuatorKey, index).on;
   }
 
-  toggleUnit(index: number): void {
+  async toggleUnit(index: number): Promise<void> {
     if (!this.selectedActuatorKey) return;
 
     const key = this.buildUnitKey(this.selectedActuatorKey, index);
     const current = this.unitStates[key] ?? { on: false, value: 24 };
+    const nextOn = !current.on;
 
     this.unitStates[key] = {
       ...current,
-      on: !current.on,
+      on: nextOn,
     };
+    this.cdr.markForCheck();
+
+    await this.sendActuatorCommand(this.selectedActuatorKey, nextOn ? 'turn_on' : 'turn_off', nextOn);
+    await this.refreshActuatorState();
   }
 
   getUnitValue(index: number): number {
@@ -280,6 +303,15 @@ export class RoomControlPageComponent implements OnInit {
       ...current,
       value: Number(target.value),
     };
+    this.cdr.markForCheck();
+  }
+
+  async commitUnitTemperature(index: number): Promise<void> {
+    if (this.selectedActuatorKey !== 'minisplit') return;
+
+    const value = this.getUnitValue(index);
+    await this.sendActuatorCommand('minisplit', 'set_temperature', value);
+    await this.refreshActuatorState();
   }
 getTemperaturePercent(value: number, min: number, max: number): number {
   if (max <= min) {
@@ -298,10 +330,11 @@ getTemperaturePercent(value: number, min: number, max: number): number {
     return this.selectedUnits.every((unit) => this.isUnitOn(unit));
   }
 
-  toggleAllSelected(): void {
+  async toggleAllSelected(): Promise<void> {
     if (!this.selectedActuatorKey) return;
 
     const shouldTurnOff = this.areAllSelectedUnitsOn();
+    const nextOn = !shouldTurnOff;
 
     for (const unit of this.selectedUnits) {
       const key = this.buildUnitKey(this.selectedActuatorKey, unit);
@@ -309,9 +342,13 @@ getTemperaturePercent(value: number, min: number, max: number): number {
 
       this.unitStates[key] = {
         ...current,
-        on: !shouldTurnOff,
+        on: nextOn,
       };
     }
+    this.cdr.markForCheck();
+
+    await this.sendActuatorCommand(this.selectedActuatorKey, nextOn ? 'turn_on' : 'turn_off', nextOn);
+    await this.refreshActuatorState();
   }
 
   activateAllSelected(): void {
@@ -424,6 +461,63 @@ getTemperaturePercent(value: number, min: number, max: number): number {
 
   private buildUnitKey(type: ActuatorKey, index: number): string {
     return `${type}-${index}`;
+  }
+
+  private async sendActuatorCommand(
+    deviceType: ActuatorKey,
+    action: 'turn_on' | 'turn_off' | 'set_temperature',
+    value: boolean | number,
+  ): Promise<void> {
+    if (!this.room) return;
+
+    try {
+      await this.apiClient.post(`/api/v1/rooms/${this.room.id}/actuators/${deviceType}/command`, {
+        action,
+        value,
+        source: 'frontend',
+      });
+    } catch (error) {
+      console.error('Error enviando comando de actuador:', error);
+    }
+  }
+
+  private async refreshActuatorState(): Promise<void> {
+    if (!this.room) return;
+
+    try {
+      const response = await this.apiClient.get<ActuatorStateResponse>(`/api/v1/rooms/${this.room.id}/actuators/state`);
+      const actuators = response.data?.actuators;
+      if (!actuators) {
+        return;
+      }
+
+      this.applyReportedState('minisplit', actuators.minisplit);
+      this.applyReportedState('purifier', actuators.purifier);
+      this.applyReportedState('extractor', actuators.extractor);
+      this.cdr.markForCheck();
+    } catch (error) {
+      console.error('Error consultando estado de actuadores:', error);
+    }
+  }
+
+  private applyReportedState(type: ActuatorKey, reported: ActuatorSnapshot | undefined): void {
+    if (!reported || reported.isOn === null) {
+      return;
+    }
+
+    const quantity = this.getActuatorQuantity(type);
+    for (let index = 1; index <= quantity; index++) {
+      const key = this.buildUnitKey(type, index);
+      const current = this.unitStates[key] ?? { on: false, value: 24 };
+
+      this.unitStates[key] = {
+        ...current,
+        on: Boolean(reported.isOn),
+        value: type === 'minisplit'
+          ? Number(reported.targetTemperature ?? current.value ?? 24)
+          : current.value,
+      };
+    }
   }
 
   private buildAvailableActuators(room: DashboardRoom): VisualActuator[] {

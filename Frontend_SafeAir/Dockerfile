@@ -30,7 +30,7 @@ RUN sed -i "s|PLACEHOLDER_API_URL|${API_BASE_URL}|g" /etc/nginx/conf.d/default.c
 COPY --from=build /app/dist/safeair-frontend/browser /usr/share/nginx/html
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost/health || exit 1
+  CMD wget --quiet --tries=1 --spider http://127.0.0.1/health || exit 1
 
 EXPOSE 80
 

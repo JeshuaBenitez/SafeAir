@@ -184,7 +184,7 @@ function normalizeEmulatorTelemetry(buffer: Buffer): Record<string, unknown> {
       emulatorId: String(raw.emulatorId ?? ""),
       deviceType: String(device.deviceType ?? "").toLowerCase(),
       isOn: Boolean(device.on),
-      targetTemperature: attrMap.get("targetTemperature") ?? attrMap.get("setpoint") ?? attrMap.get("temperature"),
+      targetTemperature: attrMap.get("targetTemperature") ?? attrMap.get("setpoint") ?? attrMap.get("temperature") ?? attrMap.get("state"),
       ambientTemperature: temperature,
       ambientHumidity: humidity,
       timestamp

@@ -35,23 +35,30 @@ public class MQTTSubscriber {
     }
 
     public void onMessage(String topic, byte[] payload) {
+        if (!MqttTopics.isGlobalConfigTopic(topic) && !isEmulatorConfigTopic(topic)) {
+            return;
+        }
+
         try {
             ConfigCommand command = adapter.toCommand(payload);
-            if (command.isSpecific() && (command.targetEmulatorId() == null || command.targetEmulatorId().isBlank())) {
-                String[] parts = topic.split("/");
-                if (parts.length >= 3) {
-                    command = new ConfigCommand(
-                            command.commandId(),
-                            command.scope(),
-                            parts[1],
-                            command.receivedAtUtc(),
-                            command.sequence(),
-                            command.payload());
-                }
+            String[] parts = topic.split("/");
+            if (parts.length == 3 && "safeair".equals(parts[0]) && "config".equals(parts[2])) {
+                command = new ConfigCommand(
+                        command.commandId(),
+                        ConfigCommand.Scope.EMULATOR,
+                        parts[1],
+                        command.receivedAtUtc(),
+                        command.sequence(),
+                        command.payload());
             }
             dispatcher.enqueue(command);
         } catch (RuntimeException ex) {
             LOGGER.warn("Rejected invalid MQTT config payload for topic {}", topic, ex);
         }
+    }
+
+    private boolean isEmulatorConfigTopic(String topic) {
+        String[] parts = topic.split("/");
+        return parts.length == 3 && "safeair".equals(parts[0]) && "config".equals(parts[2]);
     }
 }

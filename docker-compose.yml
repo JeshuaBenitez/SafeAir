@@ -36,12 +36,8 @@ services:
       - ./.env.emqx
     environment:
       # EMQX permite conexiones anónimas para desarrollo local
-      EMQX_ALLOW_ANONYMOUS: "${EMQX_ALLOW_ANONYMOUS:-true}"
-      EMQX_LOG_LEVEL: "${EMQX_LOG_LEVEL:-info}"
-      # Dashboard JWT (cambiar en producción)
-      EMQX_DASHBOARD__SECRETS__JWT_SECRET: "${EMQX_JWT_SECRET:-change_this_to_a_secure_random_string}"
-      EMQX_DEFAULT_ADMIN_PASSWORD: "${EMQX_ADMIN_PASSWORD:-}"
-      # Puertos expuestos para red local
+      EMQX_ALLOW_ANONYMOUS: "true"
+      EMQX_LOG_LEVEL: "info"
       EMQX_DASHBOARD__LISTENERS__HTTP__INET6: "false"
     ports:
       - "1883:1883"    # MQTT TCP - para emuladores
@@ -78,8 +74,10 @@ services:
       BACKEND_BIND_HOST: ${API_HOST:-0.0.0.0}
       BACKEND_PORT: 3000
       PORT: 3000
-      # CORS dinámico desde .env
+      # CORSovýnamic desde .env
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:8080}
+      # MODO DEMO - Omitir OTP
+      AUTH_SKIP_OTP: "true"
     depends_on:
       db:
         condition: service_healthy

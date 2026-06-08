@@ -12,6 +12,9 @@ RUN npm install
 COPY tsconfig.json ./
 COPY src ./src
 
+# Also copy public folder (for debug assets)
+COPY src/public ./src/public
+
 # Build TypeScript to JavaScript
 RUN npm run build
 
@@ -32,13 +35,16 @@ RUN npm ci --omit=dev
 # Copy compiled JavaScript from build stage
 COPY --from=build /app/dist ./dist
 
+# Copy static debug assets (public folder)
+COPY --from=build /app/src/public ./public
+
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 USER nodejs
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})" || exit 1
+  CMD node -e "const req=require('http').get('http://127.0.0.1:3000/health', r=>{r.resume(); process.exit(r.statusCode===200?0:1)}); req.on('error',()=>process.exit(1)); req.setTimeout(2000,()=>{req.destroy(); process.exit(1);});"
 
 EXPOSE 3000
 

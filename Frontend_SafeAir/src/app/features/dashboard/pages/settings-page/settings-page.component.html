@@ -143,6 +143,25 @@
         </form>
       </section>
 
+      <section class="settings-dev-token" *ngIf="showDevJwtTools && devJwtToken">
+        <div class="settings-dev-token__header">
+          <div>
+            <h2>JWT local/debug</h2>
+            <p>Usa este token en /debug/emulators/html para filtrar rooms y controles por tu usuario.</p>
+          </div>
+
+          <button type="button" class="settings-dev-token__copy" (click)="onCopyJwt()">
+            Copiar JWT
+          </button>
+        </div>
+
+        <textarea readonly [value]="devJwtToken" aria-label="JWT actual"></textarea>
+
+        <p class="settings-dev-token__message" *ngIf="devJwtCopyMessage">
+          {{ devJwtCopyMessage }}
+        </p>
+      </section>
+
       <section class="settings-danger-zone">
         <div>
           <h2>Cerrar sesión</h2>

@@ -2,6 +2,7 @@ import mqtt, { type MqttClient } from "mqtt";
 import { env } from "../../shared/config/env";
 import { logger } from "../../shared/config/logger";
 import { decodeMqttPayload } from "./payload-codec";
+import { addLog } from "../../application/services/debug-logs.service";
 
 type TelemetryMessage = {
   topic: string;
@@ -147,6 +148,15 @@ class MqttGateway {
         phase,
         connectCount: this.connectCount,
         clientId: env.mqttClientId
+      });
+
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "info",
+        source: "mqtt-published",
+        event: "mqtt-connected",
+        message: `MQTT connection established (${phase})`,
+        details: { phase, connectCount: this.connectCount, clientId: env.mqttClientId }
       });
 
       client.subscribe(env.mqttTelemetryTopic, { qos: env.mqttQos as 0 | 1 | 2 }, (error) => {

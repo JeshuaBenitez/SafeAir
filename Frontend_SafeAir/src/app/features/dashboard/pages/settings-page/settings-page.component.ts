@@ -1,5 +1,5 @@
 import { AsyncPipe, NgIf } from '@angular/common';
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
@@ -51,6 +51,9 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
   profilePreviewUrl: string | null = null;
   saveMessage: string | null = null;
   saveError: string | null = null;
+  readonly showDevJwtTools = this.isLocalHost();
+  devJwtToken = '';
+  devJwtCopyMessage: string | null = null;
 
   showNewPassword = false;
   showConfirmPassword = false;
@@ -63,10 +66,12 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
     private readonly authFacade: AuthFacade,
     private readonly authSessionStorage: AuthSessionStorageService,
     private readonly router: Router,
+    private readonly changeDetectorRef: ChangeDetectorRef,
   ) {}
 
   ngOnInit(): void {
     const session = this.authSessionStorage.getSession();
+    this.devJwtToken = session?.accessToken ?? '';
 
     // Cargar datos guardados de perfil en localStorage para persistencia real
     const savedFirstName = localStorage.getItem('safeair.user.firstName');
@@ -190,9 +195,33 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
     void this.router.navigateByUrl('/auth/login');
   }
 
+  async onCopyJwt(): Promise<void> {
+    if (!this.devJwtToken) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(this.devJwtToken);
+      this.devJwtCopyMessage = 'JWT copiado al portapapeles.';
+    } catch {
+      this.devJwtCopyMessage = 'No se pudo copiar automáticamente. Selecciona el token y cópialo manualmente.';
+    }
+
+    this.changeDetectorRef.markForCheck();
+
+    window.setTimeout(() => {
+      this.devJwtCopyMessage = null;
+      this.changeDetectorRef.markForCheck();
+    }, 2500);
+  }
+
   ngOnDestroy(): void {
     if (this.objectUrl) {
       URL.revokeObjectURL(this.objectUrl);
     }
+  }
+
+  private isLocalHost(): boolean {
+    return ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname);
   }
 }

@@ -7,7 +7,6 @@ import com.safeair.emulator.manager.EmulatorManager;
 import com.safeair.emulator.emulation.impl.MiniSplit;
 import com.safeair.emulator.abstracts.Electrodomestic;
 import com.safeair.emulator.emulation.core.Emulator;
-import com.safeair.emulator.abstracts.Electrodomestic;
 
 /**
  * Subscriber for actuator commands from MQTT.
@@ -47,6 +46,10 @@ public class ActuatorCommandSubscriber {
         // Subscribe to actuator state topic (wildcard for all emulators)
         connector.subscribe(MqttTopics.ACTUATOR_STATE_WILDCARD, MqttTopics.ACTUATOR_QOS);
         LOGGER.info("Subscribed to actuator commands: {}", MqttTopics.ACTUATOR_STATE_WILDCARD);
+    }
+
+    public void stop() {
+        // MQTTConnector owns the actual connection lifecycle.
     }
     
     private void processCommand(String emulatorId, String deviceType, String action, Object value) {

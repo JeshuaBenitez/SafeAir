@@ -3,7 +3,7 @@ import type { Sequelize } from "sequelize";
 
 export class EmulatorModel extends Model {
   declare id: string;
-  declare roomId: string;
+  declare roomId: string | null;
   declare emulatorExternalId: string;
   declare status: "online" | "offline";
   declare readonly createdAt: Date;
@@ -20,7 +20,7 @@ export function initEmulatorModel(sequelize: Sequelize): void {
       },
       roomId: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
         unique: true
       },
       emulatorExternalId: {
@@ -42,4 +42,3 @@ export function initEmulatorModel(sequelize: Sequelize): void {
     }
   );
 }
-

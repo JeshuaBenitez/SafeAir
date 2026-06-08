@@ -84,6 +84,7 @@
 
 .settings-profile-card,
 .settings-form-card,
+.settings-dev-token,
 .settings-danger-zone {
   border-radius: 1.25rem;
   border: 1px solid rgba(tokens.$color-border, 0.68);
@@ -319,6 +320,85 @@
   }
 }
 
+.settings-dev-token {
+  padding: 1.15rem 1.25rem;
+  display: grid;
+  gap: 0.9rem;
+  border-color: rgba(#f0b72f, 0.35);
+  background:
+    radial-gradient(circle at 8% 20%, rgba(#f0b72f, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(#24273a, 0.98), rgba(#1a1d2f, 0.96));
+
+  textarea {
+    width: 100%;
+    min-height: 7rem;
+    resize: vertical;
+    border-radius: 0.85rem;
+    border: 1px solid rgba(tokens.$color-border, 0.72);
+    background: rgba(#101321, 0.86);
+    color: tokens.$color-text-primary;
+    padding: 0.85rem;
+    font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+    font-size: 0.78rem;
+    line-height: 1.5;
+
+    &:focus-visible {
+      outline: none;
+      border-color: rgba(#f0b72f, 0.7);
+      box-shadow: 0 0 0 3px rgba(#f0b72f, 0.12);
+    }
+  }
+}
+
+.settings-dev-token__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+
+  h2 {
+    margin: 0;
+    color: #ffe3a0;
+    font-size: 1.1rem;
+    font-weight: 900;
+  }
+
+  p {
+    margin: 0.25rem 0 0;
+    color: tokens.$color-text-muted;
+    font-size: 0.9rem;
+  }
+}
+
+.settings-dev-token__copy {
+  min-height: 2.55rem;
+  padding: 0 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid rgba(#f0b72f, 0.55);
+  background: rgba(#f0b72f, 0.12);
+  color: #ffe3a0;
+  font-weight: 900;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+
+  &:hover {
+    background: rgba(#f0b72f, 0.18);
+    box-shadow: 0 0 20px rgba(#f0b72f, 0.12);
+    transform: translateY(-1px);
+  }
+}
+
+.settings-dev-token__message {
+  margin: 0;
+  color: #ffe3a0;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
 .settings-danger-zone {
   padding: 1.15rem 1.25rem;
   display: flex;
@@ -439,6 +519,15 @@
   .settings-danger-zone {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .settings-dev-token__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-dev-token__copy {
+    width: 100%;
   }
 
   .settings-logout-button {

@@ -4,10 +4,10 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 
 import com.safeair.emulator.abstracts.SendInfo;
 import com.safeair.emulator.api.adapter.ConfigAdapter;
@@ -77,13 +77,13 @@ public class LocalModeConfig {
     }
 
     @Bean
-    @ConditionalOnBean(EmulatorManager.class)
+    @Profile({"profile1", "local-demo"})
     public ConfigDispatcher configDispatcher(EmulatorManager emulatorManager) {
         return new ConfigDispatcher(emulatorManager);
     }
 
     @Bean(initMethod = "start", destroyMethod = "stop")
-    @ConditionalOnBean(ConfigDispatcher.class)
+    @Profile({"profile1", "local-demo"})
     public MQTTSubscriber mqttSubscriber(
             MQTTConnector connector,
             ConfigAdapter configAdapter,
@@ -92,7 +92,7 @@ public class LocalModeConfig {
     }
 
     @Bean(initMethod = "start", destroyMethod = "stop")
-    @ConditionalOnBean(EmulatorManager.class)
+    @Profile({"profile1", "local-demo"})
     public ActuatorCommandSubscriber actuatorCommandSubscriber(
             MQTTConnector connector,
             EmulatorManager emulatorManager,
@@ -108,7 +108,7 @@ public class LocalModeConfig {
     }
 
     @Bean(initMethod = "startDispatch", destroyMethod = "stopDispatch")
-    @ConditionalOnBean(ConfigDispatcher.class)
+    @Profile({"profile1", "local-demo"})
     public ConfigDispatchLifecycle configDispatchLifecycle(
             @Qualifier("configDispatcherExecutor") ExecutorService configDispatcherExecutor,
             ConfigDispatcher configDispatcher) {

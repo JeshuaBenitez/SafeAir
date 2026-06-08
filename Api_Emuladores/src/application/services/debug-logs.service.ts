@@ -306,12 +306,24 @@ export class DebugController {
 /**
  * Generate HTML page for log visualization
  */
+function localNow(): string {
+  return new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+}
+
+function formatLocalTime(isoString: string): string {
+  try {
+    return new Date(isoString).toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+  } catch {
+    return isoString;
+  }
+}
+
 function generateLogsHtml(logs: LogEntry[]): string {
   const logRows = logs
     .map(
       (log) => `
     <tr class="log-${log.level}">
-      <td>${log.timestamp}</td>
+      <td>${formatLocalTime(log.timestamp)}</td>
       <td><span class="badge badge-${log.level}">${log.level.toUpperCase()}</span></td>
       <td><span class="badge badge-source">${log.source}</span></td>
       <td>${log.event}</td>
@@ -330,17 +342,20 @@ function generateLogsHtml(logs: LogEntry[]): string {
   <title>SafeAir Debug Logs</title>
   <style>
     * { box-sizing: border-box; }
-    body { 
-      font-family: 'Segoe UI', system-ui, sans-serif; 
-      margin: 0; 
-      padding: 20px; 
-      background: #0d1117;
-      color: #c9d1d9;
-    }
-    h1 { color: #58a6ff; margin-bottom: 10px; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .refrescar { padding: 8px 16px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; }
-    table { width: 100%; border-collapse: collapse; background: #161b22; border-radius: 8px; overflow: hidden; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 20px; background: #0d1117; color: #c9d1d9; }
+    h1 { color: #58a6ff; margin-bottom: 4px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+    .header-left { flex: 1; }
+    .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .nav { margin-bottom: 20px; }
+    .nav a { color: #58a6ff; margin-right: 20px; text-decoration: none; font-size: 14px; }
+    .nav a:hover { text-decoration: underline; }
+    .refrescar { padding: 8px 16px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
+    .auto-refresh { font-size: 13px; color: #8b949e; }
+    .auto-refresh input { accent-color: #238636; }
+    .summary { display: flex; gap: 20px; margin-bottom: 20px; font-size: 13px; color: #8b949e; flex-wrap: wrap; }
+    .table-wrap { background: #161b22; border-radius: 8px; overflow: hidden; border: 1px solid #30363d; }
+    table { width: 100%; border-collapse: collapse; }
     th { background: #21262d; padding: 12px; text-align: left; font-weight: 600; color: #8b949e; }
     td { padding: 10px 12px; border-bottom: 1px solid #30363d; font-size: 13px; }
     tr:hover { background: #1f242c; }
@@ -354,35 +369,49 @@ function generateLogsHtml(logs: LogEntry[]): string {
     .log-warn td { border-left: 3px solid #d29922; }
     .log-error td { border-left: 3px solid #f85149; }
     .log-debug td { border-left: 3px solid #8b949e; }
-    .filters { display: flex; gap: 10px; margin-bottom: 15px; }
-    .filters select, .filters input { padding: 6px 10px; background: #21262d; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; }
-    .summary { display: flex; gap: 20px; margin-bottom: 15px; font-size: 13px; color: #8b949e; }
+    .empty { text-align: center; padding: 30px; color: #6e7681; }
   </style>
 </head>
 <body>
+  <div class="nav">
+    <a href="/debug/logs/html">📋 Ver Logs</a>
+    <a href="/debug/emulators/html">📱 Dashboard Emuladores</a>
+    <a href="/debug/status">⚙️ Estado Sistema</a>
+  </div>
   <div class="header">
-    <h1>🔍 SafeAir Debug Logs</h1>
-    <button class="refrescar" onclick="location.reload()">🔄 Refresh</button>
+    <div class="header-left">
+      <h1>🔍 SafeAir Debug Logs</h1>
+      <div class="summary">
+        <span>📊 Total: ${logs.length} logs</span>
+        <span>🕐 Actualizado: <span id="clock">${localNow()}</span></span>
+        <span>⏱️ Zona: América/México (CDMX)</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <label class="auto-refresh">
+        <input type="checkbox" id="autoRefresh" checked> Auto-refresh cada 5s
+      </label>
+      <button class="refrescar" id="refreshBtn">🔄 Refresh</button>
+    </div>
   </div>
-  <div class="summary">
-    <span>📊 Total: ${logs.length} logs</span>
-    <span>🕐 Actualizado: ${new Date().toLocaleTimeString()}</span>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp (CDMX)</th>
+          <th>Nivel</th>
+          <th>Origen</th>
+          <th>Evento</th>
+          <th>Mensaje</th>
+          <th>Emulator</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${logs.length > 0 ? logRows : '<tr><td colspan="6" class="empty">Sin logs disponibles. Los eventos aparecerán aquí en tiempo real.</td></tr>'}
+      </tbody>
+    </table>
   </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Timestamp</th>
-        <th>Nivel</th>
-        <th>Origen</th>
-        <th>Evento</th>
-        <th>Mensaje</th>
-        <th>Emulator</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${logRows}
-    </tbody>
-  </table>
+  <script src="/debug/assets/debug-logs.js"></script>
 </body>
 </html>`;
 }

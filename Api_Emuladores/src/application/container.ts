@@ -36,15 +36,15 @@ const roomSetupDomainService = new RoomSetupDomainService();
 const emailService = new EmailService();
 const authService = new AuthService(userRepository, emailService);
 const instanceService = new InstanceService(instanceRepository);
-const roomService = new RoomService(instanceRepository, roomRepository, roomSetupDomainService);
 const emulatorResolutionService = new EmulatorResolutionService(emulatorRepository, instanceRepository, roomRepository);
+const configurationService = new ConfigurationService(configurationRepository, emulatorRepository, roomRepository);
+const roomService = new RoomService(instanceRepository, roomRepository, roomSetupDomainService, configurationService);
 const cycleService = new CycleService(cycleRepository);
 const metricsQueryService = new MetricsQueryService(cycleRepository, deviceActionRepository, deviceStateRepository, roomRepository);
 const ruleEvaluationService = new RuleEvaluationService();
 const deviceActionService = new DeviceActionService(deviceActionRepository);
 const actuatorStateIngestionService = new ActuatorStateIngestionService(emulatorResolutionService, deviceStateRepository);
 const alarmService = new AlarmService(alarmRepository);
-const configurationService = new ConfigurationService(configurationRepository, emulatorRepository);
 const telemetryIngestionService = new TelemetryIngestionService(
   emulatorResolutionService,
   cycleRepository,

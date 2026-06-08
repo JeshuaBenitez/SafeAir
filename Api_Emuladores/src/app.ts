@@ -1,6 +1,7 @@
 import cors from "cors";
 import express, { type Express } from "express";
 import helmet from "helmet";
+import path from "path";
 import { env } from "./shared/config/env";
 import { requestLoggerMiddleware } from "./api/middlewares/request-logger.middleware";
 import { requestAuditMiddleware } from "./api/middlewares/request-audit.middleware";
@@ -24,6 +25,17 @@ export function createApp(): Express {
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
   });
+
+  // Serve static debug assets (JS files)
+  // These are served from /debug/assets/* path
+  // In production: files are in /app/public (copied from src/public)
+  // In development: files are in src/public (TypeScript excludes this from build)
+  const publicPath = path.join(__dirname, "..", "public");
+  app.use("/debug/assets", express.static(publicPath, {
+    maxAge: "1h",
+    etag: true,
+    index: false
+  }));
 
   // Debug endpoints (accessible in development/demo mode)
   app.use("/debug", debugRouter);

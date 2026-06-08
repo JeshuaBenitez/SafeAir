@@ -3,6 +3,7 @@ import type { Sequelize } from "sequelize";
 
 export class InstanceModel extends Model {
   declare id: string;
+  declare userId: string | null;
   declare name: string;
   declare description: string | null;
   declare isActive: boolean;
@@ -17,6 +18,10 @@ export function initInstanceModel(sequelize: Sequelize): void {
         type: DataTypes.UUID,
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true
+      },
+      userId: {
+        type: DataTypes.UUID,
+        allowNull: true
       },
       name: {
         type: DataTypes.STRING(120),
@@ -40,4 +45,3 @@ export function initInstanceModel(sequelize: Sequelize): void {
     }
   );
 }
-

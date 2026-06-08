@@ -4,6 +4,7 @@ import { CycleRepository } from "../../infrastructure/repositories/cycle.reposit
 import { RuleEvaluationService } from "./rule-evaluation.service";
 import { DeviceActionService } from "./device-action.service";
 import { AlarmService } from "./alarm.service";
+import { addLog } from "./debug-logs.service";
 import type { TelemetryInput } from "../../domain/types/telemetry.types";
 import { EmulatorResolutionService } from "./emulator-resolution.service";
 
@@ -50,6 +51,23 @@ export class TelemetryIngestionService {
       measuredAt,
       receivedAt,
       source
+    });
+
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "postgres",
+      event: "cycle-measurement-saved",
+      message: `Measurement saved: temp=${telemetry.temperature.toFixed(1)}, hum=${telemetry.humidity.toFixed(1)}, co2=${telemetry.co2.toFixed(0)}, pm25=${telemetry.pm25.toFixed(1)}`,
+      details: {
+        roomId,
+        cycleId: cycle.id,
+        measuredAt: measuredAt.toISOString(),
+        receivedAt: receivedAt.toISOString(),
+        source
+      },
+      roomId,
+      emulatorId: telemetry.emulatorId
     });
 
     const previous = await this.cycleRepository.getPreviousMeasurement(roomId, measuredAt);

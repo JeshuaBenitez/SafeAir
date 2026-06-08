@@ -56,12 +56,10 @@ export class DashboardViewPageComponent {
   startDate = this.formatDateForInput(new Date());
   startHour = '09';
   startMinute = '00';
-  startPeriod: 'AM' | 'PM' = 'AM';
 
   endDate = this.formatDateForInput(new Date());
   endHour = '10';
   endMinute = '00';
-  endPeriod: 'AM' | 'PM' = 'AM';
 
   rangeError = '';
 
@@ -104,11 +102,9 @@ export class DashboardViewPageComponent {
     this.startDate = this.formatDateForInput(new Date());
     this.startHour = '09';
     this.startMinute = '00';
-    this.startPeriod = 'AM';
     this.endDate = this.formatDateForInput(new Date());
     this.endHour = '10';
     this.endMinute = '00';
-    this.endPeriod = 'AM';
     this.rangeError = '';
 
     this.environmentMockState.pauseTelemetry();
@@ -203,16 +199,53 @@ export class DashboardViewPageComponent {
       return;
     }
 
-    const startDateTime = this.buildFullDateTime(this.startDate, this.startHour, this.startMinute, this.startPeriod);
-    const endDateTime = this.buildFullDateTime(this.endDate, this.endHour, this.endMinute, this.endPeriod);
+    const startDateTime = this.buildFullDateTime(this.startDate, this.startHour, this.startMinute);
+    const endDateTime = this.buildFullDateTime(this.endDate, this.endHour, this.endMinute);
+
+    console.debug('applyTimeRange clicked', {
+      selectedRoomId: this.selectedRoomId,
+      startDate: this.startDate,
+      startHour: this.startHour,
+      startMinute: this.startMinute,
+      endDate: this.endDate,
+      endHour: this.endHour,
+      endMinute: this.endMinute,
+      fromISO: startDateTime,
+      toISO: endDateTime
+    });
 
     this.loadHistoryWithRange(startDateTime, endDateTime);
   }
 
   private validateTimeRange(): string {
-    // Construir fechas completas
-    const startDateTime = this.buildFullDateTimeObj(this.startDate, this.startHour, this.startMinute, this.startPeriod);
-    const endDateTime = this.buildFullDateTimeObj(this.endDate, this.endHour, this.endMinute, this.endPeriod);
+    // ── Validar formato de hora (formato 24 horas HH:mm) ──────────────────────
+    // Hour debe ser 0-23, minute debe ser 0-59
+    const validateField = (field: string, value: string, min: number, max: number, label: string): string => {
+      // Si está vacío o no es número, rechazar
+      if (!value || value.trim() === '' || !/^\d+$/.test(value)) {
+        return `${label} es requerido y debe ser un número.`;
+      }
+      const num = parseInt(value, 10);
+      if (isNaN(num)) return `${label} debe ser un número válido.`;
+      if (num < min || num > max) return `${label} debe estar entre ${min} y ${max}.`;
+      return '';
+    };
+
+    // Validar inicio (formato 24h: 0-23 hora, 0-59 minuto)
+    let err = validateField('hour', this.startHour, 0, 23, 'Hora inicio');
+    if (err) return err;
+    err = validateField('minute', this.startMinute, 0, 59, 'Minuto inicio');
+    if (err) return err;
+
+    // Validar fin (formato 24h: 0-23 hora, 0-59 minuto)
+    err = validateField('hour', this.endHour, 0, 23, 'Hora fin');
+    if (err) return err;
+    err = validateField('minute', this.endMinute, 0, 59, 'Minuto fin');
+    if (err) return err;
+
+    // Construir fechas completas (formato 24h)
+    const startDateTime = this.buildFullDateTimeObj(this.startDate, this.startHour, this.startMinute);
+    const endDateTime = this.buildFullDateTimeObj(this.endDate, this.endHour, this.endMinute);
 
     // Validar que fin sea mayor que inicio
     if (endDateTime <= startDateTime) {
@@ -237,50 +270,21 @@ export class DashboardViewPageComponent {
     return '';
   }
 
-  private buildFullDateTime(dateStr: string, hour: string, minute: string, period: 'AM' | 'PM'): string {
-    const dateTime = this.buildFullDateTimeObj(dateStr, hour, minute, period);
+  private buildFullDateTime(dateStr: string, hour: string, minute: string): string {
+    const dateTime = this.buildFullDateTimeObj(dateStr, hour, minute);
     return dateTime.toISOString();
   }
 
-  private buildFullDateTimeObj(dateStr: string, hour: string, minute: string, period: 'AM' | 'PM'): Date {
+  private buildFullDateTimeObj(dateStr: string, hour: string, minute: string): Date {
     const [year, month, day] = dateStr.split('-').map(Number);
-    let h = parseInt(hour, 10);
+    const h = parseInt(hour, 10);
     const m = parseInt(minute, 10);
-
-    // Convertir de 12h a 24h
-    if (period === 'AM' && h === 12) {
-      h = 0;
-    } else if (period === 'PM' && h !== 12) {
-      h += 12;
-    }
-
     return new Date(year, month - 1, day, h, m, 0, 0);
   }
 
-  private timeToMilliseconds(hour: string, minute: string, period: 'AM' | 'PM'): number {
-    let h = parseInt(hour, 10);
+  private convertTo24hFormat(hour: string, minute: string): string {
+    const h = parseInt(hour, 10);
     const m = parseInt(minute, 10);
-
-    // Convertir de 12h a 24h
-    if (period === 'AM' && h === 12) {
-      h = 0;
-    } else if (period === 'PM' && h !== 12) {
-      h += 12;
-    }
-
-    return h * 3600000 + m * 60000;
-  }
-
-  private convertTo24hFormat(hour: string, minute: string, period: 'AM' | 'PM'): string {
-    let h = parseInt(hour, 10);
-    const m = parseInt(minute, 10);
-
-    if (period === 'AM' && h === 12) {
-      h = 0;
-    } else if (period === 'PM' && h !== 12) {
-      h += 12;
-    }
-
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
   }
 
@@ -296,16 +300,11 @@ export class DashboardViewPageComponent {
     this.environmentMockState.pauseTelemetry();
     this.isHistoryMode$.next(true);
 
-    // Formatear label para mostrar al usuario
+    // Formatear label para mostrar al usuario en hora local CDMX
     const startDt = new Date(startDateTimeISO);
     const endDt = new Date(endDateTimeISO);
     const formatDateTime = (dt: Date) => {
-      const day = String(dt.getDate()).padStart(2, '0');
-      const month = String(dt.getMonth() + 1).padStart(2, '0');
-      const year = dt.getFullYear();
-      const hour = String(dt.getHours()).padStart(2, '0');
-      const minute = String(dt.getMinutes()).padStart(2, '0');
-      return `${day}/${month}/${year} ${hour}:${minute}`;
+      return dt.toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
     };
 
     this.historyRangeLabel = `Reporte del ${formatDateTime(startDt)} al ${formatDateTime(endDt)}`;
@@ -313,6 +312,11 @@ export class DashboardViewPageComponent {
     this.apiClient
       .get<any[]>(`/api/v1/rooms/${this.selectedRoomId}/metrics/history?from=${encodeURIComponent(fromStr)}&to=${encodeURIComponent(toStr)}`)
       .then((response) => {
+        console.debug('history response', {
+          count: response.data.length,
+          firstMeasuredAt: response.data[0]?.measuredAt,
+          lastMeasuredAt: response.data[response.data.length - 1]?.measuredAt
+        });
         const sorted = [...response.data].sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime());
         this.historyData$.next(sorted);
       })
@@ -329,9 +333,9 @@ export class DashboardViewPageComponent {
       return;
     }
 
-    const headers = ['Fecha y Hora', 'Temperatura (°C)', 'Humedad (%)', 'CO2 (ppm)', 'PM2.5 (µg/m³)', 'Dispositivos'];
+    const headers = ['Fecha y Hora (CDMX)', 'Temperatura (°C)', 'Humedad (%)', 'CO2 (ppm)', 'PM2.5 (µg/m³)', 'Dispositivos'];
     const rows = data.map(item => [
-      new Date(item.measuredAt).toLocaleString('es-MX'),
+      this.formatDateLocal(item.measuredAt),
       item.temperature,
       item.humidity,
       item.co2,
@@ -361,7 +365,7 @@ export class DashboardViewPageComponent {
     }
 
     const roomId = this.selectedRoomId || 'Desconocida';
-    const now = new Date().toLocaleString('es-MX');
+    const now = this.formatDateLocal(new Date().toISOString());
 
     let html = `
       <html>
@@ -389,7 +393,7 @@ export class DashboardViewPageComponent {
           <table>
             <thead>
               <tr>
-                <th>Fecha y Hora</th>
+                <th>Fecha y Hora (CDMX)</th>
                 <th>Temperatura (°C)</th>
                 <th>Humedad (%)</th>
                 <th>CO2 (ppm)</th>
@@ -400,7 +404,7 @@ export class DashboardViewPageComponent {
             <tbody>
               ${data.map(item => `
                 <tr>
-                  <td>${new Date(item.measuredAt).toLocaleString('es-MX')}</td>
+                  <td>${this.formatDateLocal(item.measuredAt)}</td>
                   <td>${item.temperature}</td>
                   <td>${item.humidity}</td>
                   <td>${item.co2}</td>
@@ -431,5 +435,18 @@ export class DashboardViewPageComponent {
     if (item.purifierCount > 0) devices.push(`${item.purifierCount} Purificador${item.purifierCount > 1 ? 'es' : ''}`);
     if (item.extractorCount > 0) devices.push(`${item.extractorCount} Extractor${item.extractorCount > 1 ? 'es' : ''}`);
     return devices.length > 0 ? devices.join(', ') : 'Sin dispositivos';
+  }
+
+  /**
+   * Format ISO date string to CDMX local time.
+   * Uses timezone America/Mexico_City consistently.
+   */
+  formatDateLocal(isoString: string | null | undefined): string {
+    if (!isoString) return '—';
+    try {
+      return new Date(isoString).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+    } catch {
+      return isoString;
+    }
   }
 }

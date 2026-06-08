@@ -18,7 +18,7 @@ export const environment = {
    * Angular Build: ng build --configuration production --define API_BASE_URL=...
    * Or environment variable: process.env.API_BASE_URL
    */
-  API_BASE_URL: 'https://safeair-api.onrender.com',
+  API_BASE_URL: (window as any).__env?.API_BASE_URL || '',
   
   /**
    * MQTT Broker WebSocket URL for emulator telemetry subscriptions
@@ -28,7 +28,7 @@ export const environment = {
    * 
    * Ensure MQTT broker is accessible from frontend machine
    */
-  MQTT_BROKER_URL: process.env['MQTT_BROKER_URL'] || 'wss://broker.safeair.local/mqtt',
+  MQTT_BROKER_URL: (window as any).__env?.MQTT_BROKER_URL || 'ws://localhost:8084/mqtt',
   
   /**
    * Authentication source - always 'api' in production

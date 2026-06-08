@@ -4,7 +4,7 @@ import { EmulatorModel, InstanceModel, RoomModel, RoomSetupDerivedModel, RoomSet
 export async function runDatabaseSeed(): Promise<void> {
   const passwordHash = await bcrypt.hash("admin123", 10);
 
-  await UserModel.findOrCreate({
+  const [adminUser] = await UserModel.findOrCreate({
     where: { email: "admin@safeair.local" },
     defaults: {
       fullName: "SafeAir Admin",
@@ -15,8 +15,13 @@ export async function runDatabaseSeed(): Promise<void> {
 
   const [instance] = await InstanceModel.findOrCreate({
     where: { name: "Demo Instance" },
-    defaults: { description: "Seed instance" }
+    defaults: { description: "Seed instance", userId: adminUser.id }
   });
+
+  if (!instance.userId) {
+    instance.userId = adminUser.id;
+    await instance.save();
+  }
 
   const [room] = await RoomModel.findOrCreate({
     where: { name: "Room A", instanceId: instance.id },
@@ -53,4 +58,17 @@ export async function runDatabaseSeed(): Promise<void> {
   await DeviceModel.findOrCreate({ where: { roomId: room.id, type: "minisplit", label: "Minisplit A1" }, defaults: { roomId: room.id, type: "minisplit", label: "Minisplit A1" } });
   await DeviceModel.findOrCreate({ where: { roomId: room.id, type: "purifier", label: "Purifier A1" }, defaults: { roomId: room.id, type: "purifier", label: "Purifier A1" } });
   await DeviceModel.findOrCreate({ where: { roomId: room.id, type: "extractor", label: "Extractor A1" }, defaults: { roomId: room.id, type: "extractor", label: "Extractor A1" } });
+}
+
+export async function ensureDemoOwnership(): Promise<void> {
+  const adminUser = await UserModel.findOne({ where: { email: "admin@safeair.local" } });
+  if (!adminUser) {
+    return;
+  }
+
+  const demoInstance = await InstanceModel.findOne({ where: { name: "Demo Instance" } });
+  if (demoInstance && !demoInstance.userId) {
+    demoInstance.userId = adminUser.id;
+    await demoInstance.save();
+  }
 }

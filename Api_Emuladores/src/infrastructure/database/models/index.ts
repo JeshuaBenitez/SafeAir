@@ -40,6 +40,9 @@ function initModels(): void {
 export function initModelAssociations(): void {
   initModels();
 
+  UserModel.hasMany(InstanceModel, { foreignKey: "userId", as: "instances" });
+  InstanceModel.belongsTo(UserModel, { foreignKey: "userId", as: "user" });
+
   InstanceModel.hasMany(RoomModel, { foreignKey: "instanceId", as: "rooms" });
   RoomModel.belongsTo(InstanceModel, { foreignKey: "instanceId", as: "instance" });
 
@@ -87,4 +90,3 @@ export {
   DeviceStateModel,
   AlarmModel
 };
-

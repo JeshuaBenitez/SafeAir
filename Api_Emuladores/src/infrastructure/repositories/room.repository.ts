@@ -1,4 +1,4 @@
-import { AlarmModel, DeviceModel, RoomModel, RoomSetupDerivedModel, RoomSetupModel } from "../database/models";
+import { AlarmModel, DeviceModel, InstanceModel, RoomModel, RoomSetupDerivedModel, RoomSetupModel } from "../database/models";
 import type { RoomSetupDerived, RoomSetupInput } from "../../domain/types/room.types";
 
 export class RoomRepository {
@@ -6,13 +6,25 @@ export class RoomRepository {
     return RoomModel.create({ instanceId: data.instanceId, name: data.name });
   }
 
-  async findById(roomId: string): Promise<RoomModel | null> {
+  async findById(roomId: string, userId?: string): Promise<RoomModel | null> {
+    const includes: any[] = [
+      { model: RoomSetupModel, as: "setup" },
+      { model: RoomSetupDerivedModel, as: "derivedSetup" },
+      { model: DeviceModel, as: "devices" }
+    ];
+
+    if (userId) {
+      includes.push({
+        model: InstanceModel,
+        as: "instance",
+        where: { userId },
+        attributes: ["id", "userId"],
+        required: true
+      });
+    }
+
     return RoomModel.findByPk(roomId, {
-      include: [
-        { model: RoomSetupModel, as: "setup" },
-        { model: RoomSetupDerivedModel, as: "derivedSetup" },
-        { model: DeviceModel, as: "devices" }
-      ]
+      include: includes
     });
   }
 
@@ -66,4 +78,3 @@ export class RoomRepository {
     await RoomModel.destroy({ where: { id: roomId } });
   }
 }
-

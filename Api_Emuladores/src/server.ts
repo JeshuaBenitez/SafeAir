@@ -8,12 +8,30 @@ import { mqttGateway } from "./infrastructure/mqtt/mqtt.gateway";
 import { container } from "./application/container";
 import { mapTelemetryPayload } from "./infrastructure/mappers/telemetry.mapper";
 import { mapActuatorStatePayload } from "./infrastructure/mappers/actuator-state.mapper";
-import { runDatabaseSeed } from "./infrastructure/database/seeders/seed-fn";
-import { logMqttReceived, logError, updateEmulatorState } from "./application/services/debug-logs.service";
+import { ensureDemoOwnership, runDatabaseSeed } from "./infrastructure/database/seeders/seed-fn";
+import { logMqttReceived, logError, updateEmulatorState, addLog } from "./application/services/debug-logs.service";
 
 export async function startServer(): Promise<void> {
   try {
+    // Log server startup
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "system",
+      event: "server-startup",
+      message: "SafeAir API starting up"
+    });
+
     await connectDatabase();
+
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "postgres",
+      event: "database-connected",
+      message: "PostgreSQL connection established"
+    });
+
     initModelAssociations();
     await syncModels();
 
@@ -23,7 +41,16 @@ export async function startServer(): Promise<void> {
       logger.info("Database is empty. Running automatic seed...");
       await runDatabaseSeed();
       logger.info("Automatic seed completed successfully");
+
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "info",
+        source: "postgres",
+        event: "database-seeded",
+        message: "Database initial seed completed"
+      });
     }
+    await ensureDemoOwnership();
 
     mqttGateway.onTelemetry(async (message) => {
       try {
@@ -41,12 +68,63 @@ export async function startServer(): Promise<void> {
           co2: payload.co2,
           pm25: payload.pm25,
         };
-        updateEmulatorState(message.emulatorId, roomId, metrics);
+        
+        // Extract device states from the telemetry payload (Java sends "devices" not "deviceStates")
+        const devicesMap = (payload as unknown as Record<string, unknown>).devices as Record<string, unknown> | undefined;
+        let deviceUpdate: Record<string, { isOn: boolean | null; targetTemperature?: number | null }> | undefined;
+        
+        if (devicesMap) {
+          deviceUpdate = {};
+          // Java sends device types as keys: MiniSplit, HumidifierPurifier, AirExtractor
+          // Java deviceState objects have: isOn (boolean), attributes (Map<String, Integer>)
+          for (const [deviceType, deviceState] of Object.entries(devicesMap)) {
+            const ds = deviceState as { on?: boolean; isOn?: boolean; attributes?: Record<string, number> };
+            const isOn = ds.on ?? ds.isOn ?? null;
+            const targetTemp = ds.attributes?.['state'] ?? null;
+            
+            // Map Java device type names to our internal names
+            let internalType = deviceType;
+            if (deviceType === 'MiniSplit') internalType = 'minisplit';
+            else if (deviceType === 'HumidifierPurifier') internalType = 'purifier';
+            else if (deviceType === 'AirExtractor') internalType = 'extractor';
+            
+            deviceUpdate[internalType] = {
+              isOn: isOn === null ? null : Boolean(isOn),
+              targetTemperature: internalType === 'minisplit' && targetTemp !== null ? Number(targetTemp) : null
+            };
+          }
+        }
+        
+        updateEmulatorState(message.emulatorId, roomId, metrics, deviceUpdate);
+
+        if (roomId && deviceUpdate) {
+          for (const [deviceType, state] of Object.entries(deviceUpdate)) {
+            if (state.isOn === null) {
+              continue;
+            }
+
+            const mappedState = mapActuatorStatePayload({
+              emulatorId: message.emulatorId,
+              roomId,
+              deviceType,
+              isOn: state.isOn,
+              targetTemperature: state.targetTemperature ?? undefined,
+              ambientTemperature: metrics.temperature,
+              ambientHumidity: metrics.humidity,
+              timestamp: payload.timestamp
+            });
+
+            await container.actuatorStateIngestionService.handleIncomingState(
+              mappedState,
+              "mqtt"
+            );
+          }
+        }
 
         logMqttReceived(message.topic, { processed: true, emulatorId: message.emulatorId }, message.emulatorId);
 
-        const embeddedStates = Array.isArray((message.payload as Record<string, unknown>).deviceStates)
-          ? ((message.payload as Record<string, unknown>).deviceStates as Array<Record<string, unknown>>)
+        const embeddedStates = Array.isArray((message.payload as unknown as Record<string, unknown>).deviceStates)
+          ? ((message.payload as unknown as Record<string, unknown>).deviceStates as Array<Record<string, unknown>>)
           : [];
 
         for (const state of embeddedStates) {
@@ -74,6 +152,13 @@ export async function startServer(): Promise<void> {
       try {
         // Log MQTT actuator state received
         logMqttReceived(message.topic, message.payload, message.emulatorId);
+
+        if (
+          (message.payload as Record<string, unknown>).isOn === undefined &&
+          (message.payload as Record<string, unknown>).action !== undefined
+        ) {
+          return;
+        }
 
         const payload = mapActuatorStatePayload({ ...message.payload, emulatorId: message.emulatorId });
         await container.actuatorStateIngestionService.handleIncomingState(payload, "mqtt");

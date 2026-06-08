@@ -34,6 +34,10 @@ public class ActuatorCommandHandler {
      * Process incoming actuator command message
      */
     public void onMessage(String topic, byte[] payload) {
+        if (!isActuatorStateTopic(topic)) {
+            return;
+        }
+
         try {
             String json = new String(payload, java.nio.charset.StandardCharsets.UTF_8);
             LOGGER.info("Received actuator command on topic {}: {}", topic, json);
@@ -135,5 +139,10 @@ public class ActuatorCommandHandler {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private boolean isActuatorStateTopic(String topic) {
+        String[] parts = topic.split("/");
+        return parts.length == 3 && "safeair".equals(parts[0]) && "actuator-state".equals(parts[2]);
     }
 }

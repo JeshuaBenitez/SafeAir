@@ -14,6 +14,10 @@ export class EmulatorResolutionService {
   async resolveOrProvision(externalId: string): Promise<{ roomId: string; emulatorExternalId: string }> {
     const existing = await this.emulatorRepository.findByExternalId(externalId);
     if (existing) {
+      if (!existing.roomId) {
+        throw new AppError("Emulator has no assigned room", 409, "EMULATOR_UNASSIGNED");
+      }
+
       return { roomId: existing.roomId, emulatorExternalId: existing.emulatorExternalId };
     }
 
@@ -38,10 +42,10 @@ export class EmulatorResolutionService {
 
     try {
       const emulator = await this.emulatorRepository.create({ roomId: room.id, emulatorExternalId: externalId, status: "online" });
-      return { roomId: emulator.roomId, emulatorExternalId: emulator.emulatorExternalId };
+      return { roomId: room.id, emulatorExternalId: emulator.emulatorExternalId };
     } catch {
       const raceWinner = await this.emulatorRepository.findByExternalId(externalId);
-      if (raceWinner) {
+      if (raceWinner?.roomId) {
         return { roomId: raceWinner.roomId, emulatorExternalId: raceWinner.emulatorExternalId };
       }
 

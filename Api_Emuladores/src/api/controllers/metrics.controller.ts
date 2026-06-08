@@ -1,5 +1,8 @@
 ﻿import type { Request, Response } from "express";
 import { container } from "../../application/container";
+import { addLog } from "../../application/services/debug-logs.service";
+import { RoomRepository } from "../../infrastructure/repositories/room.repository";
+import { AppError } from "../../shared/errors/app-error";
 
 /**
  * Generate CSV content from metrics data
@@ -9,7 +12,7 @@ function generateCsv(measurements: Record<string, unknown>[]): string {
     return "No data available";
   }
 
-  const headers = ["timestamp", "temperature", "humidity", "co2", "pm25", "roomId"];
+  const headers = ["measuredAt", "receivedAt", "temperature", "humidity", "co2", "pm25", "roomId", "cycleId", "source"];
   const rows = measurements.map((m) =>
     headers.map((h) => {
       const val = m[h as keyof typeof m];
@@ -78,6 +81,8 @@ function generateHtmlTable(measurements: Record<string, unknown>[]): string {
 }
 
 export class MetricsController {
+  private readonly roomRepository = new RoomRepository();
+
   async ingestTelemetry(req: Request, res: Response): Promise<void> {
     await container.telemetryIngestionService.handleIncomingTelemetry(req.body, "rest");
     res.status(202).json({ accepted: true });
@@ -89,18 +94,57 @@ export class MetricsController {
   }
 
   async current(req: Request, res: Response): Promise<void> {
+    await this.ensureRoomAccess(String(req.params.id), req.auth?.sub);
     const result = await container.metricsQueryService.current(String(req.params.id));
     res.status(200).json(result);
   }
 
   async history(req: Request, res: Response): Promise<void> {
+    const roomId = String(req.params.id);
+    await this.ensureRoomAccess(roomId, req.auth?.sub);
     const from = typeof req.query.from === "string" ? req.query.from : undefined;
     const to = typeof req.query.to === "string" ? req.query.to : undefined;
-    const result = await container.metricsQueryService.history(String(req.params.id), from, to);
+    
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "api",
+      event: "metrics-history-query",
+      message: `History query for room ${roomId}`,
+      details: {
+        roomId,
+        from,
+        to,
+        source: "frontend-report"
+      },
+      roomId
+    });
+    
+    const result = await container.metricsQueryService.history(roomId, from, to);
+    
+    const firstMeasuredAt = result.length > 0 ? (result[0] as Record<string, unknown>).measuredAt : null;
+    const lastMeasuredAt = result.length > 0 ? (result[result.length - 1] as Record<string, unknown>).measuredAt : null;
+    
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "api",
+      event: "metrics-history-result",
+      message: `History query returned ${result.length} measurements`,
+      details: {
+        roomId,
+        count: result.length,
+        firstMeasuredAt,
+        lastMeasuredAt
+      },
+      roomId
+    });
+    
     res.status(200).json(result);
   }
 
   async actuatorState(req: Request, res: Response): Promise<void> {
+    await this.ensureRoomAccess(String(req.params.id), req.auth?.sub);
     const result = await container.metricsQueryService.actuatorState(String(req.params.id));
     res.status(200).json(result);
   }
@@ -110,11 +154,32 @@ export class MetricsController {
    */
   async export(req: Request, res: Response): Promise<void> {
     const roomId = String(req.params.id);
+    await this.ensureRoomAccess(roomId, req.auth?.sub);
     const from = typeof req.query.from === "string" ? req.query.from : undefined;
     const to = typeof req.query.to === "string" ? req.query.to : undefined;
     const format = (req.query.format as string) || "csv";
 
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "api",
+      event: "metrics-export-request",
+      message: `Export requested: format=${format}`,
+      details: { roomId, from, to, format },
+      roomId
+    });
+
     const measurements = await container.metricsQueryService.history(roomId, from, to);
+
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "api",
+      event: "metrics-export-complete",
+      message: `Export completed: ${measurements.length} records`,
+      details: { roomId, format, count: measurements.length },
+      roomId
+    });
 
     if (format === "csv") {
       const csv = generateCsv(measurements as Record<string, unknown>[]);
@@ -128,5 +193,15 @@ export class MetricsController {
       res.status(200).send(html);
     }
   }
-}
 
+  private async ensureRoomAccess(roomId: string, userId: string | undefined): Promise<void> {
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
+    }
+
+    const room = await this.roomRepository.findById(roomId, userId);
+    if (!room) {
+      throw new AppError("Room not found", 404, "ROOM_NOT_FOUND");
+    }
+  }
+}
