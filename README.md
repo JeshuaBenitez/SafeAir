@@ -40,7 +40,7 @@ curl http://localhost:3000/health
 |----------|-----|
 | **Frontend** | http://localhost:8080 |
 | **API** | http://localhost:3000 |
-| **Logs** | http://localhost:3000/debug/logs.html |
+| **Logs** | http://localhost:3000/debug/logs/html |
 | **Emuladores** | http://localhost:3000/debug/emulators.html |
 | **EMQX** | http://localhost:18083 |
 
