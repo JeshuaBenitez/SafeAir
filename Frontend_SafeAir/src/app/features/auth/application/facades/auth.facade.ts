@@ -8,6 +8,8 @@ import { RegisterUseCase } from '@features/auth/domain/use-cases/register.use-ca
 import { AuthSessionStorageService } from '@features/auth/application/services/auth-session-storage.service';
 import { API_CLIENT } from '@core/config/api-client.token';
 import { AUTH_REPOSITORY } from '@features/auth/domain/ports/auth-repository.port';
+import { DashboardEnvironmentMockService } from '@features/dashboard/application/services/dashboard-environment-mock.service';
+import { DashboardMockStateService } from '@features/dashboard/application/services/dashboard-mock-state.service';
 import { environment } from '../../../../../environments/environment';
 
 import { initialLoginViewState, LoginViewState } from '../view-models/login-view-state.model';
@@ -24,6 +26,8 @@ export class AuthFacade {
     private readonly loginUseCase: LoginUseCase,
     private readonly registerUseCase: RegisterUseCase,
     private readonly authSessionStorage: AuthSessionStorageService,
+    private readonly dashboardMockState: DashboardMockStateService,
+    private readonly dashboardEnvironmentState: DashboardEnvironmentMockService,
   ) {}
 
   hasActiveSession(): boolean {
@@ -102,6 +106,7 @@ export class AuthFacade {
         this.apiClient.setAuthToken(result.session.accessToken);
       }
 
+      this.resetSessionDerivedStateIfUserChanged(result.session.userId);
       this.authSessionStorage.persistSession(result.session);
       this.syncUserProfile(result.session);
 
@@ -140,6 +145,7 @@ export class AuthFacade {
         this.apiClient.setAuthToken(result.session.accessToken);
       }
 
+      this.resetSessionDerivedStateIfUserChanged(result.session.userId);
       this.authSessionStorage.persistSession(result.session);
       this.syncUserProfile(result.session);
 
@@ -188,6 +194,7 @@ export class AuthFacade {
 
   logout(): void {
     this.authSessionStorage.clearSession();
+    this.resetDashboardState();
 
     // Limpiar también los datos del perfil local para que el siguiente usuario empiece limpio
     localStorage.removeItem('safeair.user.firstName');
@@ -200,5 +207,21 @@ export class AuthFacade {
     }
 
     this.loginViewStateSubject.next(initialLoginViewState);
+  }
+
+  private resetSessionDerivedStateIfUserChanged(nextUserId: string): void {
+    const currentSession = this.authSessionStorage.getSession();
+    if (currentSession?.userId !== nextUserId) {
+      this.resetDashboardState();
+      localStorage.removeItem('safeair.user.firstName');
+      localStorage.removeItem('safeair.user.lastName');
+      localStorage.removeItem('safeair.user.email');
+      localStorage.removeItem('safeair.user.profileImage');
+    }
+  }
+
+  private resetDashboardState(): void {
+    this.dashboardMockState.resetState();
+    this.dashboardEnvironmentState.resetState();
   }
 }

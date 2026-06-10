@@ -1,6 +1,7 @@
 import type { Request } from "express";
 import { Router } from "express";
 import { DebugController, getEmulatorStates } from "../../application/services/debug-logs.service";
+import { container } from "../../application/container";
 import { EmulatorRepository } from "../../infrastructure/repositories/emulator.repository";
 import { verifyToken } from "../../shared/security/jwt";
 
@@ -84,12 +85,12 @@ function getDebugUserId(req: Request): string | null {
   }
 }
 
-function deviceDisplay(isOn: boolean | null | undefined, targetTemp: number | null | undefined, label: string, emoji: string, hasTemp: boolean): string {
-  if (isOn === null || isOn === undefined) return `<span class="device-badge unknown">${emoji} ${label}: N/A</span>`;
+function deviceDisplay(isOn: boolean | null | undefined, targetTemp: number | null | undefined, label: string, hasTemp: boolean): string {
+  if (isOn === null || isOn === undefined) return `<span class="device-badge unknown">${label}: N/A</span>`;
   const stateClass = isOn ? "on" : "off";
   const stateLabel = isOn ? "ON" : "OFF";
   const tempStr = hasTemp && targetTemp !== null && targetTemp !== undefined ? ` (${targetTemp}°C)` : "";
-  return `<span class="device-badge ${stateClass}">${emoji} ${label}: ${stateLabel}${tempStr}</span>`;
+  return `<span class="device-badge ${stateClass}">${label}: ${stateLabel}${tempStr}</span>`;
 }
 
 // ── Navigation links constant (used by all HTML pages) ────────────────────
@@ -135,19 +136,26 @@ debugRouter.get("/emulators", async (req, res) => {
   const emulatorsFromMemory = getEmulatorStates();
   const memoryMap = new Map(emulatorsFromMemory.map(e => [e.emulatorId, e]));
   const emulatorsFromDb = await emulatorRepository.findAllWithRoomDetails(userId);
-  const emulators = emulatorsFromDb.map(emuDb => {
+  const emulators = await Promise.all(emulatorsFromDb.map(async (emuDb) => {
     const memoryState = emuDb.emulatorExternalId ? memoryMap.get(emuDb.emulatorExternalId) : undefined;
+    const actuatorState = emuDb.assignmentStatus === "assigned" && emuDb.roomId
+      ? await container.metricsQueryService.actuatorState(emuDb.roomId) as { actuators?: unknown }
+      : null;
     return {
       emulatorId: emuDb.emulatorExternalId,
       roomId: emuDb.roomId,
       roomName: emuDb.roomName,
+      status: emuDb.status,
       hasEmulator: emuDb.hasEmulator,
-      connected: emuDb.hasEmulator ? (memoryState?.connected ?? (emuDb.status === "online")) : false,
+      ownedByUser: emuDb.ownedByUser,
+      assignmentStatus: emuDb.assignmentStatus,
+      assignable: emuDb.assignmentStatus === "free" && emuDb.status === "online",
+      connected: emuDb.assignmentStatus === "assigned" ? (memoryState?.connected ?? (emuDb.status === "online")) : false,
       lastSeen: memoryState?.lastSeen,
-      metrics: memoryState?.metrics ?? null,
-      devices: memoryState?.devices ?? null
+      metrics: emuDb.assignmentStatus === "assigned" ? (memoryState?.metrics ?? null) : null,
+      devices: emuDb.assignmentStatus === "assigned" ? (actuatorState?.actuators ?? memoryState?.devices ?? null) : null
     };
-  });
+  }));
 
   res.status(200).json({ count: emulators.length, emulators });
 });
@@ -165,24 +173,31 @@ debugRouter.get("/emulators/html", async (req, res) => {
     const emulatorsFromDb = userId ? await emulatorRepository.findAllWithRoomDetails(userId) : [];
 
     // Combine both sources
-    const combinedEmulators = emulatorsFromDb.map(emuDb => {
+    const combinedEmulators = await Promise.all(emulatorsFromDb.map(async (emuDb) => {
       const memoryState = emuDb.emulatorExternalId ? memoryMap.get(emuDb.emulatorExternalId) : undefined;
+      const actuatorState = emuDb.assignmentStatus === "assigned" && emuDb.roomId
+        ? await container.metricsQueryService.actuatorState(emuDb.roomId) as { actuators?: unknown }
+        : null;
       return {
         emulatorId: emuDb.emulatorExternalId,
         roomId: emuDb.roomId,
         roomName: emuDb.roomName,
+        status: emuDb.status,
         roomArea: emuDb.roomArea,
         windowCount: emuDb.windowCount,
         minisplitCount: emuDb.minisplitCount,
         purifierCount: emuDb.purifierCount,
         extractorCount: emuDb.extractorCount,
         hasEmulator: emuDb.hasEmulator,
-        connected: emuDb.hasEmulator ? (memoryState?.connected ?? (emuDb.status === "online")) : false,
+        ownedByUser: emuDb.ownedByUser,
+        assignmentStatus: emuDb.assignmentStatus,
+        assignable: emuDb.assignmentStatus === "free" && emuDb.status === "online",
+        connected: emuDb.assignmentStatus === "assigned" ? (memoryState?.connected ?? (emuDb.status === "online")) : false,
         lastSeen: memoryState?.lastSeen,
-        metrics: memoryState?.metrics || null,
-        devices: memoryState?.devices || null
+        metrics: emuDb.assignmentStatus === "assigned" ? (memoryState?.metrics || null) : null,
+        devices: emuDb.assignmentStatus === "assigned" ? (actuatorState?.actuators || memoryState?.devices || null) : null
       };
-    });
+    }));
 
     const html = generateEmulatorsHtml(combinedEmulators, { authRequired: !userId });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -199,15 +214,30 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
   const emulatorCards = emulators.map((emu, index) => {
     const cardId = emu.emulatorId || `room-${emu.roomId || index}`;
     const safeCardId = escapeHtml(cardId);
-    const connClass = !emu.hasEmulator ? "unassigned" : (emu.connected ? "connected" : "disconnected");
-    const connLabel = emu.hasEmulator ? (emu.connected ? "✅ Conectado" : "❌ Desconectado") : "Sin emulador asignado";
+    const assignmentStatus = emu.assignmentStatus || (emu.hasEmulator ? "assigned" : "room-without-emulator");
+    const isAssigned = assignmentStatus === "assigned" && emu.ownedByUser && emu.roomId;
+    const isFreeAssignable = assignmentStatus === "free" && emu.status === "online";
+    const connClass = assignmentStatus === "free"
+      ? (isFreeAssignable ? "available" : "offline")
+      : assignmentStatus === "room-without-emulator"
+        ? "unassigned"
+        : (emu.connected ? "connected" : "disconnected");
+    const connLabel = assignmentStatus === "free"
+      ? (isFreeAssignable ? "Libre / asignable" : `Libre / ${emu.status || "offline"} / no operativo`)
+      : assignmentStatus === "room-without-emulator"
+        ? "Sin emulador asignado"
+        : (emu.connected ? "Conectado" : "Desconectado");
     const lastSeen = toLocalTime(emu.lastSeen);
-    const hasMetrics = Boolean(emu.hasEmulator && emu.metrics);
-    const controlsDisabled = !emu.hasEmulator || !emu.roomId;
+    const hasMetrics = Boolean(isAssigned && emu.metrics);
+    const controlsDisabled = !isAssigned;
     const disabledAttr = controlsDisabled ? "disabled" : "";
     const controlsClass = controlsDisabled ? " controls-section--disabled" : "";
     const controlHint = controlsDisabled
-      ? `<div class="control-hint">Sin emulador asignado: el control manual queda deshabilitado para evitar comandos a rooms inválidos.</div>`
+      ? `<div class="control-hint">${assignmentStatus === "free"
+        ? (isFreeAssignable
+          ? "Emulador libre y online: se asignará automáticamente a una nueva room que lo requiera."
+          : "Emulador libre pero no operativo: no se asignará hasta que esté online.")
+        : "Sin emulador asignado: el control manual queda deshabilitado para evitar comandos a rooms inválidos."}</div>`
       : "";
 
     const temp = fmt(emu.metrics?.temperature, 2);
@@ -217,22 +247,67 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     
     // Room info from PostgreSQL
     const roomName = emu.roomName || emu.roomId || "Sin room válido";
-    const roomInfo = emu.roomName ? `${roomName} (ID: ${emu.roomId?.substring(0, 8)}...)` : (emu.roomId ? `ID: ${emu.roomId.substring(0, 8)}...` : "No hay habitación");
+    const roomInfo = emu.roomName && emu.roomId ? `${roomName} (ID: ${emu.roomId.substring(0, 8)}...)` : (emu.roomId ? `ID: ${emu.roomId.substring(0, 8)}...` : "No asignado a ninguna habitación");
     const emulatorLabel = emu.emulatorId || "Sin emulador asignado";
+    const primaryTitle = isAssigned || assignmentStatus === "room-without-emulator"
+      ? roomName
+      : emulatorLabel;
+    const secondaryTitle = isAssigned
+      ? `Emulador: ${emulatorLabel}`
+      : assignmentStatus === "room-without-emulator"
+        ? "Sin emulador asignado"
+        : "Libre / no asignado";
 
-    // Get device counts from DB or use from memory
-    const miniCount = emu.minisplitCount ?? (emu.devices?.minisplit?.isOn !== null && emu.devices?.minisplit?.isOn !== undefined ? 1 : 0);
-    const purCount = emu.purifierCount ?? (emu.devices?.purifier?.isOn !== null && emu.devices?.purifier?.isOn !== undefined ? 1 : 0);
-    const extCount = emu.extractorCount ?? (emu.devices?.extractor?.isOn !== null && emu.devices?.extractor?.isOn !== undefined ? 1 : 0);
+    const unitList = (type: "minisplit" | "purifier" | "extractor", count: number) => {
+      const reported = Array.isArray(emu.devices?.[type]) ? emu.devices[type] : [];
+      const byIndex = new Map(reported.map((unit: any) => [Number(unit.deviceIndex ?? 1), unit]));
+      return Array.from({ length: count }, (_, unitIndex) => byIndex.get(unitIndex + 1) ?? {
+        deviceType: type,
+        deviceIndex: unitIndex + 1,
+        isOn: null,
+        targetTemperature: null
+      });
+    };
 
-    const miniIsOn = emu.devices?.minisplit?.isOn;
-    const miniTemp = emu.devices?.minisplit?.targetTemperature;
-    const purIsOn = emu.devices?.purifier?.isOn;
-    const extIsOn = emu.devices?.extractor?.isOn;
+    const miniCount = Number(emu.minisplitCount ?? 0);
+    const purCount = Number(emu.purifierCount ?? 0);
+    const extCount = Number(emu.extractorCount ?? 0);
+    const minisplitUnits = unitList("minisplit", miniCount);
+    const purifierUnits = unitList("purifier", purCount);
+    const extractorUnits = unitList("extractor", extCount);
 
-    const miniBadge = emu.hasEmulator ? deviceDisplay(miniIsOn, miniTemp, `Minisplit (${miniCount})`, "❄️", true) : `<span class="device-badge unknown">❄️ Minisplit (${miniCount}): N/A</span>`;
-    const purBadge = emu.hasEmulator ? deviceDisplay(purIsOn, null, `Purificador (${purCount})`, "🌬️", false) : `<span class="device-badge unknown">🌬️ Purificador (${purCount}): N/A</span>`;
-    const extBadge = emu.hasEmulator ? deviceDisplay(extIsOn, null, `Extractor (${extCount})`, "💨", false) : `<span class="device-badge unknown">💨 Extractor (${extCount}): N/A</span>`;
+    const miniBadge = isAssigned
+      ? minisplitUnits.map((unit: any) => deviceDisplay(unit.isOn, unit.targetTemperature, `Minisplit Unidad ${unit.deviceIndex}`, true)).join(" ")
+      : `<span class="device-badge unknown">Minisplit (${miniCount}): N/A</span>`;
+    const purBadge = isAssigned
+      ? purifierUnits.map((unit: any) => deviceDisplay(unit.isOn, null, `Purificador Unidad ${unit.deviceIndex}`, false)).join(" ")
+      : `<span class="device-badge unknown">Purificador (${purCount}): N/A</span>`;
+    const extBadge = isAssigned
+      ? extractorUnits.map((unit: any) => deviceDisplay(unit.isOn, null, `Extractor Unidad ${unit.deviceIndex}`, false)).join(" ")
+      : `<span class="device-badge unknown">Extractor (${extCount}): N/A</span>`;
+
+    const controlGroup = (
+      type: "minisplit" | "purifier" | "extractor",
+      label: string,
+      units: any[],
+      supportsTemperature: boolean
+    ) => units.map((unit) => {
+      const isOn = unit.isOn === true;
+      const isOff = unit.isOn === false;
+      return `
+        <div class="control-group">
+          <span class="control-label">${label} Unidad ${unit.deviceIndex}</span>
+          <div class="btn-group">
+            <button class="btn-control btn-on ${isOn ? "is-active" : ""}" data-device="${type}" data-device-index="${unit.deviceIndex}" data-action="turn_on" data-value="true" ${disabledAttr}>ON</button>
+            <button class="btn-control btn-off ${isOff ? "is-active" : ""}" data-device="${type}" data-device-index="${unit.deviceIndex}" data-action="turn_off" data-value="false" ${disabledAttr}>OFF</button>
+            ${supportsTemperature ? `
+            <button class="btn-control btn-temp" data-device="${type}" data-device-index="${unit.deviceIndex}" data-action="set_temperature" data-value="22" ${disabledAttr}>22°C</button>
+            <button class="btn-control btn-temp" data-device="${type}" data-device-index="${unit.deviceIndex}" data-action="set_temperature" data-value="24" ${disabledAttr}>24°C</button>
+            <button class="btn-control btn-temp" data-device="${type}" data-device-index="${unit.deviceIndex}" data-action="set_temperature" data-value="26" ${disabledAttr}>26°C</button>
+            ` : ""}
+          </div>
+        </div>`;
+    }).join("");
 
     const areaM2 = emu.roomArea !== null && emu.roomArea !== undefined ? `${fmt(emu.roomArea, 2)} m²` : "No configurado";
     const windowCount = emu.windowCount !== undefined && emu.windowCount !== null ? `${emu.windowCount}` : "No configurado";
@@ -241,76 +316,55 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     <div class="emulator-card">
       <div class="card-header">
         <div class="card-title">
-          <strong>${escapeHtml(emulatorLabel)}</strong>
+          <div class="card-title-main">
+            <strong>${escapeHtml(primaryTitle)}</strong>
+            <span>${escapeHtml(secondaryTitle)}</span>
+          </div>
           <span class="status-badge ${connClass}">${connLabel}</span>
         </div>
         <div class="card-meta">Último reporte: ${lastSeen}</div>
         <div class="card-meta">Habitación: <code>${escapeHtml(roomInfo)}</code></div>
-        <div class="card-meta">📐 ${areaM2} · 🪟 ${windowCount} ventanas · ❄️ ${miniCount} · 🌬️ ${purCount} · 💨 ${extCount}</div>
+        <div class="card-meta">Área ${areaM2} · ${windowCount} ventanas · Minisplits ${miniCount} · Purificadores ${purCount} · Extractores ${extCount}</div>
       </div>
 
       <div class="metrics-grid">
         <div class="metric-box">
           <div class="metric-value">${hasMetrics ? `${temp}°C` : "—"}</div>
-          <div class="metric-label">🌡️ ${hasMetrics ? "Temperatura" : "Sin métricas disponibles"}</div>
+          <div class="metric-label">${hasMetrics ? "Temperatura" : "Sin métricas disponibles"}</div>
         </div>
         <div class="metric-box">
           <div class="metric-value">${hasMetrics ? `${humidity}%` : "—"}</div>
-          <div class="metric-label">💧 Humedad</div>
+          <div class="metric-label">Humedad</div>
         </div>
         <div class="metric-box">
           <div class="metric-value">${co2}</div>
-          <div class="metric-label">🌬️ CO₂ (ppm)</div>
+          <div class="metric-label">CO₂ (ppm)</div>
         </div>
         <div class="metric-box">
           <div class="metric-value">${pm25}</div>
-          <div class="metric-label">🌫️ PM2.5 (μg/m³)</div>
+          <div class="metric-label">PM2.5 (μg/m³)</div>
         </div>
         <div class="metric-box">
           <div class="metric-value">${areaM2}</div>
-          <div class="metric-label">📐 Área</div>
+          <div class="metric-label">Área</div>
         </div>
         <div class="metric-box">
           <div class="metric-value">${windowCount}</div>
-          <div class="metric-label">🪟 Ventanas</div>
+          <div class="metric-label">Ventanas</div>
         </div>
       </div>
 
       <div class="devices-section">
-        <div class="section-label">⚙️ Dispositivos</div>
+        <div class="section-label">Dispositivos</div>
         <div class="device-badges">${miniBadge} ${purBadge} ${extBadge}</div>
       </div>
 
-      <div class="controls-section${controlsClass}" data-room-id="${escapeHtml(emu.roomId || '')}" data-emulator-id="${safeCardId}">
-        <div class="section-label">🎮 Control Manual</div>
+      <div class="controls-section${controlsClass}" data-room-id="${isAssigned ? escapeHtml(emu.roomId) : ''}" data-emulator-id="${safeCardId}" data-assignment-status="${escapeHtml(assignmentStatus)}">
+        <div class="section-label">Control Manual</div>
         ${controlHint}
-        
-        <div class="control-group">
-          <span class="control-label">❄️ Minisplit</span>
-          <div class="btn-group">
-            <button class="btn-control btn-on" data-device="minisplit" data-action="turn_on" data-value="true" ${disabledAttr}>ON</button>
-            <button class="btn-control btn-off" data-device="minisplit" data-action="turn_off" data-value="false" ${disabledAttr}>OFF</button>
-            <button class="btn-control btn-temp" data-device="minisplit" data-action="set_temperature" data-value="22" ${disabledAttr}>22°C</button>
-            <button class="btn-control btn-temp" data-device="minisplit" data-action="set_temperature" data-value="24" ${disabledAttr}>24°C</button>
-            <button class="btn-control btn-temp" data-device="minisplit" data-action="set_temperature" data-value="26" ${disabledAttr}>26°C</button>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <span class="control-label">🌬️ Purificador</span>
-          <div class="btn-group">
-            <button class="btn-control btn-on" data-device="purifier" data-action="turn_on" data-value="true" ${disabledAttr}>ON</button>
-            <button class="btn-control btn-off" data-device="purifier" data-action="turn_off" data-value="false" ${disabledAttr}>OFF</button>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <span class="control-label">💨 Extractor</span>
-          <div class="btn-group">
-            <button class="btn-control btn-on" data-device="extractor" data-action="turn_on" data-value="true" ${disabledAttr}>ON</button>
-            <button class="btn-control btn-off" data-device="extractor" data-action="turn_off" data-value="false" ${disabledAttr}>OFF</button>
-          </div>
-        </div>
+        ${controlGroup("minisplit", "Minisplit", minisplitUnits, true)}
+        ${controlGroup("purifier", "Purificador", purifierUnits, false)}
+        ${controlGroup("extractor", "Extractor", extractorUnits, false)}
       </div>
       <div class="control-result" id="result-${safeCardId}"></div>
     </div>`;
@@ -348,11 +402,16 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     .emulator-card { background: #161b22; border-radius: 12px; border: 1px solid #30363d; padding: 16px; }
     .emulator-card:hover { border-color: #58a6ff; }
     .card-header { margin-bottom: 14px; border-bottom: 1px solid #30363d; padding-bottom: 10px; }
-    .card-title { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 15px; }
+    .card-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; font-size: 15px; }
+    .card-title-main { display: grid; gap: 2px; min-width: 0; }
+    .card-title-main strong { color: #f0f6fc; overflow-wrap: anywhere; }
+    .card-title-main span { color: #8b949e; font-size: 12px; font-weight: 600; }
     .card-meta { font-size: 12px; color: #8b949e; margin-bottom: 2px; }
     .status-badge { padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
     .connected { background: #238636; color: white; }
     .disconnected { background: #da3633; color: white; }
+    .available { background: #1f6feb; color: white; }
+    .offline { background: #6e3333; color: white; }
     .unassigned { background: #6e7681; color: white; }
     .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
     .metric-box { background: #21262d; border-radius: 8px; padding: 10px 8px; text-align: center; }
@@ -369,13 +428,15 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     .controls-section--disabled { opacity: 0.74; }
     .control-hint { margin: 0 0 10px; color: #f0b72f; font-size: 12px; }
     .control-group { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
-    .control-label { font-size: 13px; color: #c9d1d9; min-width: 80px; }
+    .control-label { font-size: 13px; color: #c9d1d9; min-width: 142px; }
     .btn-group { display: flex; gap: 4px; flex-wrap: wrap; }
     .btn-control { padding: 4px 10px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
     .btn-control:hover { opacity: 0.8; }
     .btn-control:disabled { cursor: not-allowed; opacity: 0.45; }
-    .btn-on { background: #238636; color: white; }
-    .btn-off { background: #6e7681; color: white; }
+    .btn-on { background: #1f6b3a; color: white; }
+    .btn-on.is-active { background: #2ea043; box-shadow: 0 0 0 2px rgba(46, 160, 67, 0.34); }
+    .btn-off { background: #6e3333; color: white; }
+    .btn-off.is-active { background: #da3633; box-shadow: 0 0 0 2px rgba(218, 54, 51, 0.32); }
     .btn-temp { background: #1f6feb; color: white; }
     .control-result { font-size: 12px; margin-top: 4px; min-height: 16px; color: #58a6ff; }
     .control-result.error { color: #f85149; }
@@ -385,29 +446,30 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
 </head>
 <body>
   <div class="nav">
-    <a href="/debug/logs/html">📋 Ver Logs</a>
-    <a href="/debug/emulators/html">📱 Dashboard Emuladores</a>
-    <a href="/debug/status">⚙️ Estado Sistema</a>
+    <a href="/debug/logs/html">Ver Logs</a>
+    <a href="/debug/emulators/html">Dashboard Emuladores</a>
+    <a href="/debug/status">Estado Sistema</a>
   </div>
   <div class="header">
     <div class="header-left">
-      <h1>📱 SafeAir Emulators Dashboard</h1>
+      <h1>SafeAir Emulators Dashboard</h1>
       <div class="summary">
-        <span>📊 Rooms del usuario: ${emulators.length}</span>
-        <span>🕐 Actualizado: <span id="clock">${localNow()}</span></span>
-        <span>⏱️ Zona: América/México (CDMX)</span>
+        <span>Rooms del usuario: ${emulators.filter((emu) => emu.ownedByUser).length}</span>
+        <span>Emuladores libres: ${emulators.filter((emu) => emu.assignmentStatus === "free").length}</span>
+        <span>Actualizado: <span id="clock">${localNow()}</span></span>
+        <span>Zona: América/México (CDMX)</span>
       </div>
     </div>
     <div class="header-right">
       <label class="auto-refresh">
         <input type="checkbox" id="autoRefresh" checked> Auto-refresh cada 5s
       </label>
-      <button class="refrescar" id="refreshBtn">🔄 Refresh</button>
+      <button class="refrescar" id="refreshBtn">Refresh</button>
     </div>
   </div>
 
   <div class="token-section">
-    <label for="jwtToken">🔑 JWT Token (pegar desde Configuración del frontend local para filtrar y habilitar control):</label>
+    <label for="jwtToken">JWT Token (pegar desde Configuración del frontend local para filtrar y habilitar control):</label>
     <input type="text" id="jwtToken" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
     <div class="token-hint">El token se guarda en localStorage y en una cookie local de debug para que esta página renderice solo tus rooms. Al pegar uno nuevo, la página se recarga.</div>
   </div>

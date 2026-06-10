@@ -173,6 +173,7 @@ async function run(): Promise<void> {
       logHeader("ACCIÓN RECIBIDA");
       console.log(`${bold}Topic:${reset} ${topic}`);
       console.log(`${bold}Acción:${reset} ${magenta}${payload.action}${reset} → ${cyan}${payload.deviceType}${reset}`);
+      console.log(`${bold}Unidad:${reset} ${payload.deviceIndex ?? 1}`);
       console.log(`${bold}Razón:${reset} ${payload.reason}`);
 
       // Capturar roomId del payload si aún no lo tenemos (auto-provision)
@@ -196,7 +197,7 @@ async function run(): Promise<void> {
           console.log(`${red}[Estado] ${deviceType.toUpperCase()} APAGADO${reset}`);
         }
 
-        publishActuatorState(deviceType);
+        publishActuatorState(deviceType, normalizeDeviceIndex(payload.deviceIndex));
       }
     } catch (e) {
       console.error(`${red}Error decodificando acción: ${e}${reset}`);
@@ -211,7 +212,7 @@ async function run(): Promise<void> {
     console.log(`${yellow}[MQTT] Conexión cerrada${reset}`);
   });
 
-  function publishActuatorState(deviceType: "minisplit" | "purifier" | "extractor"): void {
+  function publishActuatorState(deviceType: "minisplit" | "purifier" | "extractor", deviceIndex = 1): void {
     if (!client.connected) return;
 
     const topic = `safeair/${EMULATOR_ID}/actuator-state`;
@@ -220,6 +221,7 @@ async function run(): Promise<void> {
       emulatorId: EMULATOR_ID,
       roomId: state.roomId || undefined,
       deviceType,
+      deviceIndex,
       isOn: device.isOn,
       mode: device.mode,
       targetTemperature: deviceType === "minisplit" ? device.targetTemperature : undefined,
@@ -233,6 +235,11 @@ async function run(): Promise<void> {
         console.log(`${blue}[MQTT] Estado ${deviceType}: ${device.isOn ? green + "ON" : red + "OFF"}${reset}`);
       }
     });
+  }
+
+  function normalizeDeviceIndex(value: unknown): number {
+    const parsed = Number(value ?? 1);
+    return Number.isInteger(parsed) && parsed >= 1 && parsed <= 3 ? parsed : 1;
   }
 
   function startSimulationLoop(mqttClient: mqtt.MqttClient): void {

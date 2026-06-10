@@ -31,6 +31,12 @@
           <section class="room-visual-section">
             <h2 class="section-title">3D Habitación Emulada</h2>
 
+            <div class="room-empty-state" *ngIf="!hasAssignedEmulator; else emulatedRoomVisual">
+              <h3>Sin emulador asignado</h3>
+              <p>Sin métricas disponibles. Los controles permanecerán deshabilitados hasta que esta habitación tenga una fuente real de telemetría.</p>
+            </div>
+
+            <ng-template #emulatedRoomVisual>
             <div class="room-visual-board">
               <img
                 class="room-visual-board__image"
@@ -56,12 +62,21 @@
                 </span>
               </button>
             </div>
+            </ng-template>
           </section>
         </div>
 
         <aside class="room-control-right">
           <h2 class="right-title">Control de Actuadores</h2>
 
+          <div class="actuator-panel actuator-panel--empty" *ngIf="!hasAssignedEmulator; else actuatorControls">
+            <h3>Sin emulador asignado</h3>
+            <p>
+              Controles deshabilitados hasta que esta habitación tenga un emulador asignado.
+            </p>
+          </div>
+
+          <ng-template #actuatorControls>
           <div
   class="actuator-panel"
   [class.actuator-panel--simple]="selectedActuatorKey !== 'minisplit'"
@@ -175,6 +190,7 @@
                 Haz clic en uno de los iconos del plano para abrir su panel de control.
               </p>
             </div>
+          </ng-template>
           </ng-template>
         </aside>
       </div>

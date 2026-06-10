@@ -27,7 +27,7 @@ export class TelemetryIngestionService {
     private readonly alarmService: AlarmService
   ) {}
 
-  async handleIncomingTelemetry(rawTelemetry: TelemetryInput, source: "mqtt" | "rest"): Promise<void> {
+  async handleIncomingTelemetry(rawTelemetry: TelemetryInput, source: "mqtt" | "rest"): Promise<{ roomId: string; emulatorExternalId: string }> {
     // Boundary validation guarantees downstream rule evaluation receives a stable shape.
     const parsed = telemetrySchema.safeParse(rawTelemetry);
     if (!parsed.success) {
@@ -36,7 +36,7 @@ export class TelemetryIngestionService {
 
     const telemetry = parsed.data;
     const emulator = await this.emulatorResolutionService.resolveOrProvision(telemetry.emulatorId);
-    const roomId = telemetry.roomId ?? emulator.roomId;
+    const roomId = emulator.roomId;
     const cycle = await this.cycleRepository.openOrCreate(roomId);
     const receivedAt = new Date();
     const measuredAt = telemetry.timestamp ? new Date(telemetry.timestamp) : new Date();
@@ -107,5 +107,7 @@ export class TelemetryIngestionService {
         metadata: alarm.metadata
       });
     }
+
+    return { roomId, emulatorExternalId: emulator.emulatorExternalId };
   }
 }

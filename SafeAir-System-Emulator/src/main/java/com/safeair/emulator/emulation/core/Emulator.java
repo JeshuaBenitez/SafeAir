@@ -318,8 +318,12 @@ public class Emulator {
 
     public void sendData(Map<String, Double> sensorData, long tickDurationMs) {
         Map<String, DeviceState> devices = new HashMap<>();
+        Map<String, Integer> typeCounters = new HashMap<>();
         for (Electrodomestic d : electrodomestics) {
-            devices.put(d.getType(), new DeviceState(d.isOn(), Map.of("state", d.getNormalizedState())));
+            int deviceIndex = typeCounters.merge(d.getType(), 1, Integer::sum);
+            devices.put(
+                    d.getType() + "#" + deviceIndex,
+                    new DeviceState(d.isOn(), Map.of("state", d.getNormalizedState())));
         }
 
         TelemetryPayload payload = new TelemetryPayload(

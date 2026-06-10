@@ -3,6 +3,7 @@ import { RoomRepository } from "../../infrastructure/repositories/room.repositor
 import { EmulatorRepository } from "../../infrastructure/repositories/emulator.repository";
 import { DeviceActionRepository } from "../../infrastructure/repositories/device-action.repository";
 import { CycleRepository } from "../../infrastructure/repositories/cycle.repository";
+import type { RoomModel } from "../../infrastructure/database/models";
 import { mqttGateway } from "../../infrastructure/mqtt/mqtt.gateway";
 import { actuatorStateTopic } from "../../infrastructure/mqtt/topics";
 import { logMqttPublished, logFrontend, logError, logPostgres } from "../../application/services/debug-logs.service";
@@ -14,6 +15,7 @@ import { AppError } from "../../shared/errors/app-error";
 interface ActuatorCommandBody {
   action: "turn_on" | "turn_off" | "set_temperature";
   value: boolean | number;
+  deviceIndex?: number;
   source?: "frontend" | "api" | "rule-engine" | "debug-dashboard";
 }
 
@@ -29,6 +31,7 @@ export async function sendActuatorCommand(
   const roomId = String(req.params.roomId);
   const deviceType = String(req.params.deviceType);
   const { action, value, source = "frontend" } = req.body as ActuatorCommandBody;
+  const deviceIndex = normalizeDeviceIndex((req.body as ActuatorCommandBody).deviceIndex);
   const userId = req.auth?.sub;
 
   if (!userId) {
@@ -39,6 +42,7 @@ export async function sendActuatorCommand(
   logFrontend(`Command received: ${deviceType} ${action} for room ${roomId}`, {
     roomId,
     deviceType,
+    deviceIndex,
     action,
     value,
     source,
@@ -61,6 +65,14 @@ export async function sendActuatorCommand(
     return;
   }
 
+  if (!["minisplit", "purifier", "extractor"].includes(deviceType)) {
+    res.status(400).json({
+      success: false,
+      error: "Invalid deviceType. Must be: minisplit, purifier, or extractor",
+    });
+    return;
+  }
+
   try {
     // 3. Get room (just to verify it exists)
     const roomRepository = new RoomRepository();
@@ -74,34 +86,36 @@ export async function sendActuatorCommand(
       return;
     }
 
+    const configuredUnits = getConfiguredUnits(room, deviceType as "minisplit" | "purifier" | "extractor");
+    if (configuredUnits < 1 || deviceIndex > configuredUnits) {
+      res.status(400).json({
+        success: false,
+        error: `${deviceType} unit ${deviceIndex} is not configured for this room`,
+        configuredUnits,
+      });
+      return;
+    }
+
     // 4. Get emulator external ID (e.g., EMU-0001) for this room
     const emulatorRepository = new EmulatorRepository();
     const emulator = await emulatorRepository.findByRoomId(roomId);
-    
-    // Use emulatorExternalId if exists, otherwise fall back to roomId
-    // This ensures the command goes to the correct emulator (e.g., EMU-0001)
-    const targetId = emulator?.emulatorExternalId || roomId;
 
-    // 5. Map action: turn_on -> minisplit_on, etc.
-    let commandAction: string;
-    switch (action) {
-      case "turn_on":
-        commandAction = `${deviceType}_on`;
-        break;
-      case "turn_off":
-        commandAction = `${deviceType}_off`;
-        break;
-      case "set_temperature":
-        commandAction = `${deviceType}_set_${value}`;
-        break;
-      default:
-        commandAction = action;
+    if (!emulator) {
+      res.status(409).json({
+        success: false,
+        error: "Room has no emulator assigned",
+      });
+      return;
     }
+
+    const targetId = emulator.emulatorExternalId;
 
     const mqttPayload = {
       roomId,
+      roomName: room.name,
       deviceType,
-      action: commandAction,
+      deviceIndex,
+      action,
       value: action === "set_temperature" ? Number(value) : Boolean(value),
       source,
       timestamp: new Date().toISOString(),
@@ -126,13 +140,14 @@ export async function sendActuatorCommand(
         roomId,
         cycleId: cycle.id,
         deviceType: deviceType as "minisplit" | "purifier" | "extractor",
-        action: commandAction,
+        deviceIndex,
+        action,
         reason: `Command from ${source}`,
         requestedBy: source === "rule-engine" ? "rule-engine" : "manual",
       });
 
       // Log: PostgreSQL insert
-      logPostgres("INSERT", "device_actions", { roomId, deviceType, action: commandAction });
+      logPostgres("INSERT", "device_actions", { roomId, deviceType, deviceIndex, action });
     } catch (dbError) {
       logError("postgres", "device-action-save-failed", dbError);
       // Continue despite DB error - command was sent
@@ -141,7 +156,7 @@ export async function sendActuatorCommand(
     // 9. Respond success
     res.status(200).json({
       success: true,
-      message: `Command '${commandAction}' sent to ${deviceType} (emulator: ${targetId})`,
+      message: `Command '${action}' sent to ${deviceType} unit ${deviceIndex} (emulator: ${targetId})`,
       topic,
       payload: mqttPayload,
     });
@@ -154,4 +169,34 @@ export async function sendActuatorCommand(
       error: error instanceof Error ? error.message : "Failed to send command",
     });
   }
+}
+
+function normalizeDeviceIndex(value: unknown): number {
+  const parsed = Number(value ?? 1);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 3 ? parsed : 1;
+}
+
+function getConfiguredUnits(
+  room: RoomModel,
+  deviceType: "minisplit" | "purifier" | "extractor"
+): number {
+  const setup = room.get("setup") as {
+    minisplitCount?: number;
+    purifierCount?: number;
+    extractorCount?: number;
+  } | null;
+
+  const setupCount =
+    deviceType === "minisplit"
+      ? setup?.minisplitCount
+      : deviceType === "purifier"
+        ? setup?.purifierCount
+        : setup?.extractorCount;
+
+  if (Number.isFinite(Number(setupCount))) {
+    return Number(setupCount);
+  }
+
+  const devices = room.get("devices") as Array<{ type?: string }> | undefined;
+  return devices?.filter((device) => device.type === deviceType).length ?? 0;
 }

@@ -5,7 +5,7 @@ import { RoomSetupModel } from "../database/models";
 
 export interface DebugRoomEmulatorDetails {
   emulatorExternalId: string | null;
-  roomId: string;
+  roomId: string | null;
   roomName: string;
   roomArea: number | null;
   windowCount: number | null;
@@ -14,6 +14,8 @@ export interface DebugRoomEmulatorDetails {
   extractorCount: number | null;
   status: string;
   hasEmulator: boolean;
+  ownedByUser: boolean;
+  assignmentStatus: "assigned" | "room-without-emulator" | "free";
 }
 
 export class EmulatorRepository {
@@ -36,7 +38,8 @@ export class EmulatorRepository {
   async findFirstAvailable(): Promise<EmulatorModel | null> {
     return EmulatorModel.findOne({
       where: {
-        roomId: null
+        roomId: null,
+        status: "online"
       },
       order: [["createdAt", "ASC"]]
     });
@@ -53,8 +56,19 @@ export class EmulatorRepository {
     return emulator;
   }
 
+  async releaseRoom(roomId: string): Promise<void> {
+    await EmulatorModel.update({ roomId: null }, { where: { roomId } });
+  }
+
   async findAllWithRooms(): Promise<EmulatorModel[]> {
     return EmulatorModel.findAll({
+      order: [["createdAt", "ASC"]]
+    });
+  }
+
+  async findFree(): Promise<EmulatorModel[]> {
+    return EmulatorModel.findAll({
+      where: { roomId: null },
       order: [["createdAt", "ASC"]]
     });
   }
@@ -63,7 +77,7 @@ export class EmulatorRepository {
    * Find all emulators with their room details for dashboard display.
    * Returns enhanced emulator data including room name and setup.
    */
-  async findAllWithRoomDetails(userId: string): Promise<DebugRoomEmulatorDetails[]> {
+  async findAllForUserDebug(userId: string): Promise<DebugRoomEmulatorDetails[]> {
     const rooms = await RoomModel.findAll({
       include: [
         {
@@ -88,7 +102,7 @@ export class EmulatorRepository {
       ]
     });
 
-    return rooms.map((room) => {
+    const userRooms = rooms.map((room) => {
       const setup = room.get("setup") as RoomSetupModel | null;
       const emulator = room.get("emulator") as EmulatorModel | null;
 
@@ -102,8 +116,32 @@ export class EmulatorRepository {
         purifierCount: setup?.purifierCount ?? null,
         extractorCount: setup?.extractorCount ?? null,
         status: emulator?.status ?? "unassigned",
-        hasEmulator: Boolean(emulator)
+        hasEmulator: Boolean(emulator),
+        ownedByUser: true,
+        assignmentStatus: emulator ? "assigned" as const : "room-without-emulator" as const
       };
     });
+
+    const freeEmulators = await this.findFree();
+    const freeRows = freeEmulators.map((emulator) => ({
+      emulatorExternalId: emulator.emulatorExternalId,
+      roomId: null,
+      roomName: "Sin emulador asignado",
+      roomArea: null,
+      windowCount: null,
+      minisplitCount: null,
+      purifierCount: null,
+      extractorCount: null,
+      status: emulator.status,
+      hasEmulator: true,
+      ownedByUser: false,
+      assignmentStatus: "free" as const
+    }));
+
+    return [...userRooms, ...freeRows];
+  }
+
+  async findAllWithRoomDetails(userId: string): Promise<DebugRoomEmulatorDetails[]> {
+    return this.findAllForUserDebug(userId);
   }
 }

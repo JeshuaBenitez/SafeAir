@@ -3,7 +3,7 @@
     <div class="room-card__overlay"></div>
 
     <div class="room-card__status" [class.room-card__status--active]="isActive">
-      {{ isActive ? 'ACTIVADO / OPTIMIZADO' : 'DESACTIVADO' }}
+      {{ statusLabel }}
     </div>
 
     <button

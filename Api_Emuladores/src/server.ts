@@ -8,7 +8,7 @@ import { mqttGateway } from "./infrastructure/mqtt/mqtt.gateway";
 import { container } from "./application/container";
 import { mapTelemetryPayload } from "./infrastructure/mappers/telemetry.mapper";
 import { mapActuatorStatePayload } from "./infrastructure/mappers/actuator-state.mapper";
-import { ensureDemoOwnership, runDatabaseSeed } from "./infrastructure/database/seeders/seed-fn";
+import { ensureSeedEmulatorPool, runDatabaseSeed } from "./infrastructure/database/seeders/seed-fn";
 import { logMqttReceived, logError, updateEmulatorState, addLog } from "./application/services/debug-logs.service";
 
 export async function startServer(): Promise<void> {
@@ -50,7 +50,7 @@ export async function startServer(): Promise<void> {
         message: "Database initial seed completed"
       });
     }
-    await ensureDemoOwnership();
+    await ensureSeedEmulatorPool();
 
     mqttGateway.onTelemetry(async (message) => {
       try {
@@ -58,10 +58,10 @@ export async function startServer(): Promise<void> {
         logMqttReceived(message.topic, message.payload, message.emulatorId);
 
         const payload = mapTelemetryPayload({ ...message.payload, emulatorId: message.emulatorId });
-        await container.telemetryIngestionService.handleIncomingTelemetry(payload, "mqtt");
+        const resolvedTelemetry = await container.telemetryIngestionService.handleIncomingTelemetry(payload, "mqtt");
 
         // Update emulator state for dashboard
-        const roomId = payload.roomId || null;
+        const roomId = resolvedTelemetry.roomId;
         const metrics = {
           temperature: payload.temperature,
           humidity: payload.humidity,
@@ -71,16 +71,17 @@ export async function startServer(): Promise<void> {
         
         // Extract device states from the telemetry payload (Java sends "devices" not "deviceStates")
         const devicesMap = (payload as unknown as Record<string, unknown>).devices as Record<string, unknown> | undefined;
-        let deviceUpdate: Record<string, { isOn: boolean | null; targetTemperature?: number | null }> | undefined;
+        let deviceUpdate: Record<string, { deviceIndex: number; isOn: boolean | null; targetTemperature?: number | null }> | undefined;
         
         if (devicesMap) {
           deviceUpdate = {};
           // Java sends device types as keys: MiniSplit, HumidifierPurifier, AirExtractor
           // Java deviceState objects have: isOn (boolean), attributes (Map<String, Integer>)
           for (const [deviceType, deviceState] of Object.entries(devicesMap)) {
-            const ds = deviceState as { on?: boolean; isOn?: boolean; attributes?: Record<string, number> };
+            const ds = deviceState as { on?: boolean; isOn?: boolean; deviceIndex?: number; index?: number; attributes?: Record<string, number> };
             const isOn = ds.on ?? ds.isOn ?? null;
             const targetTemp = ds.attributes?.['state'] ?? null;
+            const deviceIndex = normalizeDeviceIndex(ds.deviceIndex ?? ds.index ?? 1);
             
             // Map Java device type names to our internal names
             let internalType = deviceType;
@@ -89,6 +90,7 @@ export async function startServer(): Promise<void> {
             else if (deviceType === 'AirExtractor') internalType = 'extractor';
             
             deviceUpdate[internalType] = {
+              deviceIndex,
               isOn: isOn === null ? null : Boolean(isOn),
               targetTemperature: internalType === 'minisplit' && targetTemp !== null ? Number(targetTemp) : null
             };
@@ -107,6 +109,7 @@ export async function startServer(): Promise<void> {
               emulatorId: message.emulatorId,
               roomId,
               deviceType,
+              deviceIndex: state.deviceIndex,
               isOn: state.isOn,
               targetTemperature: state.targetTemperature ?? undefined,
               ambientTemperature: metrics.temperature,
@@ -131,6 +134,7 @@ export async function startServer(): Promise<void> {
           const mappedState = mapActuatorStatePayload({
             emulatorId: String(state.emulatorId ?? message.emulatorId),
             deviceType: state.deviceType,
+            deviceIndex: normalizeDeviceIndex(state.deviceIndex ?? state.index ?? 1),
             isOn: Boolean(state.isOn),
             targetTemperature: state.targetTemperature !== undefined ? Number(state.targetTemperature) : undefined,
             ambientTemperature: state.ambientTemperature !== undefined ? Number(state.ambientTemperature) : undefined,
@@ -161,15 +165,16 @@ export async function startServer(): Promise<void> {
         }
 
         const payload = mapActuatorStatePayload({ ...message.payload, emulatorId: message.emulatorId });
-        await container.actuatorStateIngestionService.handleIncomingState(payload, "mqtt");
+        const resolvedState = await container.actuatorStateIngestionService.handleIncomingState(payload, "mqtt");
 
         // Update emulator state for dashboard
         updateEmulatorState(
           message.emulatorId,
-          payload.roomId || null,
+          resolvedState.roomId,
           {},
           {
             [payload.deviceType]: {
+              deviceIndex: payload.deviceIndex ?? 1,
               isOn: payload.isOn,
               targetTemperature: payload.targetTemperature,
             }
@@ -233,4 +238,9 @@ export async function startServer(): Promise<void> {
     logger.error("Fatal startup error", error);
     process.exit(1);
   }
+}
+
+function normalizeDeviceIndex(value: unknown): number {
+  const parsed = Number(value ?? 1);
+  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 3 ? parsed : 1;
 }

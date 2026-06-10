@@ -14,6 +14,7 @@ export const actuatorRouter = Router();
  * {
  *   "action": "turn_on" | "turn_off" | "set_temperature",
  *   "value": boolean | number,
+ *   "deviceIndex": 1,
  *   "source": "frontend" (optional)
  * }
  * 

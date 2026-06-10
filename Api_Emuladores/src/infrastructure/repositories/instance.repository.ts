@@ -14,7 +14,7 @@ export class InstanceRepository {
   }
 
   async findById(id: string, userId?: string): Promise<InstanceModel | null> {
-    const { RoomSetupModel, DeviceModel } = await import("../database/models");
+    const { RoomSetupModel, DeviceModel, EmulatorModel } = await import("../database/models");
     return InstanceModel.findOne({
       where: userId ? { id, userId } : { id },
       include: [
@@ -24,7 +24,8 @@ export class InstanceRepository {
           include: [
             { model: RoomSetupModel, as: "setup" },
             { model: RoomSetupDerivedModel, as: "derivedSetup" },
-            { model: DeviceModel, as: "devices" }
+            { model: DeviceModel, as: "devices" },
+            { model: EmulatorModel, as: "emulator" }
           ]
         }
       ]

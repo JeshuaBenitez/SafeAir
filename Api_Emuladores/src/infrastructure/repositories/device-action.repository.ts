@@ -1,10 +1,13 @@
 import { DeviceActionModel } from "../database/models";
 
+type ActuatorType = "minisplit" | "purifier" | "extractor";
+
 export class DeviceActionRepository {
   async create(data: {
     roomId: string;
     cycleId: string;
-    deviceType: "minisplit" | "purifier" | "extractor";
+    deviceType: ActuatorType;
+    deviceIndex?: number;
     action: string;
     reason: string;
     level?: "low" | "medium" | "high";
@@ -12,6 +15,7 @@ export class DeviceActionRepository {
   }): Promise<DeviceActionModel> {
     return DeviceActionModel.create({
       ...data,
+      deviceIndex: data.deviceIndex ?? 1,
       level: data.level ?? null,
       requestedBy: data.requestedBy ?? "rule-engine",
       executedAt: new Date()
@@ -27,18 +31,22 @@ export class DeviceActionRepository {
     return actions.length;
   }
 
-  async latestByRoomAndType(roomId: string): Promise<Partial<Record<"minisplit" | "purifier" | "extractor", DeviceActionModel>>> {
+  async latestByRoomAndType(roomId: string): Promise<Partial<Record<ActuatorType, DeviceActionModel[]>>> {
     const actions = await DeviceActionModel.findAll({ where: { roomId }, order: [["executedAt", "DESC"]], limit: 200 });
-    const result: Partial<Record<"minisplit" | "purifier" | "extractor", DeviceActionModel>> = {};
+    const result: Partial<Record<ActuatorType, DeviceActionModel[]>> = {};
+    const seen = new Set<string>();
 
     for (const action of actions) {
-      if (!result[action.deviceType]) {
-        result[action.deviceType] = action;
+      const key = `${action.deviceType}:${action.deviceIndex}`;
+      if (seen.has(key)) {
+        continue;
       }
 
-      if (result.minisplit && result.purifier && result.extractor) {
-        break;
+      seen.add(key);
+      if (!result[action.deviceType]) {
+        result[action.deviceType] = [];
       }
+      result[action.deviceType]?.push(action);
     }
 
     return result;

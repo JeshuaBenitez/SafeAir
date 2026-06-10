@@ -6,6 +6,7 @@ export class DeviceStateModel extends Model {
   declare roomId: string;
   declare emulatorId: string;
   declare deviceType: "minisplit" | "purifier" | "extractor";
+  declare deviceIndex: number;
   declare isOn: boolean;
   declare mode: string | null;
   declare targetTemperature: number | null;
@@ -37,6 +38,15 @@ export function initDeviceStateModel(sequelize: Sequelize): void {
       deviceType: {
         type: DataTypes.ENUM("minisplit", "purifier", "extractor"),
         allowNull: false
+      },
+      deviceIndex: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+        validate: {
+          min: 1,
+          max: 3
+        }
       },
       isOn: {
         type: DataTypes.BOOLEAN,
@@ -80,7 +90,7 @@ export function initDeviceStateModel(sequelize: Sequelize): void {
       sequelize,
       tableName: "device_states",
       indexes: [
-        { fields: ["roomId", "deviceType"], unique: true },
+        { fields: ["roomId", "deviceType", "deviceIndex"], unique: true },
         { fields: ["emulatorId", "reportedAt"] }
       ]
     }

@@ -49,6 +49,12 @@ export class DashboardMockStateService {
     return this.roomsSubject.value.length;
   }
 
+  resetState(): void {
+    this.currentInstanceId = null;
+    this.currentInstanceUserId = this.getCurrentUserId();
+    this.roomsSubject.next([]);
+  }
+
   hasRoomCapacity(): boolean {
     return this.getRoomCount() < MAX_ROOMS_PER_DASHBOARD;
   }
@@ -210,7 +216,10 @@ export class DashboardMockStateService {
   }
 
   refreshRooms(): void {
+    this.resetCachedInstanceIfUserChanged();
+
     if (environment.DASHBOARD_MODE === 'api') {
+      this.roomsSubject.next([]);
       this.loadRoomsFromApi()
         .then((rooms) => {
           this.roomsSubject.next(rooms);
@@ -304,6 +313,7 @@ export class DashboardMockStateService {
           id: room.id,
           name: room.name,
           designation: room.name,
+          hasEmulator: Boolean(room.emulator),
           areaM2: Math.round(areaM2),
           windowsCount: setup.windowCount,
           imageSrc: this.resolveDashboardImage(room.name),
@@ -529,6 +539,7 @@ const isDashboardRoom = (value: unknown): value is DashboardRoom => {
     typeof candidate['id'] !== 'string' ||
     typeof candidate['name'] !== 'string' ||
     typeof candidate['designation'] !== 'string' ||
+    (candidate['hasEmulator'] !== undefined && typeof candidate['hasEmulator'] !== 'boolean') ||
     typeof candidate['areaM2'] !== 'number' ||
     typeof candidate['windowsCount'] !== 'number' ||
     typeof candidate['imageSrc'] !== 'string' ||

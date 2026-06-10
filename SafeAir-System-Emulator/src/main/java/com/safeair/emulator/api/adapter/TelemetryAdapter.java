@@ -2,12 +2,15 @@ package com.safeair.emulator.api.adapter;
 
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import com.safeair.emulator.api.proto.TelemetryProto;
 import com.safeair.emulator.emulation.core.DeviceState;
 import com.safeair.emulator.emulation.core.TelemetryPayload;
 
 /** Adapter for converting TelemetryPayload to Protobuf messages. */
 public class TelemetryAdapter {
+  private static final Pattern DEVICE_INDEX_PATTERN = Pattern.compile("^(.*)#(\\d+)$");
 
   /**
    * Convert TelemetryPayload to Protobuf bytes.
@@ -43,9 +46,11 @@ public class TelemetryAdapter {
     }
 
     for (Map.Entry<String, DeviceState> device : payload.devices().entrySet()) {
+      ParsedDeviceKey parsedKey = parseDeviceKey(device.getKey());
       TelemetryProto.DeviceStateMessage.Builder deviceBuilder =
           TelemetryProto.DeviceStateMessage.newBuilder()
-              .setDeviceType(device.getKey())
+              .setDeviceType(parsedKey.deviceType())
+              .setDeviceIndex(parsedKey.deviceIndex())
               .setOn(device.getValue().isOn());
       for (Map.Entry<String, Integer> attr : device.getValue().attributes().entrySet()) {
         deviceBuilder.addAttributes(
@@ -70,4 +75,15 @@ public class TelemetryAdapter {
 
     return builder.build();
   }
+
+  private ParsedDeviceKey parseDeviceKey(String rawKey) {
+    Matcher matcher = DEVICE_INDEX_PATTERN.matcher(rawKey);
+    if (matcher.matches()) {
+      return new ParsedDeviceKey(matcher.group(1), Integer.parseInt(matcher.group(2)));
+    }
+
+    return new ParsedDeviceKey(rawKey, 1);
+  }
+
+  private record ParsedDeviceKey(String deviceType, int deviceIndex) {}
 }

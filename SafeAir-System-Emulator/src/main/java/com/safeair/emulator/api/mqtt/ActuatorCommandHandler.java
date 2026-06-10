@@ -11,7 +11,8 @@ import org.slf4j.LoggerFactory;
  * {
  *   "roomId": "...",
  *   "deviceType": "minisplit" | "purifier" | "extractor",
- *   "action": "minisplit_on" | "minisplit_off" | "minisplit_set_24" | etc,
+ *   "deviceIndex": 1,
+ *   "action": "turn_on" | "turn_off" | "set_temperature",
  *   "value": true | false | number,
  *   "source": "frontend",
  *   "timestamp": "..."
@@ -23,7 +24,7 @@ public class ActuatorCommandHandler {
     private final EmulatorCommandCallback callback;
     
     public interface EmulatorCommandCallback {
-        void onCommand(String emulatorId, String deviceType, String action, Object value);
+        void onCommand(String emulatorId, String deviceType, int deviceIndex, String action, Object value);
     }
     
     public ActuatorCommandHandler(EmulatorCommandCallback callback) {
@@ -53,9 +54,14 @@ public class ActuatorCommandHandler {
             
             // Parse JSON (simple parsing without external library)
             String deviceType = extractJsonField(json, "deviceType");
+            int deviceIndex = parseDeviceIndex(extractJsonField(json, "deviceIndex"));
             String action = extractJsonField(json, "action");
             String valueStr = extractJsonField(json, "value");
             
+            if (action == null && extractJsonField(json, "isOn") != null) {
+                return;
+            }
+
             if (deviceType == null || action == null) {
                 LOGGER.warn("Missing deviceType or action in payload: {}", json);
                 return;
@@ -70,39 +76,53 @@ public class ActuatorCommandHandler {
             }
             
             // Process action
-            processAction(emulatorId, deviceType, action, value);
+            processAction(emulatorId, deviceType, deviceIndex, action, value);
             
         } catch (Exception ex) {
             LOGGER.error("Failed to process actuator command", ex);
         }
     }
     
-    private void processAction(String emulatorId, String deviceType, String action, Object value) {
+    private void processAction(String emulatorId, String deviceType, int deviceIndex, String action, Object value) {
         // Map action string to command
-        if (action.endsWith("_on")) {
+        if ("turn_on".equals(action) || action.endsWith("_on")) {
             // Turn on command
-            LOGGER.info("Command: Turn ON {} for emulator {}", deviceType, emulatorId);
+            LOGGER.info("Command: Turn ON {} unit {} for emulator {}", deviceType, deviceIndex, emulatorId);
             if (callback != null) {
-                callback.onCommand(emulatorId, deviceType, "turn_on", true);
+                callback.onCommand(emulatorId, deviceType, deviceIndex, "turn_on", true);
             }
-        } else if (action.endsWith("_off")) {
+        } else if ("turn_off".equals(action) || action.endsWith("_off")) {
             // Turn off command
-            LOGGER.info("Command: Turn OFF {} for emulator {}", deviceType, emulatorId);
+            LOGGER.info("Command: Turn OFF {} unit {} for emulator {}", deviceType, deviceIndex, emulatorId);
             if (callback != null) {
-                callback.onCommand(emulatorId, deviceType, "turn_off", false);
+                callback.onCommand(emulatorId, deviceType, deviceIndex, "turn_off", false);
+            }
+        } else if ("set_temperature".equals(action) && value instanceof Integer) {
+            LOGGER.info("Command: Set {} unit {} temperature to {} for emulator {}", deviceType, deviceIndex, value, emulatorId);
+            if (callback != null) {
+                callback.onCommand(emulatorId, deviceType, deviceIndex, "set_temperature", value);
             }
         } else if (action.contains("_set_")) {
             // Set temperature command
             String[] parts = action.split("_set_");
             if (parts.length == 2) {
                 int temp = Integer.parseInt(parts[1]);
-                LOGGER.info("Command: Set {} temperature to {} for emulator {}", deviceType, temp, emulatorId);
+                LOGGER.info("Command: Set {} unit {} temperature to {} for emulator {}", deviceType, deviceIndex, temp, emulatorId);
                 if (callback != null) {
-                    callback.onCommand(emulatorId, deviceType, "set_temperature", temp);
+                    callback.onCommand(emulatorId, deviceType, deviceIndex, "set_temperature", temp);
                 }
             }
         } else {
             LOGGER.warn("Unknown action: {} for device {}", action, deviceType);
+        }
+    }
+
+    private int parseDeviceIndex(String raw) {
+        try {
+            int parsed = raw == null ? 1 : Integer.parseInt(raw);
+            return parsed >= 1 && parsed <= 3 ? parsed : 1;
+        } catch (NumberFormatException ex) {
+            return 1;
         }
     }
     

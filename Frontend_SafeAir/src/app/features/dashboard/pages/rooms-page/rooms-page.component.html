@@ -237,6 +237,7 @@
             <span>ID</span>
             <span>Área</span>
             <span>Aberturas</span>
+            <span>Estado</span>
             <span></span>
           </div>
 
@@ -255,6 +256,9 @@
             <span class="rooms-config__room-id">{{ room.id }}</span>
             <span class="rooms-config__pill">{{ room.areaM2 }} m²</span>
             <span class="rooms-config__pill">{{ room.windowsCount }} ventanas</span>
+            <span class="rooms-config__pill">
+              {{ room.hasEmulator === false ? 'Sin emulador asignado' : 'Emulador asignado' }}
+            </span>
 
             <button class="rooms-config__row-action" type="button" aria-label="Ver cuarto">
               ›

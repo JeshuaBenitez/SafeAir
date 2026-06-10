@@ -33,15 +33,18 @@ export class DashboardEnvironmentMockService {
         return {
           id: room.id,
           label: room.name,
-          statusLabel: roomState ? this.getStatusLabel(roomState) : 'Sin datos',
+          statusLabel: room.hasEmulator === false ? 'Sin emulador' : (roomState ? this.getStatusLabel(roomState) : 'Sin datos'),
         };
       });
 
-      const activeRoomId = selectedRoomId && stateByRoom[selectedRoomId] ? selectedRoomId : rooms[0]?.id ?? null;
+      const activeRoomId = selectedRoomId && rooms.some((room) => room.id === selectedRoomId) ? selectedRoomId : rooms[0]?.id ?? null;
+      const activeRoom = activeRoomId ? rooms.find((room) => room.id === activeRoomId) ?? null : null;
 
       return {
         rooms: roomOptions,
         selectedRoomId: activeRoomId,
+        selectedRoomLabel: activeRoom?.name ?? null,
+        selectedRoomHasEmulator: activeRoom?.hasEmulator !== false,
         selectedState: activeRoomId ? stateByRoom[activeRoomId] ?? null : null,
       };
     }),
@@ -62,6 +65,12 @@ export class DashboardEnvironmentMockService {
     this.tick();
   }
 
+  resetState(): void {
+    this.roomsSubject.next([]);
+    this.selectedRoomIdSubject.next(null);
+    this.stateByRoomSubject.next({});
+  }
+
   setRooms(rooms: readonly DashboardRoom[]): void {
     this.roomsSubject.next(rooms);
 
@@ -69,7 +78,13 @@ export class DashboardEnvironmentMockService {
     const nextMap: Record<string, DashboardEnvironmentState> = {};
 
     for (const room of rooms) {
-      nextMap[room.id] = previousMap[room.id] ?? this.createInitialState(room);
+      if (environment.DASHBOARD_MODE === 'api') {
+        if (room.hasEmulator !== false && previousMap[room.id]) {
+          nextMap[room.id] = previousMap[room.id];
+        }
+      } else {
+        nextMap[room.id] = previousMap[room.id] ?? this.createInitialState(room);
+      }
     }
 
     this.stateByRoomSubject.next(nextMap);
@@ -83,7 +98,7 @@ export class DashboardEnvironmentMockService {
   }
 
   selectRoom(roomId: string): void {
-    if (!this.stateByRoomSubject.value[roomId]) {
+    if (!this.roomsSubject.value.some((room) => room.id === roomId)) {
       return;
     }
 
@@ -116,10 +131,22 @@ export class DashboardEnvironmentMockService {
     let hasChanges = false;
 
     const promises = rooms.map(async (room) => {
+      if (room.hasEmulator === false) {
+        if (nextMap[room.id]) {
+          delete nextMap[room.id];
+          hasChanges = true;
+        }
+        return;
+      }
+
       try {
         const response = await this.apiClient.get<any>(`/api/v1/rooms/${room.id}/metrics/current`);
 
         if (!response || !response.data) {
+          if (nextMap[room.id]) {
+            delete nextMap[room.id];
+            hasChanges = true;
+          }
           return;
         }
 
@@ -152,7 +179,10 @@ export class DashboardEnvironmentMockService {
         };
         hasChanges = true;
       } catch (error) {
-        // Silenciar error si no hay datos aun persistidos (el emulador no ha transmitido telemetria)
+        if (nextMap[room.id]) {
+          delete nextMap[room.id];
+          hasChanges = true;
+        }
       }
     });
 

@@ -6,6 +6,7 @@ export class DeviceActionModel extends Model {
   declare roomId: string;
   declare cycleId: string;
   declare deviceType: "minisplit" | "purifier" | "extractor";
+  declare deviceIndex: number;
   declare action: string;
   declare reason: string;
   declare level: "low" | "medium" | "high" | null;
@@ -34,6 +35,15 @@ export function initDeviceActionModel(sequelize: Sequelize): void {
       deviceType: {
         type: DataTypes.ENUM("minisplit", "purifier", "extractor"),
         allowNull: false
+      },
+      deviceIndex: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+        validate: {
+          min: 1,
+          max: 3
+        }
       },
       action: {
         type: DataTypes.STRING(80),
@@ -66,4 +76,3 @@ export function initDeviceActionModel(sequelize: Sequelize): void {
     }
   );
 }
-

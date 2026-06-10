@@ -63,7 +63,7 @@
       </section>
 
       <!-- Tabla de Histórico -->
-      <div class="history-table-container" *ngIf="(isHistoryMode$ | async) && envVm.selectedState">
+      <div class="history-table-container" *ngIf="(isHistoryMode$ | async) && envVm.selectedRoomId">
         <!-- Controles de Rango de Fecha y Hora -->
         <div class="history-range-controls">
           <!-- Selectores de Fecha y Hora en Formato 12H -->
@@ -205,9 +205,20 @@
         </table>
       </div>
 
-      <section class="section-page__empty" *ngIf="!envVm.selectedState">
-        <h2>Sin habitaciones disponibles</h2>
-        <p>Agrega habitaciones en la sección Cuartos para habilitar el monitoreo ambiental.</p>
+      <section class="section-page__empty" *ngIf="!(isHistoryMode$ | async) && !envVm.selectedState">
+        <ng-container *ngIf="envVm.selectedRoomId; else noRoomsConfigured">
+          <h2>{{ envVm.selectedRoomHasEmulator ? 'Sin métricas disponibles' : 'Sin emulador asignado' }}</h2>
+          <p>
+            {{ envVm.selectedRoomHasEmulator
+              ? 'La habitación seleccionada todavía no tiene telemetría real recibida.'
+              : 'La habitación seleccionada no tiene una fuente real de telemetría; el monitoreo y los controles permanecen inactivos.' }}
+          </p>
+        </ng-container>
+
+        <ng-template #noRoomsConfigured>
+          <h2>Sin habitaciones disponibles</h2>
+          <p>Agrega habitaciones en la sección Cuartos para habilitar el monitoreo ambiental.</p>
+        </ng-template>
       </section>
     </section>
   </section>

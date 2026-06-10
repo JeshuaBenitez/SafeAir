@@ -3,6 +3,8 @@ import { DeviceActionRepository } from "../../infrastructure/repositories/device
 import { DeviceStateRepository } from "../../infrastructure/repositories/device-state.repository";
 import { RoomRepository } from "../../infrastructure/repositories/room.repository";
 
+type ActuatorType = "minisplit" | "purifier" | "extractor";
+
 export class MetricsQueryService {
   constructor(
     private readonly cycleRepository: CycleRepository,
@@ -50,6 +52,7 @@ export class MetricsQueryService {
     const latestMeasurement = await this.cycleRepository.getLatestMeasurement(roomId);
     const latestActions = await this.deviceActionRepository.latestByRoomAndType(roomId);
     const reportedStates = await this.deviceStateRepository.latestByRoom(roomId);
+    const unitCounts = await this.getUnitCounts(roomId);
 
     const mapState = (actionName?: string): boolean | null => {
       if (!actionName) {
@@ -67,6 +70,38 @@ export class MetricsQueryService {
       return null;
     };
 
+    const buildUnits = (type: ActuatorType) => {
+      const statesByIndex = new Map((reportedStates[type] ?? []).map((state) => [state.deviceIndex, state]));
+      const actionsByIndex = new Map((latestActions[type] ?? []).map((action) => [action.deviceIndex, action]));
+      const count = unitCounts[type];
+
+      return Array.from({ length: count }, (_, index) => {
+        const deviceIndex = index + 1;
+        const reported = statesByIndex.get(deviceIndex);
+        const action = actionsByIndex.get(deviceIndex);
+        const reportedAt = reported?.reportedAt ? new Date(reported.reportedAt).getTime() : 0;
+        const actionAt = action?.executedAt ? new Date(action.executedAt).getTime() : 0;
+        const actionState = mapState(action?.action);
+        const mqttConfirmsAction = Boolean(reported && action && actionState === reported.isOn);
+        const useActionState = Boolean(action && actionAt >= reportedAt && !mqttConfirmsAction);
+
+        return {
+          deviceType: type,
+          deviceIndex,
+          label: `${this.actuatorLabel(type)} Unidad ${deviceIndex}`,
+          isOn: useActionState ? actionState : reported?.isOn ?? actionState,
+          lastAction: action?.action ?? null,
+          mode: reported?.mode ?? null,
+          targetTemperature: reported?.targetTemperature ?? null,
+          ambientTemperature: reported?.ambientTemperature ?? null,
+          ambientHumidity: reported?.ambientHumidity ?? null,
+          level: action?.level ?? null,
+          updatedAt: useActionState ? action?.executedAt ?? null : reported?.reportedAt ?? action?.executedAt ?? null,
+          source: useActionState ? "manual" : reported?.source ?? (action ? "manual" : null)
+        };
+      });
+    };
+
     return {
       roomId,
       measuredAt: latestMeasurement?.measuredAt ?? null,
@@ -80,40 +115,45 @@ export class MetricsQueryService {
           }
         : null,
       actuators: {
-        minisplit: {
-          isOn: reportedStates.minisplit?.isOn ?? mapState(latestActions.minisplit?.action),
-          lastAction: latestActions.minisplit?.action ?? null,
-          mode: reportedStates.minisplit?.mode ?? null,
-          targetTemperature: reportedStates.minisplit?.targetTemperature ?? null,
-          ambientTemperature: reportedStates.minisplit?.ambientTemperature ?? null,
-          ambientHumidity: reportedStates.minisplit?.ambientHumidity ?? null,
-          level: latestActions.minisplit?.level ?? null,
-          updatedAt: reportedStates.minisplit?.reportedAt ?? latestActions.minisplit?.executedAt ?? null,
-          source: reportedStates.minisplit?.source ?? null
-        },
-        purifier: {
-          isOn: reportedStates.purifier?.isOn ?? mapState(latestActions.purifier?.action),
-          lastAction: latestActions.purifier?.action ?? null,
-          mode: reportedStates.purifier?.mode ?? null,
-          targetTemperature: reportedStates.purifier?.targetTemperature ?? null,
-          ambientTemperature: reportedStates.purifier?.ambientTemperature ?? null,
-          ambientHumidity: reportedStates.purifier?.ambientHumidity ?? null,
-          level: latestActions.purifier?.level ?? null,
-          updatedAt: reportedStates.purifier?.reportedAt ?? latestActions.purifier?.executedAt ?? null,
-          source: reportedStates.purifier?.source ?? null
-        },
-        extractor: {
-          isOn: reportedStates.extractor?.isOn ?? mapState(latestActions.extractor?.action),
-          lastAction: latestActions.extractor?.action ?? null,
-          mode: reportedStates.extractor?.mode ?? null,
-          targetTemperature: reportedStates.extractor?.targetTemperature ?? null,
-          ambientTemperature: reportedStates.extractor?.ambientTemperature ?? null,
-          ambientHumidity: reportedStates.extractor?.ambientHumidity ?? null,
-          level: latestActions.extractor?.level ?? null,
-          updatedAt: reportedStates.extractor?.reportedAt ?? latestActions.extractor?.executedAt ?? null,
-          source: reportedStates.extractor?.source ?? null
-        }
+        minisplit: buildUnits("minisplit"),
+        purifier: buildUnits("purifier"),
+        extractor: buildUnits("extractor")
       }
     };
+  }
+
+  private async getUnitCounts(roomId: string): Promise<Record<ActuatorType, number>> {
+    const room = await this.roomRepository.findById(roomId);
+    const setup = room?.get("setup") as {
+      minisplitCount?: number;
+      purifierCount?: number;
+      extractorCount?: number;
+    } | null;
+
+    if (setup) {
+      return {
+        minisplit: Number(setup.minisplitCount ?? 0),
+        purifier: Number(setup.purifierCount ?? 0),
+        extractor: Number(setup.extractorCount ?? 0)
+      };
+    }
+
+    const devices = await this.roomRepository.listDevices(roomId);
+    return {
+      minisplit: devices.filter((device) => device.type === "minisplit").length,
+      purifier: devices.filter((device) => device.type === "purifier").length,
+      extractor: devices.filter((device) => device.type === "extractor").length
+    };
+  }
+
+  private actuatorLabel(type: ActuatorType): string {
+    switch (type) {
+      case "minisplit":
+        return "Minisplit";
+      case "purifier":
+        return "Purificador";
+      case "extractor":
+        return "Extractor";
+    }
   }
 }

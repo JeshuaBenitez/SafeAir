@@ -67,10 +67,14 @@ export function mapExternalDeviceTypeToInternal(rawDeviceType: unknown): Actuato
 }
 
 export function mapActuatorStatePayload(payload: Record<string, unknown>): ActuatorStateInput {
+  const rawDeviceIndex = Number(payload.deviceIndex ?? payload.unitIndex ?? payload.index ?? 1);
+
   return {
     emulatorId: String(payload.emulatorId ?? ""),
     roomId: payload.roomId ? String(payload.roomId) : undefined,
+    roomName: payload.roomName ? String(payload.roomName) : undefined,
     deviceType: mapExternalDeviceTypeToInternal(payload.deviceType),
+    deviceIndex: Number.isInteger(rawDeviceIndex) && rawDeviceIndex >= 1 && rawDeviceIndex <= 3 ? rawDeviceIndex : 1,
     isOn: Boolean(payload.isOn),
     mode: payload.mode ? String(payload.mode) : undefined,
     targetTemperature: payload.targetTemperature !== undefined ? Number(payload.targetTemperature) : undefined,

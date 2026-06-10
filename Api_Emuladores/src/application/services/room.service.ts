@@ -1,4 +1,5 @@
 import { AppError } from "../../shared/errors/app-error";
+import { EmulatorRepository } from "../../infrastructure/repositories/emulator.repository";
 import { InstanceRepository } from "../../infrastructure/repositories/instance.repository";
 import { RoomRepository } from "../../infrastructure/repositories/room.repository";
 import { RoomSetupDomainService } from "../../domain/services/room-setup-domain.service";
@@ -10,11 +11,12 @@ export class RoomService {
   constructor(
     private readonly instanceRepository: InstanceRepository,
     private readonly roomRepository: RoomRepository,
+    private readonly emulatorRepository: EmulatorRepository,
     private readonly roomSetupDomainService: RoomSetupDomainService,
     private readonly configurationService: ConfigurationService
   ) {}
 
-  async create(input: { instanceId: string; name: string }, userId: string): Promise<{ id: string }> {
+  async create(input: { instanceId: string; name: string }, userId: string): Promise<{ id: string; emulatorExternalId: string | null; emulatorAssigned: boolean }> {
     const instance = await this.instanceRepository.findById(input.instanceId, userId);
     if (!instance) {
       throw new AppError("Instance not found", 404, "INSTANCE_NOT_FOUND");
@@ -26,7 +28,39 @@ export class RoomService {
     }
 
     const room = await this.roomRepository.create(input);
-    return { id: room.id };
+    const available = await this.emulatorRepository.findFirstAvailable();
+    if (!available) {
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "warn",
+        source: "api",
+        event: "room-created-without-emulator",
+        message: `Room created without an available emulator: "${room.name}"`,
+        details: { roomId: room.id, roomName: room.name, userId },
+        roomId: room.id
+      });
+
+      return { id: room.id, emulatorExternalId: null, emulatorAssigned: false };
+    }
+
+    const emulator = await this.emulatorRepository.assignToRoom(available.id, room.id);
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "api",
+      event: "room-created-emulator-assigned",
+      message: `Room created and assigned to emulator ${emulator?.emulatorExternalId ?? available.emulatorExternalId}`,
+      details: {
+        roomId: room.id,
+        roomName: room.name,
+        userId,
+        emulatorExternalId: emulator?.emulatorExternalId ?? available.emulatorExternalId
+      },
+      roomId: room.id,
+      emulatorId: emulator?.emulatorExternalId ?? available.emulatorExternalId
+    });
+
+    return { id: room.id, emulatorExternalId: emulator?.emulatorExternalId ?? available.emulatorExternalId, emulatorAssigned: true };
   }
 
   async getById(roomId: string, userId?: string): Promise<unknown> {

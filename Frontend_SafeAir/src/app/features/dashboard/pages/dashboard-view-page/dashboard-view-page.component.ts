@@ -15,6 +15,22 @@ import { DashboardTemperatureWidgetComponent } from '@features/dashboard/compone
 import { DashboardTopbarComponent } from '@features/dashboard/components/dashboard-topbar/dashboard-topbar.component';
 import { API_CLIENT } from '@core/config/api-client.token';
 
+interface MetricsHistoryRow {
+  readonly id?: string;
+  readonly roomId?: string;
+  readonly cycleId?: string;
+  readonly temperature: number;
+  readonly humidity: number;
+  readonly co2: number;
+  readonly pm25: number;
+  readonly measuredAt: string;
+  readonly receivedAt?: string;
+  readonly source?: string;
+  readonly minisplitCount: number;
+  readonly purifierCount: number;
+  readonly extractorCount: number;
+}
+
 @Component({
   selector: 'sa-dashboard-view-page',
   standalone: true,
@@ -44,10 +60,11 @@ export class DashboardViewPageComponent {
   readonly environmentViewModel$ = this.environmentMockState.viewModel$;
 
   readonly isHistoryMode$ = new BehaviorSubject<boolean>(false);
-  readonly historyData$ = new BehaviorSubject<any[]>([]);
+  readonly historyData$ = new BehaviorSubject<MetricsHistoryRow[]>([]);
   
   historyRangeLabel = '';
   selectedRoomId: string | null = null;
+  private activeHistoryRequestKey = '';
 
   selectedTelemetryDate = this.formatDateForInput(new Date());
   selectedTelemetryTime = this.formatTimeForInput(new Date());
@@ -88,7 +105,7 @@ export class DashboardViewPageComponent {
         this.selectedRoomId = roomId;
         
         if (this.isHistoryMode$.value && roomId && roomId !== previousId) {
-          this.loadHistoryData(this.selectedTelemetryDate, this.selectedTelemetryTime);
+          this.applyTimeRange();
         }
       });
   }
@@ -152,26 +169,11 @@ export class DashboardViewPageComponent {
       return;
     }
 
-    const fromStr = `${date}T00:00:00.000Z`;
-    const toStr = `${date}T${time}.000Z`;
-
-    this.environmentMockState.pauseTelemetry();
-    this.isHistoryMode$.next(true);
-    
-    const parts = date.split('-');
-    const formattedDate = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : date;
-    this.historyRangeLabel = `Mostrando historial del ${formattedDate} hasta las ${time}`;
-
-    this.apiClient
-      .get<any[]>(`/api/v1/rooms/${this.selectedRoomId}/metrics/history?from=${encodeURIComponent(fromStr)}&to=${encodeURIComponent(toStr)}`)
-      .then((response) => {
-        const sorted = [...response.data].sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime());
-        this.historyData$.next(sorted);
-      })
-      .catch((error) => {
-        console.error('Error cargando historial de metras:', error);
-        this.historyData$.next([]);
-      });
+    const [hour = '00', minute = '00'] = time.split(':');
+    const fromStr = this.buildFullDateTime(date, '00', '00');
+    const toStr = this.buildFullDateTime(date, hour, minute);
+    this.historyRangeLabel = `Reporte del ${this.formatInputDateTime(date, '00', '00')} al ${this.formatInputDateTime(date, hour, minute)}`;
+    this.loadHistoryWithRange(fromStr, toStr);
   }
 
   private formatDateForInput(date: Date): string {
@@ -199,48 +201,55 @@ export class DashboardViewPageComponent {
       return;
     }
 
-    const startDateTime = this.buildFullDateTime(this.startDate, this.startHour, this.startMinute);
-    const endDateTime = this.buildFullDateTime(this.endDate, this.endHour, this.endMinute);
+    const startHour = this.normalizeTimePart(this.startHour, 0, 23);
+    const startMinute = this.normalizeTimePart(this.startMinute, 0, 59);
+    const endHour = this.normalizeTimePart(this.endHour, 0, 23);
+    const endMinute = this.normalizeTimePart(this.endMinute, 0, 59);
+    const startDateTime = this.buildFullDateTime(this.startDate, startHour, startMinute);
+    const endDateTime = this.buildFullDateTime(this.endDate, endHour, endMinute);
 
-    console.debug('applyTimeRange clicked', {
-      selectedRoomId: this.selectedRoomId,
+    console.debug('[Reports] apply range clicked', {
+      roomId: this.selectedRoomId,
       startDate: this.startDate,
-      startHour: this.startHour,
-      startMinute: this.startMinute,
+      startHour,
+      startMinute,
       endDate: this.endDate,
-      endHour: this.endHour,
-      endMinute: this.endMinute,
-      fromISO: startDateTime,
-      toISO: endDateTime
+      endHour,
+      endMinute,
+      from: startDateTime,
+      to: endDateTime,
     });
 
+    this.historyRangeLabel = `Reporte del ${this.formatInputDateTime(this.startDate, startHour, startMinute)} al ${this.formatInputDateTime(this.endDate, endHour, endMinute)}`;
     this.loadHistoryWithRange(startDateTime, endDateTime);
   }
 
   private validateTimeRange(): string {
     // ── Validar formato de hora (formato 24 horas HH:mm) ──────────────────────
     // Hour debe ser 0-23, minute debe ser 0-59
-    const validateField = (field: string, value: string, min: number, max: number, label: string): string => {
+    const validateField = (value: string | number, min: number, max: number, label: string): string => {
+      const rawValue = String(value ?? '').trim();
+
       // Si está vacío o no es número, rechazar
-      if (!value || value.trim() === '' || !/^\d+$/.test(value)) {
+      if (!rawValue || !/^\d+$/.test(rawValue)) {
         return `${label} es requerido y debe ser un número.`;
       }
-      const num = parseInt(value, 10);
+      const num = parseInt(rawValue, 10);
       if (isNaN(num)) return `${label} debe ser un número válido.`;
       if (num < min || num > max) return `${label} debe estar entre ${min} y ${max}.`;
       return '';
     };
 
     // Validar inicio (formato 24h: 0-23 hora, 0-59 minuto)
-    let err = validateField('hour', this.startHour, 0, 23, 'Hora inicio');
+    let err = validateField(this.startHour, 0, 23, 'Hora inicio');
     if (err) return err;
-    err = validateField('minute', this.startMinute, 0, 59, 'Minuto inicio');
+    err = validateField(this.startMinute, 0, 59, 'Minuto inicio');
     if (err) return err;
 
     // Validar fin (formato 24h: 0-23 hora, 0-59 minuto)
-    err = validateField('hour', this.endHour, 0, 23, 'Hora fin');
+    err = validateField(this.endHour, 0, 23, 'Hora fin');
     if (err) return err;
-    err = validateField('minute', this.endMinute, 0, 59, 'Minuto fin');
+    err = validateField(this.endMinute, 0, 59, 'Minuto fin');
     if (err) return err;
 
     // Construir fechas completas (formato 24h)
@@ -277,48 +286,59 @@ export class DashboardViewPageComponent {
 
   private buildFullDateTimeObj(dateStr: string, hour: string, minute: string): Date {
     const [year, month, day] = dateStr.split('-').map(Number);
-    const h = parseInt(hour, 10);
-    const m = parseInt(minute, 10);
+    const h = parseInt(this.normalizeTimePart(hour, 0, 23), 10);
+    const m = parseInt(this.normalizeTimePart(minute, 0, 59), 10);
     return new Date(year, month - 1, day, h, m, 0, 0);
   }
 
-  private convertTo24hFormat(hour: string, minute: string): string {
-    const h = parseInt(hour, 10);
-    const m = parseInt(minute, 10);
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
-  }
-
   private loadHistoryWithRange(startDateTimeISO: string, endDateTimeISO: string): void {
-    if (!this.selectedRoomId) {
+    const roomId = this.selectedRoomId;
+
+    if (!roomId) {
       this.rangeError = 'Selecciona una habitación primero.';
       return;
     }
 
     const fromStr = startDateTimeISO;
     const toStr = endDateTimeISO;
+    const endpoint = `/api/v1/rooms/${roomId}/metrics/history`;
+    const params = { from: fromStr, to: toStr };
+    const finalUrl = this.buildDebugUrl(endpoint, params);
+    const requestKey = `${roomId}|${fromStr}|${toStr}`;
+
+    this.activeHistoryRequestKey = requestKey;
 
     this.environmentMockState.pauseTelemetry();
     this.isHistoryMode$.next(true);
 
-    // Formatear label para mostrar al usuario en hora local CDMX
-    const startDt = new Date(startDateTimeISO);
-    const endDt = new Date(endDateTimeISO);
-    const formatDateTime = (dt: Date) => {
-      return dt.toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
-    };
-
-    this.historyRangeLabel = `Reporte del ${formatDateTime(startDt)} al ${formatDateTime(endDt)}`;
+    console.debug('[Reports] metrics history request', {
+      roomId,
+      from: fromStr,
+      to: toStr,
+      url: finalUrl,
+    });
 
     this.apiClient
-      .get<any[]>(`/api/v1/rooms/${this.selectedRoomId}/metrics/history?from=${encodeURIComponent(fromStr)}&to=${encodeURIComponent(toStr)}`)
+      .get<unknown>(endpoint, { params })
       .then((response) => {
-        console.debug('history response', {
-          count: response.data.length,
-          firstMeasuredAt: response.data[0]?.measuredAt,
-          lastMeasuredAt: response.data[response.data.length - 1]?.measuredAt
+        if (this.activeHistoryRequestKey !== requestKey) {
+          console.debug('[Reports] stale history response ignored', { roomId, from: fromStr, to: toStr });
+          return;
+        }
+
+        const rows = this.normalizeHistoryRows(response.data);
+
+        console.debug('[Reports] metrics history response', {
+          roomId,
+          from: fromStr,
+          to: toStr,
+          url: finalUrl,
+          receivedCount: rows.length,
+          firstMeasuredAt: rows[0]?.measuredAt,
+          lastMeasuredAt: rows[rows.length - 1]?.measuredAt,
         });
-        const sorted = [...response.data].sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime());
-        this.historyData$.next(sorted);
+
+        this.historyData$.next(rows);
       })
       .catch((error) => {
         console.error('Error cargando historial:', error);
@@ -429,7 +449,73 @@ export class DashboardViewPageComponent {
     }
   }
 
-  private formatDevices(item: any): string {
+  private normalizeTimePart(value: string | number, min: number, max: number): string {
+    const numeric = parseInt(String(value ?? '').trim(), 10);
+    const safeValue = Number.isFinite(numeric) ? Math.min(max, Math.max(min, numeric)) : min;
+
+    return String(safeValue).padStart(2, '0');
+  }
+
+  private formatInputDateTime(date: string, hour: string | number, minute: string | number): string {
+    const [year, month, day] = date.split('-');
+    const safeDate = year && month && day ? `${day}/${month}/${year}` : date;
+
+    return `${safeDate} ${this.normalizeTimePart(hour, 0, 23)}:${this.normalizeTimePart(minute, 0, 59)}`;
+  }
+
+  private buildDebugUrl(endpoint: string, params: { from: string; to: string }): string {
+    const baseUrl = (this.apiClient as unknown as { getBaseUrl?: () => string }).getBaseUrl?.() ?? '';
+    const query = new URLSearchParams(params).toString();
+
+    return `${baseUrl}${endpoint}?${query}`;
+  }
+
+  private normalizeHistoryRows(payload: unknown): MetricsHistoryRow[] {
+    const rawRows = Array.isArray(payload)
+      ? payload
+      : Array.isArray((payload as { data?: unknown[] })?.data)
+        ? (payload as { data: unknown[] }).data
+        : Array.isArray((payload as { records?: unknown[] })?.records)
+          ? (payload as { records: unknown[] }).records
+          : [];
+
+    return rawRows
+      .map((item) => this.mapHistoryRow(item))
+      .filter((row): row is MetricsHistoryRow => Boolean(row?.measuredAt))
+      .sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime());
+  }
+
+  private mapHistoryRow(item: unknown): MetricsHistoryRow | null {
+    if (!item || typeof item !== 'object') {
+      return null;
+    }
+
+    const row = item as Record<string, unknown>;
+
+    return {
+      id: typeof row['id'] === 'string' ? row['id'] : undefined,
+      roomId: typeof row['roomId'] === 'string' ? row['roomId'] : undefined,
+      cycleId: typeof row['cycleId'] === 'string' ? row['cycleId'] : undefined,
+      temperature: this.toNumber(row['temperature']),
+      humidity: this.toNumber(row['humidity']),
+      co2: this.toNumber(row['co2']),
+      pm25: this.toNumber(row['pm25']),
+      measuredAt: String(row['measuredAt'] ?? ''),
+      receivedAt: typeof row['receivedAt'] === 'string' ? row['receivedAt'] : undefined,
+      source: typeof row['source'] === 'string' ? row['source'] : undefined,
+      minisplitCount: this.toNumber(row['minisplitCount']),
+      purifierCount: this.toNumber(row['purifierCount']),
+      extractorCount: this.toNumber(row['extractorCount']),
+    };
+  }
+
+  private toNumber(value: unknown): number {
+    const numeric = Number(value);
+
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+
+  private formatDevices(item: MetricsHistoryRow): string {
     const devices = [];
     if (item.minisplitCount > 0) devices.push(`${item.minisplitCount} Minisplit${item.minisplitCount > 1 ? 's' : ''}`);
     if (item.purifierCount > 0) devices.push(`${item.purifierCount} Purificador${item.purifierCount > 1 ? 'es' : ''}`);

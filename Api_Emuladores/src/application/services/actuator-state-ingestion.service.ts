@@ -7,7 +7,9 @@ import { EmulatorResolutionService } from "./emulator-resolution.service";
 const actuatorStateSchema = z.object({
   emulatorId: z.string().min(1),
   roomId: z.string().uuid().optional(),
+  roomName: z.string().optional(),
   deviceType: z.enum(["minisplit", "purifier", "extractor"]),
+  deviceIndex: z.number().int().min(1).max(3).optional().default(1),
   isOn: z.boolean(),
   mode: z.string().optional(),
   targetTemperature: z.number().optional(),
@@ -22,7 +24,7 @@ export class ActuatorStateIngestionService {
     private readonly deviceStateRepository: DeviceStateRepository
   ) {}
 
-  async handleIncomingState(rawState: ActuatorStateInput, source: "mqtt" | "rest"): Promise<void> {
+  async handleIncomingState(rawState: ActuatorStateInput, source: "mqtt" | "rest"): Promise<{ roomId: string; emulatorExternalId: string }> {
     const parsed = actuatorStateSchema.safeParse(rawState);
     if (!parsed.success) {
       throw new AppError("Invalid actuator state payload", 422, "ACTUATOR_STATE_VALIDATION_ERROR", parsed.error.format());
@@ -30,13 +32,14 @@ export class ActuatorStateIngestionService {
 
     const state = parsed.data;
     const emulator = await this.emulatorResolutionService.resolveOrProvision(state.emulatorId);
-    const roomId = state.roomId ?? emulator.roomId;
+    const roomId = emulator.roomId;
     const reportedAt = state.timestamp ? new Date(state.timestamp) : new Date();
 
     await this.deviceStateRepository.upsertLatest({
       roomId,
       emulatorId: state.emulatorId,
       deviceType: state.deviceType,
+      deviceIndex: state.deviceIndex,
       isOn: state.isOn,
       mode: state.mode,
       targetTemperature: state.targetTemperature,
@@ -46,5 +49,7 @@ export class ActuatorStateIngestionService {
       source,
       payload: state as unknown as Record<string, unknown>
     });
+
+    return { roomId, emulatorExternalId: emulator.emulatorExternalId };
   }
 }

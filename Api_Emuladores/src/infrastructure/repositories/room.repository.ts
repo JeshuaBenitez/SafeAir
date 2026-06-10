@@ -60,19 +60,21 @@ export class RoomRepository {
       CycleMeasurementModel,
       CycleModel,
       DeviceModel,
-      EmulatorModel,
       RoomSetupDerivedModel,
       RoomSetupModel,
       RoomModel
     } = await import("../database/models");
 
+    const { EmulatorRepository } = await import("./emulator.repository");
+    const emulatorRepository = new EmulatorRepository();
+
+    await emulatorRepository.releaseRoom(roomId);
     await DeviceStateModel.destroy({ where: { roomId } });
     await AlarmModel.destroy({ where: { roomId } });
     await DeviceActionModel.destroy({ where: { roomId } });
     await CycleMeasurementModel.destroy({ where: { roomId } });
     await CycleModel.destroy({ where: { roomId } });
     await DeviceModel.destroy({ where: { roomId } });
-    await EmulatorModel.destroy({ where: { roomId } });
     await RoomSetupDerivedModel.destroy({ where: { roomId } });
     await RoomSetupModel.destroy({ where: { roomId } });
     await RoomModel.destroy({ where: { id: roomId } });

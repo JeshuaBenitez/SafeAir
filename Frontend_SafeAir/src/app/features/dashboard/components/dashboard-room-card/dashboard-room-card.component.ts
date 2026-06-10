@@ -19,6 +19,7 @@ export class DashboardRoomCardComponent implements OnChanges {
 
   imageUrl = 'assets/images/sala.png';
   isActive = false;
+  statusLabel = 'Sin emulador asignado';
   displayTemperature = '22°C';
   actuatorsCount = 0;
 
@@ -62,10 +63,11 @@ export class DashboardRoomCardComponent implements OnChanges {
       this.purifierCount +
       this.extractorCount;
 
-    this.isActive = this.actuatorsCount > 0;
+    this.isActive = this.room?.hasEmulator !== false;
+    this.statusLabel = this.isActive ? 'EMULADOR ASIGNADO' : 'SIN EMULADOR ASIGNADO';
 
     const temp = this.room?.temperature ?? 22 + (this.index % 4);
-    this.displayTemperature = `${temp}°C`;
+    this.displayTemperature = this.isActive ? `${temp}°C` : '--°C';
   }
 
   goToControl(): void {

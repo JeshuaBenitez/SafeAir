@@ -15,6 +15,7 @@ export interface DashboardRoom {
   readonly id: string;
   readonly name: string;
   readonly designation: string;
+  readonly hasEmulator?: boolean;
   readonly areaM2: number;
   readonly windowsCount: number;
   readonly imageSrc: string;

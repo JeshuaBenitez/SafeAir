@@ -10,6 +10,7 @@ export class DeviceActionService {
     roomId: string;
     cycleId: string;
     deviceType: "minisplit" | "purifier" | "extractor";
+    deviceIndex?: number;
     action: string;
     reason: string;
     level?: "low" | "medium" | "high";
@@ -21,6 +22,7 @@ export class DeviceActionService {
       roomId: data.roomId,
       cycleId: data.cycleId,
       deviceType: data.deviceType,
+      deviceIndex: data.deviceIndex ?? 1,
       action: data.action,
       level: data.level ?? null,
       reason: data.reason,

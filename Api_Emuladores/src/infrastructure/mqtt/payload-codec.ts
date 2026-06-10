@@ -22,12 +22,13 @@ const root = protobuf.Root.fromJSON({
             emulatorId: { type: "string", id: 1 },
             roomId: { type: "string", id: 2 },
             deviceType: { type: "string", id: 3 },
-            isOn: { type: "bool", id: 4 },
-            mode: { type: "string", id: 5 },
-            targetTemperature: { type: "float", id: 6 },
-            ambientTemperature: { type: "float", id: 7 },
-            ambientHumidity: { type: "float", id: 8 },
-            timestamp: { type: "string", id: 9 }
+            deviceIndex: { type: "int32", id: 4 },
+            isOn: { type: "bool", id: 5 },
+            mode: { type: "string", id: 6 },
+            targetTemperature: { type: "float", id: 7 },
+            ambientTemperature: { type: "float", id: 8 },
+            ambientHumidity: { type: "float", id: 9 },
+            timestamp: { type: "string", id: 10 }
           }
         }
       }
@@ -183,6 +184,7 @@ function normalizeEmulatorTelemetry(buffer: Buffer): Record<string, unknown> {
     return {
       emulatorId: String(raw.emulatorId ?? ""),
       deviceType: String(device.deviceType ?? "").toLowerCase(),
+      deviceIndex: toNumber(device.deviceIndex) ?? toNumber(device.index) ?? 1,
       isOn: Boolean(device.on),
       targetTemperature: attrMap.get("targetTemperature") ?? attrMap.get("setpoint") ?? attrMap.get("temperature") ?? attrMap.get("state"),
       ambientTemperature: temperature,

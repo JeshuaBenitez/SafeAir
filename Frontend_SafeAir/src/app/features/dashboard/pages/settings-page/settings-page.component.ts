@@ -8,6 +8,7 @@ import { AuthFacade } from '@features/auth/application/facades/auth.facade';
 import { DashboardSidebarComponent } from '@features/dashboard/components/dashboard-sidebar/dashboard-sidebar.component';
 import { DashboardTopbarComponent } from '@features/dashboard/components/dashboard-topbar/dashboard-topbar.component';
 import { AuthSessionStorageService } from '@features/auth/application/services/auth-session-storage.service';
+import { environment } from '../../../../../environments/environment';
 
 @Component({
   selector: 'sa-settings-page',
@@ -222,6 +223,6 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
   }
 
   private isLocalHost(): boolean {
-    return ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname);
+    return ['localhost', '127.0.0.1', '0.0.0.0'].includes(window.location.hostname) || !environment.production;
   }
 }

@@ -1,10 +1,33 @@
 import bcrypt from "bcryptjs";
-import { EmulatorModel, InstanceModel, RoomModel, RoomSetupDerivedModel, RoomSetupModel, UserModel, DeviceModel } from "../models";
+import { Op } from "sequelize";
+import {
+  AlarmModel,
+  CycleMeasurementModel,
+  CycleModel,
+  DeviceActionModel,
+  DeviceModel,
+  DeviceStateModel,
+  EmulatorModel,
+  InstanceModel,
+  RoomModel,
+  RoomSetupDerivedModel,
+  RoomSetupModel,
+  UserModel
+} from "../models";
+
+const SEED_EMULATOR_IDS = ["EMU-0001", "EMU-0002", "emu-room-a"] as const;
+const LEGACY_DEMO_ROOM_NAMES = ["Room A", "Room EMU-0001", "Room EMU-0002"] as const;
+const LEGACY_DEMO_INSTANCE_NAMES = ["Demo Instance", "SafeAir Auto Instance", "Auto Provisioned Instance"] as const;
+const SEED_EMULATOR_STATUS: Record<typeof SEED_EMULATOR_IDS[number], "online" | "offline"> = {
+  "EMU-0001": "online",
+  "EMU-0002": "online",
+  "emu-room-a": "offline"
+};
 
 export async function runDatabaseSeed(): Promise<void> {
   const passwordHash = await bcrypt.hash("admin123", 10);
 
-  const [adminUser] = await UserModel.findOrCreate({
+  await UserModel.findOrCreate({
     where: { email: "admin@safeair.local" },
     defaults: {
       fullName: "SafeAir Admin",
@@ -13,62 +36,60 @@ export async function runDatabaseSeed(): Promise<void> {
     }
   });
 
-  const [instance] = await InstanceModel.findOrCreate({
-    where: { name: "Demo Instance" },
-    defaults: { description: "Seed instance", userId: adminUser.id }
-  });
-
-  if (!instance.userId) {
-    instance.userId = adminUser.id;
-    await instance.save();
-  }
-
-  const [room] = await RoomModel.findOrCreate({
-    where: { name: "Room A", instanceId: instance.id },
-    defaults: { instanceId: instance.id, name: "Room A" }
-  });
-
-  await RoomSetupModel.upsert({
-    roomId: room.id,
-    roomWidth: 5,
-    roomLength: 6,
-    roomHeight: 2.7,
-    windowCount: 2,
-    windowAreaTotal: 5,
-    minisplitCount: 1,
-    purifierCount: 1,
-    extractorCount: 1
-  });
-
-  await RoomSetupDerivedModel.upsert({
-    roomId: room.id,
-    roomArea: 30,
-    windowAreaRatio: 0.1667,
-    windowFactorBase: 1.08335,
-    windowFactor: 1.08335,
-    areaTermica: 32.5005,
-    areaCalidadAire: 31.5003
-  });
-
-  await EmulatorModel.findOrCreate({
-    where: { emulatorExternalId: "emu-room-a" },
-    defaults: { roomId: room.id, emulatorExternalId: "emu-room-a", status: "online" }
-  });
-
-  await DeviceModel.findOrCreate({ where: { roomId: room.id, type: "minisplit", label: "Minisplit A1" }, defaults: { roomId: room.id, type: "minisplit", label: "Minisplit A1" } });
-  await DeviceModel.findOrCreate({ where: { roomId: room.id, type: "purifier", label: "Purifier A1" }, defaults: { roomId: room.id, type: "purifier", label: "Purifier A1" } });
-  await DeviceModel.findOrCreate({ where: { roomId: room.id, type: "extractor", label: "Extractor A1" }, defaults: { roomId: room.id, type: "extractor", label: "Extractor A1" } });
+  await ensureSeedEmulatorPool();
 }
 
-export async function ensureDemoOwnership(): Promise<void> {
-  const adminUser = await UserModel.findOne({ where: { email: "admin@safeair.local" } });
-  if (!adminUser) {
-    return;
+export async function ensureSeedEmulatorPool(): Promise<void> {
+  await removeLegacyDemoRooms();
+
+  for (const emulatorExternalId of SEED_EMULATOR_IDS) {
+    await EmulatorModel.findOrCreate({
+      where: { emulatorExternalId },
+      defaults: { roomId: null, emulatorExternalId, status: SEED_EMULATOR_STATUS[emulatorExternalId] }
+    });
+  }
+}
+
+async function removeLegacyDemoRooms(): Promise<void> {
+  const legacyRooms = await RoomModel.findAll({
+    where: { name: { [Op.in]: [...LEGACY_DEMO_ROOM_NAMES] } },
+    include: [
+      {
+        model: InstanceModel,
+        as: "instance",
+        required: false
+      }
+    ]
+  });
+
+  const legacyRoomIds = legacyRooms
+    .filter((room) => {
+      const instance = room.get("instance") as InstanceModel | null;
+      return !instance || LEGACY_DEMO_INSTANCE_NAMES.includes(instance.name as typeof LEGACY_DEMO_INSTANCE_NAMES[number]);
+    })
+    .map((room) => room.id);
+
+  if (legacyRoomIds.length > 0) {
+    await EmulatorModel.update({ roomId: null }, { where: { roomId: { [Op.in]: legacyRoomIds } } });
+    await DeviceStateModel.destroy({ where: { roomId: { [Op.in]: legacyRoomIds } } });
+    await AlarmModel.destroy({ where: { roomId: { [Op.in]: legacyRoomIds } } });
+    await DeviceActionModel.destroy({ where: { roomId: { [Op.in]: legacyRoomIds } } });
+    await CycleMeasurementModel.destroy({ where: { roomId: { [Op.in]: legacyRoomIds } } });
+    await CycleModel.destroy({ where: { roomId: { [Op.in]: legacyRoomIds } } });
+    await DeviceModel.destroy({ where: { roomId: { [Op.in]: legacyRoomIds } } });
+    await RoomSetupDerivedModel.destroy({ where: { roomId: { [Op.in]: legacyRoomIds } } });
+    await RoomSetupModel.destroy({ where: { roomId: { [Op.in]: legacyRoomIds } } });
+    await RoomModel.destroy({ where: { id: { [Op.in]: legacyRoomIds } } });
   }
 
-  const demoInstance = await InstanceModel.findOne({ where: { name: "Demo Instance" } });
-  if (demoInstance && !demoInstance.userId) {
-    demoInstance.userId = adminUser.id;
-    await demoInstance.save();
+  const emptyLegacyInstances = await InstanceModel.findAll({
+    where: { name: { [Op.in]: [...LEGACY_DEMO_INSTANCE_NAMES] } }
+  });
+
+  for (const instance of emptyLegacyInstances) {
+    const roomCount = await RoomModel.count({ where: { instanceId: instance.id } });
+    if (roomCount === 0) {
+      await instance.destroy();
+    }
   }
 }

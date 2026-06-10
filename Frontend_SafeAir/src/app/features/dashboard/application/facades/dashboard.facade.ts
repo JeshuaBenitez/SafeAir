@@ -75,7 +75,9 @@ export class DashboardFacade {
     const totalAreaM2 = rooms.reduce((sum, room) => sum + room.areaM2, 0);
     const totalWindows = rooms.reduce((sum, room) => sum + room.windowsCount, 0);
     const activeActuators = rooms.reduce(
-      (sum, room) => sum + room.actuators.minisplit.quantity + room.actuators.purifier.quantity + room.actuators.extractor.quantity,
+      (sum, room) => room.hasEmulator === false
+        ? sum
+        : sum + room.actuators.minisplit.quantity + room.actuators.purifier.quantity + room.actuators.extractor.quantity,
       0,
     );
 

@@ -47,12 +47,13 @@ interface EnvironmentMetricCard {
 }
 
 interface ActuatorSnapshot {
+  deviceIndex: number;
   isOn: boolean | null;
   targetTemperature: number | null;
 }
 
 interface ActuatorStateResponse {
-  actuators?: Partial<Record<ActuatorKey, ActuatorSnapshot>>;
+  actuators?: Partial<Record<ActuatorKey, ActuatorSnapshot[]>>;
 }
 
 @Component({
@@ -84,6 +85,7 @@ export class RoomControlPageComponent implements OnInit {
   selectedActuatorKey: ActuatorKey | null = null;
 
   private readonly unitStates: Record<string, UnitControlState> = {};
+  private activeRoomId: string | null = null;
 
   ngOnInit(): void {
     combineLatest([this.facade.viewModel$, this.route.paramMap])
@@ -97,11 +99,18 @@ export class RoomControlPageComponent implements OnInit {
 
         this.environmentMockState.setRooms(vm.rooms);
 
+        if (this.activeRoomId !== this.room?.id) {
+          this.clearUnitStates();
+          this.selectedEnvironmentState = null;
+          this.selectedActuatorKey = null;
+          this.activeRoomId = this.room?.id ?? null;
+        }
+
         if (this.room) {
           this.environmentMockState.selectRoom(this.room.id);
         }
 
-        this.availableActuators = this.room
+        this.availableActuators = this.room && this.hasAssignedEmulator
           ? this.buildAvailableActuators(this.room)
           : [];
 
@@ -128,33 +137,38 @@ export class RoomControlPageComponent implements OnInit {
 
   get environmentMetrics(): EnvironmentMetricCard[] {
     const state = this.selectedEnvironmentState;
+    const missingStatus = this.hasAssignedEmulator ? 'Sin métricas disponibles' : 'Sin emulador asignado';
 
     return [
       {
         title: 'TEMPERATURA',
         value: state ? `${this.formatOneDecimal(state.temperatureC)}°C` : '--°C',
-        status: state ? this.getTemperatureStatus(state.temperatureC) : 'Sin datos',
+        status: state ? this.getTemperatureStatus(state.temperatureC) : missingStatus,
         icon: 'assets/icons/temperatura.png',
       },
       {
         title: 'HUMEDAD',
         value: state ? `${Math.round(state.humidityPct)}%` : '--%',
-        status: state ? this.getHumidityStatus(state.humidityPct) : 'Sin datos',
+        status: state ? this.getHumidityStatus(state.humidityPct) : missingStatus,
         icon: 'assets/icons/humedad.png',
       },
       {
         title: 'CO2',
         value: state ? `${Math.round(state.co2Ppm)} ppm` : '-- ppm',
-        status: state ? this.getCo2Status(state.co2Ppm) : 'Sin datos',
+        status: state ? this.getCo2Status(state.co2Ppm) : missingStatus,
         icon: 'assets/icons/actuador.png',
       },
       {
         title: 'PM2.5',
         value: state ? `${Math.round(state.pm25UgM3)} μg/m³` : '-- μg/m³',
-        status: state ? this.getPm25Status(state.pm25UgM3) : 'Sin datos',
+        status: state ? this.getPm25Status(state.pm25UgM3) : missingStatus,
         icon: 'assets/icons/pm.png',
       },
     ];
+  }
+
+  get hasAssignedEmulator(): boolean {
+    return this.room?.hasEmulator !== false;
   }
 
   get selectedActuator(): VisualActuator | null {
@@ -178,6 +192,7 @@ export class RoomControlPageComponent implements OnInit {
   }
 
   selectActuator(key: ActuatorKey): void {
+    if (!this.hasAssignedEmulator) return;
     this.selectedActuatorKey = key;
   }
 
@@ -271,19 +286,13 @@ export class RoomControlPageComponent implements OnInit {
   }
 
   async toggleUnit(index: number): Promise<void> {
-    if (!this.selectedActuatorKey) return;
+    if (!this.selectedActuatorKey || !this.hasAssignedEmulator) return;
 
     const key = this.buildUnitKey(this.selectedActuatorKey, index);
     const current = this.unitStates[key] ?? { on: false, value: 24 };
     const nextOn = !current.on;
 
-    this.unitStates[key] = {
-      ...current,
-      on: nextOn,
-    };
-    this.cdr.markForCheck();
-
-    await this.sendActuatorCommand(this.selectedActuatorKey, nextOn ? 'turn_on' : 'turn_off', nextOn);
+    await this.sendActuatorCommand(this.selectedActuatorKey, index, nextOn ? 'turn_on' : 'turn_off', nextOn);
     await this.refreshActuatorState();
   }
 
@@ -293,7 +302,7 @@ export class RoomControlPageComponent implements OnInit {
   }
 
   setUnitValue(index: number, event: Event): void {
-    if (!this.selectedActuatorKey) return;
+    if (!this.selectedActuatorKey || !this.hasAssignedEmulator) return;
 
     const target = event.target as HTMLInputElement;
     const key = this.buildUnitKey(this.selectedActuatorKey, index);
@@ -307,10 +316,10 @@ export class RoomControlPageComponent implements OnInit {
   }
 
   async commitUnitTemperature(index: number): Promise<void> {
-    if (this.selectedActuatorKey !== 'minisplit') return;
+    if (this.selectedActuatorKey !== 'minisplit' || !this.hasAssignedEmulator) return;
 
     const value = this.getUnitValue(index);
-    await this.sendActuatorCommand('minisplit', 'set_temperature', value);
+    await this.sendActuatorCommand('minisplit', index, 'set_temperature', value);
     await this.refreshActuatorState();
   }
 getTemperaturePercent(value: number, min: number, max: number): number {
@@ -323,31 +332,26 @@ getTemperaturePercent(value: number, min: number, max: number): number {
   return Math.max(0, Math.min(100, percent));
 }
   areAllSelectedUnitsOn(): boolean {
-    if (!this.selectedActuatorKey || this.selectedUnits.length === 0) {
+    const units = this.getAllConfiguredUnits();
+    if (units.length === 0) {
       return false;
     }
 
-    return this.selectedUnits.every((unit) => this.isUnitOn(unit));
+    return units.every(({ type, index }) => this.getUnitState(type, index).on);
   }
 
   async toggleAllSelected(): Promise<void> {
-    if (!this.selectedActuatorKey) return;
+    if (!this.hasAssignedEmulator) return;
 
     const shouldTurnOff = this.areAllSelectedUnitsOn();
     const nextOn = !shouldTurnOff;
+    const units = this.getAllConfiguredUnits();
 
-    for (const unit of this.selectedUnits) {
-      const key = this.buildUnitKey(this.selectedActuatorKey, unit);
-      const current = this.unitStates[key] ?? { on: false, value: 24 };
-
-      this.unitStates[key] = {
-        ...current,
-        on: nextOn,
-      };
-    }
-    this.cdr.markForCheck();
-
-    await this.sendActuatorCommand(this.selectedActuatorKey, nextOn ? 'turn_on' : 'turn_off', nextOn);
+    await Promise.all(
+      units.map(({ type, index }) =>
+        this.sendActuatorCommand(type, index, nextOn ? 'turn_on' : 'turn_off', nextOn),
+      ),
+    );
     await this.refreshActuatorState();
   }
 
@@ -424,6 +428,11 @@ getTemperaturePercent(value: number, min: number, max: number): number {
   }
 
   private ensureSelectedActuator(): void {
+    if (!this.hasAssignedEmulator) {
+      this.selectedActuatorKey = null;
+      return;
+    }
+
     const selectedStillExists = this.availableActuators.some(
       (item) => item.key === this.selectedActuatorKey,
     );
@@ -434,7 +443,7 @@ getTemperaturePercent(value: number, min: number, max: number): number {
   }
 
   private ensureUnitStates(): void {
-    if (!this.room) return;
+    if (!this.room || !this.hasAssignedEmulator) return;
 
     const keys: ActuatorKey[] = ['minisplit', 'purifier', 'extractor'];
 
@@ -463,16 +472,32 @@ getTemperaturePercent(value: number, min: number, max: number): number {
     return `${type}-${index}`;
   }
 
+  private getAllConfiguredUnits(): Array<{ type: ActuatorKey; index: number }> {
+    const result: Array<{ type: ActuatorKey; index: number }> = [];
+    const types: ActuatorKey[] = ['minisplit', 'purifier', 'extractor'];
+
+    for (const type of types) {
+      const quantity = this.getActuatorQuantity(type);
+      for (let index = 1; index <= quantity; index++) {
+        result.push({ type, index });
+      }
+    }
+
+    return result;
+  }
+
   private async sendActuatorCommand(
     deviceType: ActuatorKey,
+    deviceIndex: number,
     action: 'turn_on' | 'turn_off' | 'set_temperature',
     value: boolean | number,
   ): Promise<void> {
-    if (!this.room) return;
+    if (!this.room || !this.hasAssignedEmulator) return;
 
     try {
       await this.apiClient.post(`/api/v1/rooms/${this.room.id}/actuators/${deviceType}/command`, {
         action,
+        deviceIndex,
         value,
         source: 'frontend',
       });
@@ -482,7 +507,7 @@ getTemperaturePercent(value: number, min: number, max: number): number {
   }
 
   private async refreshActuatorState(): Promise<void> {
-    if (!this.room) return;
+    if (!this.room || !this.hasAssignedEmulator) return;
 
     try {
       const response = await this.apiClient.get<ActuatorStateResponse>(`/api/v1/rooms/${this.room.id}/actuators/state`);
@@ -500,14 +525,17 @@ getTemperaturePercent(value: number, min: number, max: number): number {
     }
   }
 
-  private applyReportedState(type: ActuatorKey, reported: ActuatorSnapshot | undefined): void {
-    if (!reported || reported.isOn === null) {
+  private applyReportedState(type: ActuatorKey, reportedUnits: ActuatorSnapshot[] | undefined): void {
+    if (!reportedUnits) {
       return;
     }
 
-    const quantity = this.getActuatorQuantity(type);
-    for (let index = 1; index <= quantity; index++) {
-      const key = this.buildUnitKey(type, index);
+    for (const reported of reportedUnits) {
+      if (reported.isOn === null) {
+        continue;
+      }
+
+      const key = this.buildUnitKey(type, reported.deviceIndex);
       const current = this.unitStates[key] ?? { on: false, value: 24 };
 
       this.unitStates[key] = {
@@ -517,6 +545,12 @@ getTemperaturePercent(value: number, min: number, max: number): number {
           ? Number(reported.targetTemperature ?? current.value ?? 24)
           : current.value,
       };
+    }
+  }
+
+  private clearUnitStates(): void {
+    for (const key of Object.keys(this.unitStates)) {
+      delete this.unitStates[key];
     }
   }
 

@@ -18,5 +18,7 @@ export interface DashboardRoomOption {
 export interface DashboardEnvironmentViewModel {
   readonly rooms: readonly DashboardRoomOption[];
   readonly selectedRoomId: string | null;
+  readonly selectedRoomLabel: string | null;
+  readonly selectedRoomHasEmulator: boolean;
   readonly selectedState: DashboardEnvironmentState | null;
 }

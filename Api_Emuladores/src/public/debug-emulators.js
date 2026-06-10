@@ -108,16 +108,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const controlsSection = btn.closest('.controls-section');
       const roomId = controlsSection?.dataset.roomId;
       const emulatorId = controlsSection?.dataset.emulatorId;
+      const assignmentStatus = controlsSection?.dataset.assignmentStatus;
       const device = btn.dataset.device;
+      const deviceIndex = Number(btn.dataset.deviceIndex || 1);
       const action = btn.dataset.action;
       const value = btn.dataset.value;
       const resultEl = document.getElementById('result-' + emulatorId);
 
-      console.log('control clicked:', { roomId, emulatorId, device, action, value });
+      console.log('control clicked:', { roomId, emulatorId, device, deviceIndex, action, value });
 
       if (!roomId) {
         if (resultEl) {
-          resultEl.textContent = '⚠️ Sin emulador asignado para este room';
+          resultEl.textContent = assignmentStatus === 'free'
+            ? 'Emulador libre: aún no hay room de usuario asignada'
+            : 'Sin emulador asignado para este room';
           resultEl.className = 'control-result error';
         }
         return;
@@ -126,20 +130,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const jwt = localStorage.getItem('safeair.debug.jwt') || jwtInput?.value;
       if (!jwt || jwt.length < 10) {
         if (resultEl) {
-          resultEl.textContent = '⚠️ Token requerido para enviar comandos';
+          resultEl.textContent = 'Token requerido para enviar comandos';
           resultEl.className = 'control-result error';
         }
         return;
       }
 
       if (resultEl) {
-        resultEl.textContent = '⏳ Enviando...';
+        resultEl.textContent = 'Enviando...';
         resultEl.className = 'control-result';
       }
 
       // Body must match: {"action":"turn_on","value":true,"source":"debug-dashboard"}
       const body = {
         action,
+        deviceIndex,
         value: value !== undefined ? (value === 'true' ? true : value === 'false' ? false : parseInt(value)) : undefined,
         source: 'debug-dashboard'
       };
@@ -162,19 +167,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (res.ok) {
           if (resultEl) {
-            resultEl.textContent = '✅ OK ' + res.status + ': ' + (data.message || action);
+            resultEl.textContent = 'OK ' + res.status + ': ' + (data.message || action);
             resultEl.className = 'control-result success';
           }
         } else {
           if (resultEl) {
-            resultEl.textContent = '❌ Error ' + res.status + ': ' + (data.message || res.statusText);
+            resultEl.textContent = 'Error ' + res.status + ': ' + (data.error || data.message || res.statusText);
             resultEl.className = 'control-result error';
           }
         }
       } catch (e) {
         console.error('[DEBUG-EMULATORS] network error:', e);
         if (resultEl) {
-          resultEl.textContent = '❌ Red: ' + e.message;
+          resultEl.textContent = 'Red: ' + e.message;
           resultEl.className = 'control-result error';
         }
       }

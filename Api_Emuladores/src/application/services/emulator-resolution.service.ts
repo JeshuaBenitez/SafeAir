@@ -1,20 +1,21 @@
 import { AppError } from "../../shared/errors/app-error";
 import { env } from "../../shared/config/env";
 import { EmulatorRepository } from "../../infrastructure/repositories/emulator.repository";
-import { InstanceRepository } from "../../infrastructure/repositories/instance.repository";
-import { RoomRepository } from "../../infrastructure/repositories/room.repository";
 
 export class EmulatorResolutionService {
   constructor(
-    private readonly emulatorRepository: EmulatorRepository,
-    private readonly instanceRepository: InstanceRepository,
-    private readonly roomRepository: RoomRepository
+    private readonly emulatorRepository: EmulatorRepository
   ) {}
 
   async resolveOrProvision(externalId: string): Promise<{ roomId: string; emulatorExternalId: string }> {
     const existing = await this.emulatorRepository.findByExternalId(externalId);
     if (existing) {
       if (!existing.roomId) {
+        if (existing.status !== "online") {
+          existing.status = "online";
+          await existing.save();
+        }
+
         throw new AppError("Emulator has no assigned room", 409, "EMULATOR_UNASSIGNED");
       }
 
@@ -25,31 +26,15 @@ export class EmulatorResolutionService {
       throw new AppError("Unknown emulator", 404, "EMULATOR_NOT_FOUND");
     }
 
-    const instance = (await this.instanceRepository.findFirstActive()) ??
-      (await this.instanceRepository.create({
-        name: env.emulatorAutoInstanceName,
-        description: "Auto-provisioned for incoming emulator telemetry"
-      }));
-
-    const roomName = `${env.emulatorAutoRoomPrefix} ${externalId}`.trim();
-    const room = await this.roomRepository.create({ instanceId: instance.id, name: roomName });
-
-    if (env.emulatorAutoCreateDevices) {
-      await this.roomRepository.createDevice({ roomId: room.id, type: "minisplit", label: `Minisplit ${externalId}` });
-      await this.roomRepository.createDevice({ roomId: room.id, type: "purifier", label: `Purifier ${externalId}` });
-      await this.roomRepository.createDevice({ roomId: room.id, type: "extractor", label: `Extractor ${externalId}` });
-    }
-
     try {
-      const emulator = await this.emulatorRepository.create({ roomId: room.id, emulatorExternalId: externalId, status: "online" });
-      return { roomId: room.id, emulatorExternalId: emulator.emulatorExternalId };
+      await this.emulatorRepository.create({ roomId: null, emulatorExternalId: externalId, status: "online" });
     } catch {
       const raceWinner = await this.emulatorRepository.findByExternalId(externalId);
       if (raceWinner?.roomId) {
         return { roomId: raceWinner.roomId, emulatorExternalId: raceWinner.emulatorExternalId };
       }
-
-      throw new AppError("Unable to provision emulator", 500, "EMULATOR_PROVISIONING_FAILED");
     }
+
+    throw new AppError("Emulator registered as free but has no assigned room", 409, "EMULATOR_UNASSIGNED");
   }
 }
