@@ -54,11 +54,6 @@ export class RoomRepository {
 
   async delete(roomId: string): Promise<void> {
     const {
-      DeviceStateModel,
-      AlarmModel,
-      DeviceActionModel,
-      CycleMeasurementModel,
-      CycleModel,
       DeviceModel,
       RoomSetupDerivedModel,
       RoomSetupModel,
@@ -69,11 +64,6 @@ export class RoomRepository {
     const emulatorRepository = new EmulatorRepository();
 
     await emulatorRepository.releaseRoom(roomId);
-    await DeviceStateModel.destroy({ where: { roomId } });
-    await AlarmModel.destroy({ where: { roomId } });
-    await DeviceActionModel.destroy({ where: { roomId } });
-    await CycleMeasurementModel.destroy({ where: { roomId } });
-    await CycleModel.destroy({ where: { roomId } });
     await DeviceModel.destroy({ where: { roomId } });
     await RoomSetupDerivedModel.destroy({ where: { roomId } });
     await RoomSetupModel.destroy({ where: { roomId } });

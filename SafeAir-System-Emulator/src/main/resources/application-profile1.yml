@@ -16,7 +16,7 @@ mqtt:
 safeair:
   profile1:
     emulators:
-      - emulatorId: EMU-0001
+      - emulatorId: ${SAFEAIR_EMULATOR_ID_1:EMU-U001-R001}
         updateIntervalSec: 1
         roomSquareMeters: 35
         windowCount: 1
@@ -25,9 +25,16 @@ safeair:
         # Device types: 1=MiniSplit, 2=HumidifierPurifier, 3=AirExtractor
         deviceTypes: [1, 2, 3]
 
-      - emulatorId: EMU-0002
+      - emulatorId: ${SAFEAIR_EMULATOR_ID_2:EMU-U001-R002}
         updateIntervalSec: 2
         roomSquareMeters: 60
         windowCount: 3
         sensorTypes: [2, 4]
         deviceTypes: [1, 3]
+
+      - emulatorId: ${SAFEAIR_EMULATOR_ID_3:EMU-U001-R003}
+        updateIntervalSec: 2
+        roomSquareMeters: 40
+        windowCount: 2
+        sensorTypes: [1, 2, 3, 4]
+        deviceTypes: [1, 2, 3]

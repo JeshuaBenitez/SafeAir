@@ -67,7 +67,7 @@ export class AuthController {
           source: "api",
           event: "auth-login-success",
           message: `Login successful (OTP bypassed: demo mode)`,
-          details: { email, tokenPrefix: result.accessToken.substring(0, 20) + "..." }
+          details: { email }
         });
       }
       
@@ -153,4 +153,3 @@ export class AuthController {
     };
   }
 }
-

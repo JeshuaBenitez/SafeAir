@@ -25,7 +25,8 @@ export const API_CLIENT = new InjectionToken<ApiClientPort>('API_CLIENT');
 export function createApiClientFactory(httpClient: any): ApiClientPort {
   // This will be called by Angular with HttpClient already injected
   const client = new HttpClientAdapter(httpClient);
-  const baseUrl = environment.API_BASE_URL || 'http://localhost:3000';
+  const fallbackBaseUrl = environment.production ? '' : 'http://localhost:3000';
+  const baseUrl = environment.API_BASE_URL || fallbackBaseUrl;
   client.setBaseUrl(baseUrl);
   return client;
 }

@@ -19,6 +19,8 @@ import type {
 } from './api-client.port';
 import { ApiClientPort } from './api-client.port';
 
+const SESSION_STORAGE_KEY = 'safeair.auth.session';
+
 @Injectable({
   providedIn: 'root'
 })
@@ -204,6 +206,8 @@ export class HttpClientAdapter extends ApiClientPort {
    * Build HTTP headers with authorization and defaults
    */
   private buildHeaders(customHeaders?: Record<string, string>): HttpHeaders {
+    this.restoreAuthTokenFromStorage();
+
     let headers = new HttpHeaders({
       'Content-Type': 'application/json'
     });
@@ -221,6 +225,52 @@ export class HttpClientAdapter extends ApiClientPort {
     }
 
     return headers;
+  }
+
+  private restoreAuthTokenFromStorage(): void {
+    if (this.authToken) {
+      return;
+    }
+
+    const rawSession = localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!rawSession) {
+      return;
+    }
+
+    try {
+      const session = JSON.parse(rawSession) as {
+        accessToken?: unknown;
+        tokenType?: unknown;
+        expiresAt?: unknown;
+      };
+
+      if (
+        session.tokenType !== 'Bearer' ||
+        typeof session.accessToken !== 'string' ||
+        typeof session.expiresAt !== 'string' ||
+        new Date(session.expiresAt).getTime() <= Date.now()
+      ) {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+        return;
+      }
+
+      this.authToken = session.accessToken;
+    } catch {
+      localStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  }
+
+  private handleUnauthorized(error: HttpErrorResponse): void {
+    this.authToken = null;
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+
+    const requestUrl = error.url ?? '';
+    const isAuthEndpoint = requestUrl.includes('/api/v1/auth/');
+    const isAlreadyOnAuthPage = window.location.pathname.startsWith('/auth');
+
+    if (!isAuthEndpoint && !isAlreadyOnAuthPage) {
+      window.location.assign('/auth/login');
+    }
   }
 
   /**
@@ -241,6 +291,10 @@ export class HttpClientAdapter extends ApiClientPort {
    */
   private handleError(error: any): never {
     if (error instanceof HttpErrorResponse) {
+      if (error.status === 401) {
+        this.handleUnauthorized(error);
+      }
+
       const apiError: ApiClientError = {
         status: error.status,
         statusText: error.statusText,

@@ -76,6 +76,18 @@ document.addEventListener('DOMContentLoaded', () => {
   // ── JWT Input ─────────────────────────────────────────────────────────
   const jwtInput = document.getElementById('jwtToken');
   if (jwtInput) {
+    const persistJwt = () => {
+      const jwt = jwtInput.value.trim();
+      if (!jwt) {
+        localStorage.removeItem('safeair.debug.jwt');
+        clearDebugJwtCookie();
+        return;
+      }
+
+      localStorage.setItem('safeair.debug.jwt', jwt);
+      setDebugJwtCookie(jwt);
+    };
+
     const saved = localStorage.getItem('safeair.debug.jwt');
     if (saved) {
       jwtInput.value = saved;
@@ -85,15 +97,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
     }
-    jwtInput.addEventListener('change', () => {
-      const jwt = jwtInput.value.trim();
-      if (!jwt) {
-        localStorage.removeItem('safeair.debug.jwt');
-        clearDebugJwtCookie();
-      } else {
-        localStorage.setItem('safeair.debug.jwt', jwt);
-        setDebugJwtCookie(jwt);
+    jwtInput.addEventListener('input', persistJwt);
+    jwtInput.addEventListener('paste', () => {
+      setTimeout(persistJwt, 0);
+    });
+    jwtInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        persistJwt();
+        window.location.reload();
       }
+    });
+    jwtInput.addEventListener('change', () => {
+      persistJwt();
       window.location.reload();
     });
   }

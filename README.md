@@ -27,20 +27,19 @@ Rutas principales:
 - Estado debug: `http://localhost:3000/debug/status`
 - EMQX dashboard: `http://localhost:18083`
 
-## Modo Local All-In-One
+## Modo Local Base
 
-Este modo sirve para desarrollo y validación local en una sola máquina. Levanta:
+Este modo sirve para desarrollo y validación local en una sola máquina. Primero levanta solo la base operativa:
 
 - `db`
 - `mqtt`
 - `api`
 - `frontend`
-- `emulator-java`
 
 Comando:
 
 ```bash
-docker compose up -d --build
+docker compose --env-file .env.docker up --build -d db mqtt api frontend
 ```
 
 Verificación rápida:
@@ -49,6 +48,17 @@ Verificación rápida:
 docker compose ps
 curl http://localhost:3000/health
 ```
+
+Flujo funcional:
+
+1. Registrar usuario operador.
+2. Login y OTP.
+3. Crear de 1 a 3 habitaciones desde el frontend.
+4. Consultar los `emulatorExternalId` asignados.
+5. Copiar esos IDs a `SAFEAIR_EMULATOR_ID_1..3` en `.env.docker`.
+6. Levantar el emulador Java.
+
+El emulador no debe arrancar antes de que existan rooms con emulador asignado, porque la API ignora telemetría de emuladores libres.
 
 URLs esperadas:
 
@@ -70,6 +80,25 @@ docker compose logs -f frontend
 docker compose logs -f emulator-java
 docker compose restart api
 docker compose down
+```
+
+Levantar emulador despues de crear rooms:
+
+```bash
+docker compose --env-file .env.docker up -d emulator-java
+```
+
+Obtener IDs asignados para configurar `SAFEAIR_EMULATOR_ID_1..3`:
+
+```bash
+docker compose --env-file .env.docker exec -T db psql -U postgres -d safeair -P pager=off -c '
+SELECT u.email, r.name AS room_name, e."emulatorExternalId"
+FROM users u
+JOIN instances i ON i."userId" = u.id
+JOIN rooms r ON r."instanceId" = i.id
+LEFT JOIN emulators e ON e."roomId" = r.id
+ORDER BY u.email, r.name;
+'
 ```
 
 ## Persistencia
@@ -128,6 +157,7 @@ Emulador Java (`SafeAir-System-Emulator`):
 | `MQTT_PASSWORD` | Password MQTT opcional |
 | `MQTT_CONSOLE_LOG_ENABLED` | Logs MQTT en consola |
 | `SPRING_PROFILES_ACTIVE` | Perfil Spring, por ejemplo `profile1` |
+| `SAFEAIR_EMULATOR_ID_1..3` | IDs asignados a rooms creadas por el usuario; deben copiarse desde la BD/debug antes de levantar `emulator-java` |
 
 PostgreSQL:
 

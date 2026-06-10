@@ -20,7 +20,7 @@ export class DashboardRoomCardComponent implements OnChanges {
   imageUrl = 'assets/images/sala.png';
   isActive = false;
   statusLabel = 'Sin emulador asignado';
-  displayTemperature = '22°C';
+  displayTemperature = '--°C';
   actuatorsCount = 0;
 
   minisplitCount = 0;
@@ -64,10 +64,19 @@ export class DashboardRoomCardComponent implements OnChanges {
       this.extractorCount;
 
     this.isActive = this.room?.hasEmulator !== false;
-    this.statusLabel = this.isActive ? 'EMULADOR ASIGNADO' : 'SIN EMULADOR ASIGNADO';
+    const latestMetrics = this.room?.latestMetrics;
+    const hasTemperature = typeof latestMetrics?.temperature === 'number';
 
-    const temp = this.room?.temperature ?? 22 + (this.index % 4);
-    this.displayTemperature = this.isActive ? `${temp}°C` : '--°C';
+    if (!this.isActive) {
+      this.statusLabel = 'SIN EMULADOR ASIGNADO';
+      this.displayTemperature = '--°C';
+      return;
+    }
+
+    this.statusLabel = hasTemperature ? 'TELEMETRÍA ACTIVA' : 'ESPERANDO TELEMETRÍA';
+    this.displayTemperature = hasTemperature
+      ? `${Number(latestMetrics.temperature).toFixed(1)}°C`
+      : '--°C';
   }
 
   goToControl(): void {

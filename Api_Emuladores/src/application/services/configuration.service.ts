@@ -57,19 +57,14 @@ export class ConfigurationService {
     if (!emulator) {
       logSystem("No emulator assigned to room, looking for available emulator", { roomId });
 
-      const available = await this.emulatorRepository.findFirstAvailable();
-      if (!available) {
+      emulator = await this.emulatorRepository.assignFirstAvailableToRoom(roomId);
+      if (!emulator) {
         logError("system", "no-emulator-available", new Error(`No emulator available for room ${roomId}`));
         throw new AppError(
-          "No emulator available. Ensure EMU-0001 or EMU-0002 is registered in the emulators table.",
+          "No emulator available. Ensure the managed emulator pool has free online emulators.",
           503,
           "NO_EMULATOR_AVAILABLE"
         );
-      }
-
-      emulator = await this.emulatorRepository.assignToRoom(available.id, roomId);
-      if (!emulator) {
-        throw new AppError("Failed to assign emulator to room", 500, "ASSIGN_FAILED");
       }
 
       logSystem("Emulator assigned to room", {

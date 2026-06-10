@@ -4,7 +4,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/copy-public.js",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "seed": "node -r ts-node/register/transpile-only src/infrastructure/database/seeders/seed.ts",

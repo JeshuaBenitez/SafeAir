@@ -22,14 +22,14 @@ export class RoomService {
       throw new AppError("Instance not found", 404, "INSTANCE_NOT_FOUND");
     }
 
-    const roomCount = await this.instanceRepository.countRooms(input.instanceId);
-    if (roomCount >= 3) {
-      throw new AppError("Maximum 3 rooms per instance", 422, "MAX_ROOMS_REACHED");
+    const userRoomCount = await this.instanceRepository.countRoomsByUser(userId);
+    if (userRoomCount >= 3) {
+      throw new AppError("Maximum 3 rooms per user", 422, "MAX_ROOMS_REACHED");
     }
 
     const room = await this.roomRepository.create(input);
-    const available = await this.emulatorRepository.findFirstAvailable();
-    if (!available) {
+    const emulator = await this.emulatorRepository.assignFirstAvailableToRoom(room.id);
+    if (!emulator) {
       addLog({
         timestamp: new Date().toISOString(),
         level: "warn",
@@ -43,24 +43,23 @@ export class RoomService {
       return { id: room.id, emulatorExternalId: null, emulatorAssigned: false };
     }
 
-    const emulator = await this.emulatorRepository.assignToRoom(available.id, room.id);
     addLog({
       timestamp: new Date().toISOString(),
       level: "info",
       source: "api",
       event: "room-created-emulator-assigned",
-      message: `Room created and assigned to emulator ${emulator?.emulatorExternalId ?? available.emulatorExternalId}`,
+      message: `Room created and assigned to emulator ${emulator.emulatorExternalId}`,
       details: {
         roomId: room.id,
         roomName: room.name,
         userId,
-        emulatorExternalId: emulator?.emulatorExternalId ?? available.emulatorExternalId
+        emulatorExternalId: emulator.emulatorExternalId
       },
       roomId: room.id,
-      emulatorId: emulator?.emulatorExternalId ?? available.emulatorExternalId
+      emulatorId: emulator.emulatorExternalId
     });
 
-    return { id: room.id, emulatorExternalId: emulator?.emulatorExternalId ?? available.emulatorExternalId, emulatorAssigned: true };
+    return { id: room.id, emulatorExternalId: emulator.emulatorExternalId, emulatorAssigned: true };
   }
 
   async getById(roomId: string, userId?: string): Promise<unknown> {

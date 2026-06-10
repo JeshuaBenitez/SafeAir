@@ -6,8 +6,6 @@ services:
     image: postgres:16
     container_name: safeair-db
     restart: unless-stopped
-    env_file:
-      - ./.env.docker
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-safeair}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -18,7 +16,9 @@ services:
       - db_data:/var/lib/postgresql/data
       - ./Api_Emuladores/database/sql:/docker-entrypoint-initdb.d:Z
     networks:
-      - safeair-network
+      safeair-network:
+        aliases:
+          - postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
@@ -68,16 +68,17 @@ services:
       - ./.env.docker
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      DB_HOST: db
-      DB_PORT: 5432
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       MQTT_URL: ${MQTT_URL:-mqtt://mqtt:1883}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-safeair-api-local}
       BACKEND_BIND_HOST: ${API_HOST:-0.0.0.0}
       BACKEND_PORT: 3000
       PORT: 3000
-      # CORSovýnamic desde .env
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:8080}
-      # MODO DEMO - Omitir OTP
-      AUTH_SKIP_OTP: "true"
+      # CORS dinámico desde .env/.env.docker
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4200,http://localhost:8080,http://frontend:80}
+      # OTP habilitado por defecto. Para demos sin correo: AUTH_SKIP_OTP=true en .env.docker
+      AUTH_SKIP_OTP: ${AUTH_SKIP_OTP:-false}
     depends_on:
       db:
         condition: service_healthy
@@ -95,8 +96,8 @@ services:
     build:
       context: ./Frontend_SafeAir
       args:
-        # Por defecto conecta al API en la misma máquina
-        # Para LAN, cambiar a: --build-arg API_BASE_URL=http://192.168.x.x:3000
+        # Docker local: Nginx proxya /api hacia http://api:3000
+        # LAN/Tailscale: usar un host:puerto alcanzable desde el contenedor Nginx
         API_BASE_URL: ${API_BASE_URL:-api:3000}
     container_name: safeair-frontend
     restart: unless-stopped
@@ -112,6 +113,8 @@ services:
   # Emuladores - Dispositivos IoT simulados
   # =============================================
   emulator-java:
+    profiles:
+      - emulator
     build:
       context: ./SafeAir-System-Emulator
       dockerfile: Dockerfile
@@ -125,7 +128,10 @@ services:
       MQTT_USERNAME: ""
       MQTT_PASSWORD: ""
       MQTT_CONSOLE_LOG_ENABLED: "true"
-      # Perfil con 2 emuladores: EMU-0001 y EMU-0002
+      # Perfil local con 3 emuladores. Ajustar en .env.docker al usuario provisionado actual.
+      SAFEAIR_EMULATOR_ID_1: ${SAFEAIR_EMULATOR_ID_1:-EMU-U001-R001}
+      SAFEAIR_EMULATOR_ID_2: ${SAFEAIR_EMULATOR_ID_2:-EMU-U001-R002}
+      SAFEAIR_EMULATOR_ID_3: ${SAFEAIR_EMULATOR_ID_3:-EMU-U001-R003}
       SPRING_PROFILES_ACTIVE: profile1
     depends_on:
       mqtt:

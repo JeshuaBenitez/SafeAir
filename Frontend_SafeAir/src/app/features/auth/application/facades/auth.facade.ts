@@ -109,6 +109,7 @@ export class AuthFacade {
       this.resetSessionDerivedStateIfUserChanged(result.session.userId);
       this.authSessionStorage.persistSession(result.session);
       this.syncUserProfile(result.session);
+      this.dashboardMockState.refreshRooms();
 
       this.loginViewStateSubject.next({
         loading: false,
@@ -148,6 +149,7 @@ export class AuthFacade {
       this.resetSessionDerivedStateIfUserChanged(result.session.userId);
       this.authSessionStorage.persistSession(result.session);
       this.syncUserProfile(result.session);
+      this.dashboardMockState.refreshRooms();
 
       this.loginViewStateSubject.next({
         loading: false,

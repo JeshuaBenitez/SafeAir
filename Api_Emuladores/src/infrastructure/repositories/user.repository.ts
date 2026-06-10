@@ -17,4 +17,22 @@ export class UserRepository {
   async findById(id: string): Promise<UserModel | null> {
     return UserModel.findByPk(id);
   }
+
+  async countOperators(): Promise<number> {
+    return UserModel.count({ where: { role: "operator" } });
+  }
+
+  async getOperatorProvisioningIndex(userId: string): Promise<number | null> {
+    const operators = await UserModel.findAll({
+      attributes: ["id"],
+      where: { role: "operator" },
+      order: [
+        ["createdAt", "ASC"],
+        ["id", "ASC"]
+      ]
+    });
+
+    const index = operators.findIndex((user) => user.id === userId);
+    return index >= 0 ? index + 1 : null;
+  }
 }

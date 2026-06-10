@@ -79,8 +79,11 @@ export class DashboardEnvironmentMockService {
 
     for (const room of rooms) {
       if (environment.DASHBOARD_MODE === 'api') {
-        if (room.hasEmulator !== false && previousMap[room.id]) {
-          nextMap[room.id] = previousMap[room.id];
+        if (room.hasEmulator !== false) {
+          const seededState = this.createStateFromLatestMetrics(room, previousMap[room.id]);
+          if (seededState) {
+            nextMap[room.id] = seededState;
+          }
         }
       } else {
         nextMap[room.id] = previousMap[room.id] ?? this.createInitialState(room);
@@ -90,11 +93,17 @@ export class DashboardEnvironmentMockService {
     this.stateByRoomSubject.next(nextMap);
 
     const selectedRoomId = this.selectedRoomIdSubject.value;
-    if (selectedRoomId && nextMap[selectedRoomId]) {
+    if (selectedRoomId && rooms.some((room) => room.id === selectedRoomId)) {
+      if (environment.DASHBOARD_MODE === 'api') {
+        this.tick();
+      }
       return;
     }
 
     this.selectedRoomIdSubject.next(rooms[0]?.id ?? null);
+    if (environment.DASHBOARD_MODE === 'api') {
+      this.tick();
+    }
   }
 
   selectRoom(roomId: string): void {
@@ -223,6 +232,35 @@ export class DashboardEnvironmentMockService {
       co2History: this.seedHistory(co2Ppm, seed, 24),
       pm25History: this.seedHistory(pm25UgM3, seed + 7, 24),
       updatedAt: Date.now(),
+    };
+  }
+
+  private createStateFromLatestMetrics(
+    room: DashboardRoom,
+    previousState?: DashboardEnvironmentState,
+  ): DashboardEnvironmentState | null {
+    const metrics = room.latestMetrics;
+    if (!metrics) {
+      return previousState ?? null;
+    }
+
+    const co2History = previousState && Array.isArray(previousState.co2History)
+      ? this.pushHistory(previousState.co2History, metrics.co2)
+      : Array(10).fill(metrics.co2);
+
+    const pm25History = previousState && Array.isArray(previousState.pm25History)
+      ? this.pushHistory(previousState.pm25History, metrics.pm25)
+      : Array(10).fill(metrics.pm25);
+
+    return {
+      roomId: room.id,
+      temperatureC: metrics.temperature,
+      humidityPct: metrics.humidity,
+      co2Ppm: metrics.co2,
+      pm25UgM3: metrics.pm25,
+      co2History,
+      pm25History,
+      updatedAt: metrics.measuredAt ? new Date(metrics.measuredAt).getTime() : Date.now(),
     };
   }
 

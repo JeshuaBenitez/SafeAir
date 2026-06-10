@@ -72,14 +72,15 @@ function extractDebugToken(req: Request): string | null {
   return null;
 }
 
-function getDebugUserId(req: Request): string | null {
+function getDebugAuth(req: Request): { userId: string; role: string } | null {
   const token = extractDebugToken(req);
   if (!token) {
     return null;
   }
 
   try {
-    return verifyToken(token).sub;
+    const payload = verifyToken(token);
+    return { userId: payload.sub, role: payload.role };
   } catch {
     return null;
   }
@@ -117,13 +118,28 @@ debugRouter.get("/status", (req, res, next) => {
 });
 
 function buildDebugEmulatorView(req: Request) {
-  const userId = getDebugUserId(req);
-  return { userId };
+  const auth = getDebugAuth(req);
+  const explicitGlobal = req.query.scope === "global" || req.query.includePool === "true";
+  const global = Boolean(auth && auth.role === "admin" && explicitGlobal);
+  return { userId: auth?.userId ?? null, role: auth?.role ?? null, global };
+}
+
+async function getDebugEmulatorsForRequest(req: Request) {
+  const { userId, role, global } = buildDebugEmulatorView(req);
+  if (!userId) {
+    return { userId, role, global, emulatorsFromDb: null };
+  }
+
+  const emulatorsFromDb = global
+    ? await emulatorRepository.findAllGlobalDebug(userId)
+    : await emulatorRepository.findAllWithRoomDetails(userId);
+
+  return { userId, role, global, emulatorsFromDb };
 }
 
 // Get emulators dashboard as JSON
 debugRouter.get("/emulators", async (req, res) => {
-  const { userId } = buildDebugEmulatorView(req);
+  const { userId, role, global, emulatorsFromDb } = await getDebugEmulatorsForRequest(req);
   if (!userId) {
     res.status(401).json({
       count: 0,
@@ -135,8 +151,7 @@ debugRouter.get("/emulators", async (req, res) => {
 
   const emulatorsFromMemory = getEmulatorStates();
   const memoryMap = new Map(emulatorsFromMemory.map(e => [e.emulatorId, e]));
-  const emulatorsFromDb = await emulatorRepository.findAllWithRoomDetails(userId);
-  const emulators = await Promise.all(emulatorsFromDb.map(async (emuDb) => {
+  const emulators = await Promise.all((emulatorsFromDb ?? []).map(async (emuDb) => {
     const memoryState = emuDb.emulatorExternalId ? memoryMap.get(emuDb.emulatorExternalId) : undefined;
     const actuatorState = emuDb.assignmentStatus === "assigned" && emuDb.roomId
       ? await container.metricsQueryService.actuatorState(emuDb.roomId) as { actuators?: unknown }
@@ -157,23 +172,23 @@ debugRouter.get("/emulators", async (req, res) => {
     };
   }));
 
-  res.status(200).json({ count: emulators.length, emulators });
+  res.status(200).json({ count: emulators.length, mode: global ? "global-admin" : "user", role, emulators });
 });
 
 // Get emulators dashboard as HTML - combines PostgreSQL config + memory telemetry
 debugRouter.get("/emulators/html", async (req, res) => {
   try {
-    const { userId } = buildDebugEmulatorView(req);
+    const { userId, global, emulatorsFromDb } = await getDebugEmulatorsForRequest(req);
 
     // Get real-time state from memory (telemetry)
     const emulatorsFromMemory = getEmulatorStates();
     const memoryMap = new Map(emulatorsFromMemory.map(e => [e.emulatorId, e]));
 
     // Get user-owned rooms and their emulator assignment from PostgreSQL
-    const emulatorsFromDb = userId ? await emulatorRepository.findAllWithRoomDetails(userId) : [];
+    const dbRows = emulatorsFromDb ?? [];
 
     // Combine both sources
-    const combinedEmulators = await Promise.all(emulatorsFromDb.map(async (emuDb) => {
+    const combinedEmulators = await Promise.all(dbRows.map(async (emuDb) => {
       const memoryState = emuDb.emulatorExternalId ? memoryMap.get(emuDb.emulatorExternalId) : undefined;
       const actuatorState = emuDb.assignmentStatus === "assigned" && emuDb.roomId
         ? await container.metricsQueryService.actuatorState(emuDb.roomId) as { actuators?: unknown }
@@ -199,7 +214,7 @@ debugRouter.get("/emulators/html", async (req, res) => {
       };
     }));
 
-    const html = generateEmulatorsHtml(combinedEmulators, { authRequired: !userId });
+    const html = generateEmulatorsHtml(combinedEmulators, { authRequired: !userId, global });
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.status(200).send(html);
   } catch (err) {
@@ -210,7 +225,7 @@ debugRouter.get("/emulators/html", async (req, res) => {
 
 // ── Emulators dashboard HTML generator ──────────────────────────────────────
 
-function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolean }): string {
+function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolean; global: boolean }): string {
   const emulatorCards = emulators.map((emu, index) => {
     const cardId = emu.emulatorId || `room-${emu.roomId || index}`;
     const safeCardId = escapeHtml(cardId);
@@ -454,8 +469,9 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     <div class="header-left">
       <h1>SafeAir Emulators Dashboard</h1>
       <div class="summary">
-        <span>Rooms del usuario: ${emulators.filter((emu) => emu.ownedByUser).length}</span>
-        <span>Emuladores libres: ${emulators.filter((emu) => emu.assignmentStatus === "free").length}</span>
+        <span>${options.global ? "Modo admin global" : "Modo operador"}</span>
+        <span>Rooms visibles: ${emulators.filter((emu) => emu.roomId).length}</span>
+        ${options.global ? `<span>Emuladores libres: ${emulators.filter((emu) => emu.assignmentStatus === "free").length}</span>` : ""}
         <span>Actualizado: <span id="clock">${localNow()}</span></span>
         <span>Zona: América/México (CDMX)</span>
       </div>

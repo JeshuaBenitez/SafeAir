@@ -15,6 +15,8 @@ COPY src ./src
 # Also copy public folder (for debug assets)
 COPY src/public ./src/public
 
+COPY scripts ./scripts
+
 # Build TypeScript to JavaScript
 RUN npm run build
 

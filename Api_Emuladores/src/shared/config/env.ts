@@ -1,7 +1,21 @@
 import dotenv from "dotenv";
 import { z } from "zod";
 
-dotenv.config();
+const dotenvResult = dotenv.config();
+const dotenvLoadedKeys = Object.keys(dotenvResult.parsed ?? {}).length;
+
+function normalizeBoolean(value: string | undefined, defaultValue = false): boolean {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  return value.trim().toLowerCase() === "true";
+}
+
+function optionalNonEmpty(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
 
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -49,8 +63,10 @@ if (!parsed.success) {
 }
 
 export const env = {
+  configSource: dotenvLoadedKeys > 0 ? ".env + process.env" : "process.env",
   nodeEnv: parsed.data.NODE_ENV,
-  authSkipOtp: parsed.data.AUTH_SKIP_OTP === "true",
+  authSkipOtp: normalizeBoolean(parsed.data.AUTH_SKIP_OTP),
+  authSkipOtpRaw: parsed.data.AUTH_SKIP_OTP,
   port: parsed.data.PORT,
   apiPrefix: parsed.data.API_PREFIX,
   apiHost: parsed.data.API_HOST,
@@ -63,10 +79,10 @@ export const env = {
   dbName: parsed.data.DB_NAME,
   dbUser: parsed.data.DB_USER,
   dbPassword: parsed.data.DB_PASSWORD,
-  dbLogging: parsed.data.DB_LOGGING === "true",
-  dbSyncOnStartup: parsed.data.DB_SYNC_ON_STARTUP === "true",
-  dbSsl: parsed.data.DB_SSL === "true",
-  dbSslRejectUnauthorized: parsed.data.DB_SSL_REJECT_UNAUTHORIZED === "true",
+  dbLogging: normalizeBoolean(parsed.data.DB_LOGGING),
+  dbSyncOnStartup: normalizeBoolean(parsed.data.DB_SYNC_ON_STARTUP),
+  dbSsl: normalizeBoolean(parsed.data.DB_SSL),
+  dbSslRejectUnauthorized: normalizeBoolean(parsed.data.DB_SSL_REJECT_UNAUTHORIZED),
   mqttUrl: parsed.data.MQTT_URL,
   mqttUsername: parsed.data.MQTT_USERNAME,
   mqttPassword: parsed.data.MQTT_PASSWORD,
@@ -77,11 +93,11 @@ export const env = {
   emulatorMissingStrategy: parsed.data.EMULATOR_MISSING_STRATEGY,
   emulatorAutoInstanceName: parsed.data.EMULATOR_AUTO_INSTANCE_NAME,
   emulatorAutoRoomPrefix: parsed.data.EMULATOR_AUTO_ROOM_PREFIX,
-  emulatorAutoCreateDevices: parsed.data.EMULATOR_AUTO_CREATE_DEVICES === "true",
-  smtpHost: parsed.data.SMTP_HOST,
+  emulatorAutoCreateDevices: normalizeBoolean(parsed.data.EMULATOR_AUTO_CREATE_DEVICES, true),
+  smtpHost: optionalNonEmpty(parsed.data.SMTP_HOST),
   smtpPort: parsed.data.SMTP_PORT,
-  smtpSecure: parsed.data.SMTP_SECURE === "true",
-  smtpUser: parsed.data.SMTP_USER,
-  smtpPass: parsed.data.SMTP_PASS,
+  smtpSecure: normalizeBoolean(parsed.data.SMTP_SECURE),
+  smtpUser: optionalNonEmpty(parsed.data.SMTP_USER),
+  smtpPass: optionalNonEmpty(parsed.data.SMTP_PASS),
   smtpFrom: parsed.data.SMTP_FROM
 };

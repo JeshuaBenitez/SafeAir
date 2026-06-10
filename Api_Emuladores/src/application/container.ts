@@ -21,6 +21,7 @@ import { MetricsQueryService } from "./services/metrics-query.service";
 import { RoomService } from "./services/room.service";
 import { RuleEvaluationService } from "./services/rule-evaluation.service";
 import { TelemetryIngestionService } from "./services/telemetry-ingestion.service";
+import { UserProvisioningService } from "./services/user-provisioning.service";
 
 const userRepository = new UserRepository();
 const instanceRepository = new InstanceRepository();
@@ -34,10 +35,11 @@ const configurationRepository = new ConfigurationRepository();
 const roomSetupDomainService = new RoomSetupDomainService();
 
 const emailService = new EmailService();
-const authService = new AuthService(userRepository, emailService);
 const instanceService = new InstanceService(instanceRepository);
 const emulatorResolutionService = new EmulatorResolutionService(emulatorRepository);
 const configurationService = new ConfigurationService(configurationRepository, emulatorRepository, roomRepository);
+const userProvisioningService = new UserProvisioningService(userRepository, instanceRepository);
+const authService = new AuthService(userRepository, emailService, userProvisioningService);
 const roomService = new RoomService(instanceRepository, roomRepository, emulatorRepository, roomSetupDomainService, configurationService);
 const cycleService = new CycleService(cycleRepository);
 const metricsQueryService = new MetricsQueryService(cycleRepository, deviceActionRepository, deviceStateRepository, roomRepository);

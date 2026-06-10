@@ -9,6 +9,11 @@ export class InstanceService {
       throw new AppError("Instance name is required", 422, "INSTANCE_NAME_REQUIRED");
     }
 
+    const active = await this.instanceRepository.findFirstActive(userId);
+    if (active) {
+      return { id: active.id };
+    }
+
     const instance = await this.instanceRepository.create({ ...input, userId });
     return { id: instance.id };
   }

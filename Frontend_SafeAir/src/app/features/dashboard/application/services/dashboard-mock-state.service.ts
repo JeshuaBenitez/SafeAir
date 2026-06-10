@@ -41,9 +41,7 @@ export class DashboardMockStateService {
 
   readonly rooms$ = this.roomsSubject.asObservable();
 
-  constructor(private readonly authSessionStorage: AuthSessionStorageService) {
-    this.refreshRooms();
-  }
+  constructor(private readonly authSessionStorage: AuthSessionStorageService) {}
 
   getRoomCount(): number {
     return this.roomsSubject.value.length;
@@ -92,7 +90,11 @@ export class DashboardMockStateService {
       const normalizedName = draft.name.trim();
 
       // 1. Crear cuarto en API
-      const roomResponse = await this.apiClient.post<{ id: string }>('/api/v1/rooms', {
+      const roomResponse = await this.apiClient.post<unknown, {
+        id: string;
+        emulatorAssigned?: boolean;
+        emulatorExternalId?: string | null;
+      }>('/api/v1/rooms', {
         instanceId,
         name: normalizedName,
       } as any);
@@ -174,6 +176,7 @@ export class DashboardMockStateService {
         id: roomId,
         name: normalizedName,
         designation: normalizedName,
+        hasEmulator: roomResponse.data.emulatorAssigned !== false,
         areaM2: draft.areaM2,
         windowsCount: draft.windowsCount,
         imageSrc: this.resolveDashboardImage(normalizedName),
@@ -220,6 +223,11 @@ export class DashboardMockStateService {
 
     if (environment.DASHBOARD_MODE === 'api') {
       this.roomsSubject.next([]);
+      if (!this.authSessionStorage.getSession()) {
+        this.currentInstanceId = null;
+        return;
+      }
+
       this.loadRoomsFromApi()
         .then((rooms) => {
           this.roomsSubject.next(rooms);
@@ -234,6 +242,11 @@ export class DashboardMockStateService {
 
   private async getOrCreateInstanceId(createIfMissing = true): Promise<string | null> {
     this.resetCachedInstanceIfUserChanged();
+
+    if (!this.authSessionStorage.getSession()) {
+      this.currentInstanceId = null;
+      return null;
+    }
 
     if (this.currentInstanceId) {
       return this.currentInstanceId;
@@ -279,7 +292,7 @@ export class DashboardMockStateService {
         return [];
       }
 
-      return instanceDetailResponse.data.rooms.map((room: any): DashboardRoom => {
+      const rooms = await Promise.all(instanceDetailResponse.data.rooms.map(async (room: any): Promise<DashboardRoom> => {
         const setup = room.setup || {
           windowCount: 0,
           minisplitCount: 1,
@@ -309,21 +322,58 @@ export class DashboardMockStateService {
           },
         };
 
+        const latestMetrics = await this.loadLatestMetrics(room.id, Boolean(room.emulator));
+
         return {
           id: room.id,
           name: room.name,
           designation: room.name,
           hasEmulator: Boolean(room.emulator),
+          emulatorExternalId: room.emulator?.emulatorExternalId ?? null,
+          latestMetrics,
           areaM2: Math.round(areaM2),
           windowsCount: setup.windowCount,
           imageSrc: this.resolveDashboardImage(room.name),
           controlImageSrc: 'assets/images/3d.png',
           actuators,
         };
-      });
+      }));
+
+      return rooms;
     } catch (error) {
       console.error('Error al consultar habitaciones de API:', error);
       return [];
+    }
+  }
+
+  private async loadLatestMetrics(roomId: string, hasEmulator: boolean): Promise<DashboardRoom['latestMetrics']> {
+    if (!hasEmulator) {
+      return null;
+    }
+
+    try {
+      const response = await this.apiClient.get<any>(`/api/v1/rooms/${roomId}/metrics/current`);
+      const metrics = response.data;
+
+      if (
+        !metrics ||
+        typeof metrics.temperature !== 'number' ||
+        typeof metrics.humidity !== 'number' ||
+        typeof metrics.co2 !== 'number' ||
+        typeof metrics.pm25 !== 'number'
+      ) {
+        return null;
+      }
+
+      return {
+        temperature: metrics.temperature,
+        humidity: metrics.humidity,
+        co2: metrics.co2,
+        pm25: metrics.pm25,
+        measuredAt: metrics.measuredAt,
+      };
+    } catch {
+      return null;
     }
   }
 

@@ -10,6 +10,31 @@ import { mapTelemetryPayload } from "./infrastructure/mappers/telemetry.mapper";
 import { mapActuatorStatePayload } from "./infrastructure/mappers/actuator-state.mapper";
 import { ensureSeedEmulatorPool, runDatabaseSeed } from "./infrastructure/database/seeders/seed-fn";
 import { logMqttReceived, logError, updateEmulatorState, addLog } from "./application/services/debug-logs.service";
+import { AppError } from "./shared/errors/app-error";
+
+const UNASSIGNED_EMULATOR_LOG_INTERVAL_MS = 30_000;
+const unassignedEmulatorWarnings = new Map<string, { lastLoggedAt: number; suppressed: number }>();
+
+function logUnassignedEmulatorTelemetry(emulatorId: string): void {
+  const now = Date.now();
+  const current = unassignedEmulatorWarnings.get(emulatorId) ?? { lastLoggedAt: 0, suppressed: 0 };
+
+  if (now - current.lastLoggedAt < UNASSIGNED_EMULATOR_LOG_INTERVAL_MS) {
+    unassignedEmulatorWarnings.set(emulatorId, {
+      lastLoggedAt: current.lastLoggedAt,
+      suppressed: current.suppressed + 1
+    });
+    return;
+  }
+
+  logger.warn("Telemetry ignored for unassigned emulator", {
+    emulatorId,
+    suppressedSinceLastLog: current.suppressed,
+    reason: "EMULATOR_UNASSIGNED"
+  });
+
+  unassignedEmulatorWarnings.set(emulatorId, { lastLoggedAt: now, suppressed: 0 });
+}
 
 export async function startServer(): Promise<void> {
   try {
@@ -20,6 +45,24 @@ export async function startServer(): Promise<void> {
       source: "system",
       event: "server-startup",
       message: "SafeAir API starting up"
+    });
+
+    logger.info("Runtime configuration loaded", {
+      configSource: env.configSource,
+      nodeEnv: env.nodeEnv,
+      authSkipOtp: env.authSkipOtp,
+      authSkipOtpRaw: env.authSkipOtpRaw,
+      smtpConfigured: Boolean(env.smtpHost),
+      smtpMode: env.smtpHost ? "smtp" : "fallback",
+      smtpHost: env.smtpHost ?? null,
+      smtpPort: env.smtpPort,
+      smtpSecure: env.smtpSecure,
+      smtpFrom: env.smtpFrom,
+      dbHost: env.dbHost,
+      dbPort: env.dbPort,
+      mqttUrl: env.mqttUrl,
+      emulatorMissingStrategy: env.emulatorMissingStrategy,
+      corsOrigins: env.corsOrigins
     });
 
     await connectDatabase();
@@ -148,6 +191,11 @@ export async function startServer(): Promise<void> {
           );
         }
       } catch (error: unknown) {
+        if (error instanceof AppError && error.code === "EMULATOR_UNASSIGNED") {
+          logUnassignedEmulatorTelemetry(message.emulatorId);
+          return;
+        }
+
         logger.error("Telemetry ingestion from MQTT failed", error);
       }
     });
@@ -181,6 +229,11 @@ export async function startServer(): Promise<void> {
           }
         );
       } catch (error: unknown) {
+        if (error instanceof AppError && error.code === "EMULATOR_UNASSIGNED") {
+          logUnassignedEmulatorTelemetry(message.emulatorId);
+          return;
+        }
+
         logger.error("Actuator state ingestion from MQTT failed", error);
         logError("mqtt", "actuator-state-failed", error);
       }
@@ -190,10 +243,10 @@ export async function startServer(): Promise<void> {
 
     const app = createApp();
 
-    // Bind to BACKEND_BIND_HOST (default: 0.0.0.0 for all interfaces)
+    // Bind to API_HOST/BACKEND_BIND_HOST (default: 0.0.0.0 for all interfaces)
     // This allows connections from other devices in multi-device setup
-    // Can be overridden via BACKEND_BIND_HOST environment variable
-    const bindHost = process.env.BACKEND_BIND_HOST || '0.0.0.0';
+    // BACKEND_BIND_HOST is kept for compatibility with older local env files.
+    const bindHost = process.env.BACKEND_BIND_HOST || env.apiHost;
     const port = env.port;
 
     const server = app.listen(port, bindHost, () => {

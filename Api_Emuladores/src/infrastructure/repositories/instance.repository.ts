@@ -44,6 +44,19 @@ export class InstanceRepository {
     return RoomModel.count({ where: { instanceId } });
   }
 
+  async countRoomsByUser(userId: string): Promise<number> {
+    return RoomModel.count({
+      include: [
+        {
+          model: InstanceModel,
+          as: "instance",
+          where: { userId },
+          required: true
+        }
+      ]
+    });
+  }
+
   async totalArea(instanceId: string): Promise<number> {
     const result = await RoomSetupDerivedModel.findOne({
       attributes: [[fn("SUM", col("roomArea")), "totalArea"]],
