@@ -26,13 +26,18 @@ class HumiditySimulationTest {
     }
 
     @Test
-    void humidity_movesTowardExternal_withNoActuator() {
+    void humidity_deviceEffectStops_whenHumidifierOff() {
         Room room = stdRoom();
+        room.humidity(30.0); // below target 50.0 so humidifier would push up if ON
+        // With humidifier OFF, device effect does NOT apply.
+        // Only environmental exchange applies (no noise with zeroNoise stub).
         double before = room.humidity();
         helper.simulateEnvironment(room, null, null, null, zeroNoise);
         double after = room.humidity();
-        // external=55, internal=45 → should move up
-        assertTrue(after > before);
+        // Device effect (kHum * (50 - hum)) is 0 when humidifier is OFF
+        // Only env exchange applies, but extHum=55, intHum=30 → deltaHEnv > 0
+        assertTrue(after > before,
+                "Humidity env exchange continues even when humidifier is OFF");
     }
 
     @Test

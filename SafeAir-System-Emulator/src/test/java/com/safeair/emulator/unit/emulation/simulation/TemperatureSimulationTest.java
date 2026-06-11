@@ -26,14 +26,16 @@ class TemperatureSimulationTest {
     }
 
     @Test
-    void temperature_convergesToExternal_withNoActuators_zeroNoise() {
+    void temperature_frozen_whenMiniSplitOff() {
         Room room = stdRoom(24.0);
-        // With zero noise and no actuator, temperature must move toward external (28.0)
+        // With no miniSplit, temperature must freeze completely.
         double before = room.temperature();
-        helper.simulateEnvironment(room, null, null, null, zeroNoise);
+        for (int i = 0; i < 10; i++) {
+            helper.simulateEnvironment(room, null, null, null, zeroNoise);
+        }
         double after = room.temperature();
-        assertTrue(after > before,
-                "Temperature should move toward external temperature (28.0) from 24.0");
+        assertEquals(before, after, 1e-10,
+                "Temperature must stay frozen when miniSplit is OFF");
     }
 
     @Test
