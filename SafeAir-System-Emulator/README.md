@@ -95,7 +95,10 @@ El emulador puede configurarse mediante variables de entorno:
 | `MQTT_TLS_ENABLED` | `false` | Usar TLS |
 | `MQTT_USERNAME` | - | Usuario MQTT (opcional) |
 | `MQTT_PASSWORD` | - | Contraseña MQTT (opcional) |
-| `MQTT_CONSOLE_LOG_ENABLED` | `true` | Habilitar logs en consola |
+| `MQTT_CONSOLE_LOG_ENABLED` | `false` | Habilitar logs de telemetria en consola |
+| `SAFEAIR_CLI_SUPPRESS_TELEMETRY_OUTPUT` | `true` | Mantener limpia la CLI sin apagar MQTT |
+| `SAFEAIR_MQTT_LOG_LEVEL` | `WARN` | Nivel del paquete MQTT (`DEBUG` muestra publicaciones exitosas) |
+| `SPRING_DEBUG` | `false` | Habilitar diagnostico de auto-configuracion de Spring |
 | `SPRING_PROFILES_ACTIVE` | `production` | Perfil de Spring |
 
 ### Perfiles Disponibles

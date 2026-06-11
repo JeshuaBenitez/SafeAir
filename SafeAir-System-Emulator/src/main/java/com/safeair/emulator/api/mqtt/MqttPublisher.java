@@ -33,7 +33,7 @@ public class MqttPublisher extends SendInfo implements Subject {
   public void send(Object data) {
     if (data instanceof TelemetryPayload payload && telemetryAdapter != null) {
       String topic = MqttTopics.telemetryTopic(payload.emulatorId());
-      LOGGER.info("Publishing telemetry to topic {}", topic);
+      LOGGER.debug("Publishing telemetry to topic {}", topic);
       publish(topic, telemetryAdapter.toProtobuf(payload));
       return;
     }
@@ -62,9 +62,9 @@ public class MqttPublisher extends SendInfo implements Subject {
     boolean published = connector.publish(topic, bytes, qos);
     if (published) {
       if (topic.endsWith("/telemetry")) {
-        LOGGER.info("Published telemetry successfully topic={} broker={}", topic, connector.brokerUrl());
+        LOGGER.debug("Published telemetry successfully topic={} broker={}", topic, connector.brokerUrl());
       } else {
-        LOGGER.info("Published MQTT message successfully topic={} broker={}", topic, connector.brokerUrl());
+        LOGGER.debug("Published MQTT message successfully topic={} broker={}", topic, connector.brokerUrl());
       }
     } else {
       LOGGER.error("Failed to publish MQTT message topic={} broker={}", topic, connector.brokerUrl());

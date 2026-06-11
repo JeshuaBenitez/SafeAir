@@ -26,3 +26,9 @@ safeair:
   cli:
     enabled: ${SAFEAIR_CLI_ENABLED:true}
     suppress-telemetry-output: ${SAFEAIR_CLI_SUPPRESS_TELEMETRY_OUTPUT:false}
+
+logging:
+  level:
+    com.safeair.emulator.api.mqtt: ${SAFEAIR_MQTT_LOG_LEVEL:WARN}
+    com.safeair.emulator.api.mqtt.ConsolePublisher: ${SAFEAIR_MQTT_CONSOLE_PUBLISHER_LOG_LEVEL:${SAFEAIR_MQTT_LOG_LEVEL:WARN}}
+    com.safeair.emulator.api.mqtt.MqttPublisher: ${SAFEAIR_MQTT_PUBLISHER_LOG_LEVEL:${SAFEAIR_MQTT_LOG_LEVEL:WARN}}

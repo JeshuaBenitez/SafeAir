@@ -11,7 +11,7 @@ mqtt:
     enabled: ${MQTT_TLS_ENABLED:false}
   username: ${MQTT_USERNAME:}
   password: ${MQTT_PASSWORD:}
-  console-log-enabled: ${MQTT_CONSOLE_LOG_ENABLED:true}
+  console-log-enabled: ${MQTT_CONSOLE_LOG_ENABLED:false}
 
 safeair:
   profile1:

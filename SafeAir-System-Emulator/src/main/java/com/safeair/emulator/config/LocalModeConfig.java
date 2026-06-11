@@ -73,11 +73,9 @@ public class LocalModeConfig {
             MqttProperties properties,
             @Value("${safeair.cli.suppress-telemetry-output:false}") boolean suppressTelemetryOutput) {
         List<SendInfo> channels;
-        if (suppressTelemetryOutput) {
-            channels = List.of();
-        } else if (properties.isConsoleLogEnabled() && properties.isEnabled()) {
+        if (!suppressTelemetryOutput && properties.isConsoleLogEnabled() && properties.isEnabled()) {
             channels = List.of(consolePublisher, mqttPublisher);
-        } else if (properties.isConsoleLogEnabled()) {
+        } else if (!suppressTelemetryOutput && properties.isConsoleLogEnabled()) {
             channels = List.of(consolePublisher);
         } else if (properties.isEnabled()) {
             channels = List.of(mqttPublisher);

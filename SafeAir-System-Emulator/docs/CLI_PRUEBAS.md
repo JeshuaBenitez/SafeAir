@@ -36,8 +36,8 @@ mvn spring-boot:run
 Notas:
 
 - `MQTT_ENABLED=false` permite probar la CLI sin depender del broker MQTT.
-- `SAFEAIR_CLI_SUPPRESS_TELEMETRY_OUTPUT=true` evita que la telemetria automatica invada la terminal mientras usas la CLI y desactiva su despacho automatico durante esa sesion.
-- `MQTT_CONSOLE_LOG_ENABLED=true` deja visible la salida normal del emulador.
+- `SAFEAIR_CLI_SUPPRESS_TELEMETRY_OUTPUT=true` evita que la telemetria automatica invada la terminal mientras usas la CLI sin apagar la publicacion MQTT.
+- `MQTT_CONSOLE_LOG_ENABLED=true` deja habilitado el canal de consola si necesitas diagnostico explicito.
 - Si quieres probar con broker real, cambia `MQTT_ENABLED=true` y define `MQTT_HOST` y `MQTT_PORT`.
 
 ## 3. Ejecutar el escenario de prueba dedicado para la CLI
@@ -155,7 +155,7 @@ SAFEAIR_CLI_SUPPRESS_TELEMETRY_OUTPUT=true
 
 Comportamiento:
 
-- `true`: no imprime la telemetria automatica en consola y tampoco intenta publicarla por MQTT durante esa ejecucion.
+- `true`: no imprime la telemetria automatica en consola; la publicacion MQTT sigue activa si `MQTT_ENABLED=true`.
 - `false`: mantiene el comportamiento normal de telemetria.
 
 Ejemplo minimo:
