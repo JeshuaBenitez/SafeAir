@@ -25,3 +25,7 @@ export function emulatorScenarioTopic(emulatorId: string): string {
 export function emulatorCommandTopic(emulatorId: string): string {
   return `safeair/${emulatorId}/commands`;
 }
+
+export function emulatorProvisionTopic(): string {
+  return "safeair/emulator-control/provision";
+}

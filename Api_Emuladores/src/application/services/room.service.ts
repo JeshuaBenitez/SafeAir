@@ -2,21 +2,37 @@ import { AppError } from "../../shared/errors/app-error";
 import { EmulatorRepository } from "../../infrastructure/repositories/emulator.repository";
 import { InstanceRepository } from "../../infrastructure/repositories/instance.repository";
 import { RoomRepository } from "../../infrastructure/repositories/room.repository";
+import { UserRepository } from "../../infrastructure/repositories/user.repository";
 import { RoomSetupDomainService } from "../../domain/services/room-setup-domain.service";
 import { ConfigurationService } from "./configuration.service";
+import { EmulatorProvisioningService } from "./emulator-provisioning.service";
 import { addLog } from "./debug-logs.service";
 import type { RoomSetupInput } from "../../domain/types/room.types";
+
+const MAX_SUPPORTED_OPERATORS = 10;
+const MAX_ROOMS_PER_USER = 3;
 
 export class RoomService {
   constructor(
     private readonly instanceRepository: InstanceRepository,
     private readonly roomRepository: RoomRepository,
     private readonly emulatorRepository: EmulatorRepository,
+    private readonly userRepository: UserRepository,
     private readonly roomSetupDomainService: RoomSetupDomainService,
-    private readonly configurationService: ConfigurationService
+    private readonly configurationService: ConfigurationService,
+    private readonly emulatorProvisioningService: EmulatorProvisioningService
   ) {}
 
-  async create(input: { instanceId?: string; name: string }, userId: string): Promise<{ id: string; emulatorExternalId: string | null; emulatorAssigned: boolean }> {
+  async create(input: { instanceId?: string; name: string }, userId: string): Promise<{ id: string; emulatorExternalId: string; emulatorAssigned: boolean; emulatorProvisionRequested: boolean }> {
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "api",
+      event: "room.create.started",
+      message: `Creating room "${input.name}"`,
+      details: { userId, instanceId: input.instanceId ?? null }
+    });
+
     const instance = input.instanceId
       ? await this.instanceRepository.findById(input.instanceId, userId)
       : await this.findOrCreateDefaultInstance(userId);
@@ -26,31 +42,28 @@ export class RoomService {
     }
 
     const userRoomCount = await this.instanceRepository.countRoomsByUser(userId);
-    if (userRoomCount >= 3) {
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "api",
+      event: "room.create.limit-checked",
+      message: `User has ${userRoomCount}/${MAX_ROOMS_PER_USER} rooms before creation`,
+      details: { userId, userRoomCount, maxRoomsPerUser: MAX_ROOMS_PER_USER }
+    });
+
+    if (userRoomCount >= MAX_ROOMS_PER_USER) {
       throw new AppError("Maximum 3 rooms per user", 422, "MAX_ROOMS_REACHED");
     }
 
+    const emulatorExternalId = await this.nextEmulatorExternalId(userId);
     const room = await this.roomRepository.create({ instanceId: instance.id, name: input.name });
-    const emulator = await this.emulatorRepository.assignFirstAvailableToRoom(room.id);
-    if (!emulator) {
-      addLog({
-        timestamp: new Date().toISOString(),
-        level: "warn",
-        source: "api",
-        event: "room-created-without-emulator",
-        message: `Room created without an available emulator: "${room.name}"`,
-        details: { roomId: room.id, roomName: room.name, userId },
-        roomId: room.id
-      });
-
-      return { id: room.id, emulatorExternalId: null, emulatorAssigned: false };
-    }
+    const emulator = await this.emulatorRepository.createOrAssignToRoom({ roomId: room.id, emulatorExternalId });
 
     addLog({
       timestamp: new Date().toISOString(),
       level: "info",
       source: "api",
-      event: "room-created-emulator-assigned",
+      event: "room.create.emulator-assigned",
       message: `Room created and assigned to emulator ${emulator.emulatorExternalId}`,
       details: {
         roomId: room.id,
@@ -62,7 +75,38 @@ export class RoomService {
       emulatorId: emulator.emulatorExternalId
     });
 
-    return { id: room.id, emulatorExternalId: emulator.emulatorExternalId, emulatorAssigned: true };
+    try {
+      await this.emulatorProvisioningService.requestProvision({
+        emulatorExternalId: emulator.emulatorExternalId,
+        roomId: room.id,
+        userId
+      });
+
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "info",
+        source: "api",
+        event: "room.create.completed",
+        message: `Room "${room.name}" created with emulator ${emulator.emulatorExternalId}`,
+        details: { roomId: room.id, roomName: room.name, userId, emulatorExternalId: emulator.emulatorExternalId },
+        roomId: room.id,
+        emulatorId: emulator.emulatorExternalId
+      });
+
+      return { id: room.id, emulatorExternalId: emulator.emulatorExternalId, emulatorAssigned: true, emulatorProvisionRequested: true };
+    } catch (error) {
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "error",
+        source: "api",
+        event: "room.create.failed",
+        message: error instanceof Error ? error.message : String(error),
+        details: { roomId: room.id, roomName: room.name, userId, emulatorExternalId: emulator.emulatorExternalId },
+        roomId: room.id,
+        emulatorId: emulator.emulatorExternalId
+      });
+      throw new AppError("Room created but emulator provision request failed", 503, "EMULATOR_PROVISION_FAILED");
+    }
   }
 
   async list(userId?: string): Promise<unknown[]> {
@@ -201,5 +245,24 @@ export class RoomService {
       name: "Default Instance",
       description: "Created automatically for CLI room management"
     });
+  }
+
+  private async nextEmulatorExternalId(userId: string): Promise<string> {
+    const operatorIndex = await this.userRepository.getOperatorProvisioningIndex(userId);
+    if (!operatorIndex || operatorIndex > MAX_SUPPORTED_OPERATORS) {
+      throw new AppError("User is outside the supported provisioning range", 422, "USER_LIMIT_REACHED");
+    }
+
+    const userCode = String(operatorIndex).padStart(3, "0");
+    const assignedIds = new Set(await this.emulatorRepository.findAssignedExternalIdsByUser(userId));
+
+    for (let roomIndex = 1; roomIndex <= MAX_ROOMS_PER_USER; roomIndex += 1) {
+      const candidate = `EMU-U${userCode}-R${String(roomIndex).padStart(3, "0")}`;
+      if (!assignedIds.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    throw new AppError("Maximum 3 rooms per user", 422, "MAX_ROOMS_REACHED");
   }
 }

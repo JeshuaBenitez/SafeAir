@@ -72,12 +72,12 @@ export class DashboardViewPageComponent {
 
   // Variables para el modo reporte
   startDate = this.formatDateForInput(new Date());
-  startHour = '09';
+  startHour = '00';
   startMinute = '00';
 
   endDate = this.formatDateForInput(new Date());
-  endHour = '10';
-  endMinute = '00';
+  endHour = '23';
+  endMinute = '59';
 
   rangeError = '';
 
@@ -118,11 +118,11 @@ export class DashboardViewPageComponent {
   openReportMode(): void {
     // Inicializar fechas con valores por defecto
     this.startDate = this.formatDateForInput(new Date());
-    this.startHour = '09';
+    this.startHour = '00';
     this.startMinute = '00';
     this.endDate = this.formatDateForInput(new Date());
-    this.endHour = '10';
-    this.endMinute = '00';
+    this.endHour = '23';
+    this.endMinute = '59';
     this.rangeError = '';
     this.selectedRangeSummary = this.buildRangeSummary();
 
@@ -269,19 +269,12 @@ export class DashboardViewPageComponent {
       return 'La fecha y hora de fin debe ser mayor que la fecha y hora de inicio.';
     }
 
-    // Calcular diferencia en minutos
-    const diffMs = endDateTime.getTime() - startDateTime.getTime();
-    const diffMinutes = diffMs / (60 * 1000);
-
-    // Validar mínimo 20 minutos
-    if (diffMinutes < 20) {
-      return 'El rango mínimo permitido es de 20 minutos.';
-    }
-
-    // Validar máximo 30 días (límite razonable)
-    const maxMinutes = 30 * 24 * 60;
-    if (diffMinutes > maxMinutes) {
-      return `El rango máximo permitido es de 30 días (${maxMinutes} minutos).`;
+    // Validar máximo 15 días calendario incluyendo fecha inicial y final.
+    const startDay = this.buildFullDateTimeObj(this.startDate, '00', '00');
+    const endDay = this.buildFullDateTimeObj(this.endDate, '00', '00');
+    const selectedDays = Math.floor((endDay.getTime() - startDay.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    if (selectedDays > 15) {
+      return 'El rango máximo permitido es de 15 días.';
     }
 
     return '';

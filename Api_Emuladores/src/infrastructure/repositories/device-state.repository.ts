@@ -1,3 +1,4 @@
+import { UniqueConstraintError } from "sequelize";
 import { DeviceStateModel } from "../database/models";
 
 type ActuatorType = "minisplit" | "purifier" | "extractor";
@@ -22,34 +23,47 @@ export class DeviceStateRepository {
     });
 
     if (!existing) {
-      await DeviceStateModel.create({
-        roomId: data.roomId,
-        emulatorId: data.emulatorId,
-        deviceType: data.deviceType,
-        deviceIndex: data.deviceIndex,
-        isOn: data.isOn,
-        mode: data.mode ?? null,
-        targetTemperature: data.targetTemperature ?? null,
-        ambientTemperature: data.ambientTemperature ?? null,
-        ambientHumidity: data.ambientHumidity ?? null,
-        reportedAt: data.reportedAt,
-        source: data.source,
-        payload: data.payload
-      });
-      return;
+      try {
+        await DeviceStateModel.create({
+          roomId: data.roomId,
+          emulatorId: data.emulatorId,
+          deviceType: data.deviceType,
+          deviceIndex: data.deviceIndex,
+          isOn: data.isOn,
+          mode: data.mode ?? null,
+          targetTemperature: data.targetTemperature ?? null,
+          ambientTemperature: data.ambientTemperature ?? null,
+          ambientHumidity: data.ambientHumidity ?? null,
+          reportedAt: data.reportedAt,
+          source: data.source,
+          payload: data.payload
+        });
+        return;
+      } catch (error: unknown) {
+        if (!(error instanceof UniqueConstraintError)) {
+          throw error;
+        }
+      }
     }
 
-    existing.emulatorId = data.emulatorId;
-    existing.deviceIndex = data.deviceIndex;
-    existing.isOn = data.isOn;
-    existing.mode = data.mode ?? null;
-    existing.targetTemperature = data.targetTemperature ?? null;
-    existing.ambientTemperature = data.ambientTemperature ?? null;
-    existing.ambientHumidity = data.ambientHumidity ?? null;
-    existing.reportedAt = data.reportedAt;
-    existing.source = data.source;
-    existing.payload = data.payload;
-    await existing.save();
+    const row = existing ?? await DeviceStateModel.findOne({
+      where: { roomId: data.roomId, deviceType: data.deviceType, deviceIndex: data.deviceIndex }
+    });
+    if (!row) {
+      throw new Error("Device state upsert failed after unique constraint retry");
+    }
+
+    row.emulatorId = data.emulatorId;
+    row.deviceIndex = data.deviceIndex;
+    row.isOn = data.isOn;
+    row.mode = data.mode ?? null;
+    row.targetTemperature = data.targetTemperature ?? null;
+    row.ambientTemperature = data.ambientTemperature ?? null;
+    row.ambientHumidity = data.ambientHumidity ?? null;
+    row.reportedAt = data.reportedAt;
+    row.source = data.source;
+    row.payload = data.payload;
+    await row.save();
   }
 
   async latestByRoom(roomId: string): Promise<Partial<Record<ActuatorType, DeviceStateModel[]>>> {

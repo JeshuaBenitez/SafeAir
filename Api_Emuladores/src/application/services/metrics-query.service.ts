@@ -2,6 +2,7 @@ import { CycleRepository } from "../../infrastructure/repositories/cycle.reposit
 import { DeviceActionRepository } from "../../infrastructure/repositories/device-action.repository";
 import { DeviceStateRepository } from "../../infrastructure/repositories/device-state.repository";
 import { RoomRepository } from "../../infrastructure/repositories/room.repository";
+import { ReportDateRangeService } from "./report-date-range.service";
 
 type ActuatorType = "minisplit" | "purifier" | "extractor";
 
@@ -19,7 +20,8 @@ export class MetricsQueryService {
   }
 
   async history(roomId: string, from?: string, to?: string): Promise<unknown[]> {
-    const measurements = await this.cycleRepository.getHistory(roomId, from ? new Date(from) : undefined, to ? new Date(to) : undefined);
+    const { startAt, endExclusive } = ReportDateRangeService.normalize(from, to);
+    const measurements = await this.cycleRepository.getHistory(roomId, startAt, endExclusive);
     const devices = await this.roomRepository.listDevices(roomId);
 
     return measurements.map((m) => {

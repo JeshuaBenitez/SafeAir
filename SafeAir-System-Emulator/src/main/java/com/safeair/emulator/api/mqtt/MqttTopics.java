@@ -6,6 +6,7 @@ public final class MqttTopics {
     public static final String ACTUATOR_STATE_TEMPLATE = "safeair/%s/actuator-state";
     public static final String EMULATOR_COMMANDS_TEMPLATE = "safeair/%s/commands";
     public static final String EMULATOR_SCENARIO_TEMPLATE = "safeair/%s/scenario";
+    public static final String EMULATOR_PROVISION_TOPIC = "safeair/emulator-control/provision";
     public static final String GLOBAL_CONFIG_TOPIC = "safeair/config";
     public static final String EMULATOR_CONFIG_WILDCARD = "safeair/+/config";
     public static final String ACTUATOR_STATE_WILDCARD = "safeair/+/actuator-state";
@@ -41,5 +42,9 @@ public final class MqttTopics {
 
     public static boolean isGlobalConfigTopic(String topic) {
         return GLOBAL_CONFIG_TOPIC.equals(topic);
+    }
+
+    public static boolean isEmulatorProvisionTopic(String topic) {
+        return EMULATOR_PROVISION_TOPIC.equals(topic);
     }
 }

@@ -1,24 +1,38 @@
-import { Op } from "sequelize";
+import { Op, UniqueConstraintError } from "sequelize";
 import { CycleMeasurementModel, CycleModel } from "../database/models";
 
 export class CycleRepository {
   async openOrCreate(roomId: string): Promise<CycleModel> {
-    const open = await CycleModel.findOne({
-      where: { roomId, status: "open" },
-      order: [["cycleNumber", "DESC"]]
-    });
-
+    const open = await this.findOpen(roomId);
     if (open) {
       return open;
     }
 
     const latest = await CycleModel.findOne({ where: { roomId }, order: [["cycleNumber", "DESC"]] });
 
-    return CycleModel.create({
-      roomId,
-      cycleNumber: latest ? latest.cycleNumber + 1 : 1,
-      status: "open",
-      startedAt: new Date()
+    try {
+      return await CycleModel.create({
+        roomId,
+        cycleNumber: latest ? latest.cycleNumber + 1 : 1,
+        status: "open",
+        startedAt: new Date()
+      });
+    } catch (error: unknown) {
+      if (error instanceof UniqueConstraintError) {
+        const concurrentOpen = await this.findOpen(roomId);
+        if (concurrentOpen) {
+          return concurrentOpen;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  private async findOpen(roomId: string): Promise<CycleModel | null> {
+    return CycleModel.findOne({
+      where: { roomId, status: "open" },
+      order: [["cycleNumber", "DESC"]]
     });
   }
 
@@ -63,19 +77,19 @@ export class CycleRepository {
     return CycleMeasurementModel.findOne({ where: { roomId }, order: [["measuredAt", "DESC"]] });
   }
 
-  async getHistory(roomId: string, from?: Date, to?: Date): Promise<CycleMeasurementModel[]> {
+  async getHistory(roomId: string, from?: Date, endExclusive?: Date): Promise<CycleMeasurementModel[]> {
     const measuredAtRange: Record<symbol, Date> = {};
     if (from) {
       measuredAtRange[Op.gte] = from;
     }
-    if (to) {
-      measuredAtRange[Op.lte] = to;
+    if (endExclusive) {
+      measuredAtRange[Op.lt] = endExclusive;
     }
 
     return CycleMeasurementModel.findAll({
       where: {
         roomId,
-        ...(from || to ? { measuredAt: measuredAtRange } : {})
+        ...(from || endExclusive ? { measuredAt: measuredAtRange } : {})
       },
       order: [["measuredAt", "DESC"]],
       limit: 500
