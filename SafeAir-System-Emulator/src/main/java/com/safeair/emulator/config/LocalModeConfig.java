@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -69,10 +70,20 @@ public class LocalModeConfig {
             TelemetryQueue queue,
             ConsolePublisher consolePublisher,
             MqttPublisher mqttPublisher,
-            MqttProperties properties) {
-        List<SendInfo> channels = properties.isConsoleLogEnabled()
-                ? List.of(consolePublisher, mqttPublisher)
-                : List.of(mqttPublisher);
+            MqttProperties properties,
+            @Value("${safeair.cli.suppress-telemetry-output:false}") boolean suppressTelemetryOutput) {
+        List<SendInfo> channels;
+        if (suppressTelemetryOutput) {
+            channels = List.of();
+        } else if (properties.isConsoleLogEnabled() && properties.isEnabled()) {
+            channels = List.of(consolePublisher, mqttPublisher);
+        } else if (properties.isConsoleLogEnabled()) {
+            channels = List.of(consolePublisher);
+        } else if (properties.isEnabled()) {
+            channels = List.of(mqttPublisher);
+        } else {
+            channels = List.of();
+        }
         return new TelemetryDispatcher(queue, channels);
     }
 
