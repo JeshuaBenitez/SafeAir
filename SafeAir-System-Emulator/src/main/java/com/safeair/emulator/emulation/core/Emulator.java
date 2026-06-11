@@ -109,6 +109,85 @@ public class Emulator {
         this.activeEmulatorCount = count;
     }
 
+    public synchronized String applyScenario(String scenario) {
+        ensureRoomReady();
+        String normalized = scenario == null ? "" : scenario.trim().toLowerCase();
+        switch (normalized) {
+            case "normal" -> {
+                room.temperature(24.0);
+                room.humidity(45.0);
+                room.co2(500.0);
+                room.pm25(10.0);
+                room.externalTemperature(28.0);
+                room.externalHumidity(55.0);
+                room.externalCo2(420.0);
+                room.externalPm25(12.0);
+            }
+            case "hot-room" -> {
+                room.temperature(32.0);
+                room.externalTemperature(38.0);
+            }
+            case "poor-air" -> {
+                room.co2(950.0);
+                room.pm25(85.0);
+                room.externalCo2(900.0);
+                room.externalPm25(80.0);
+            }
+            case "high-humidity" -> {
+                room.humidity(76.0);
+                room.externalHumidity(85.0);
+            }
+            case "high-co2" -> {
+                room.co2(1200.0);
+                room.externalCo2(1000.0);
+            }
+            default -> {
+                return "unsupported_scenario";
+            }
+        }
+
+        LOGGER.info("[{}] Scenario applied: {}", emulatorId, normalized);
+        return "ok";
+    }
+
+    public synchronized String applyBehaviorCommand(String action, String value) {
+        ensureRoomReady();
+        String normalized = action == null ? "" : action.trim().toLowerCase();
+        switch (normalized) {
+            case "set_temperature" -> room.temperature(DomainValidators.clamp(parseDouble(value, room.temperature()), DomainConstants.TEMP_MIN, DomainConstants.TEMP_MAX));
+            case "set_humidity" -> room.humidity(DomainValidators.clamp(parseDouble(value, room.humidity()), DomainConstants.HUMIDITY_MIN, DomainConstants.HUMIDITY_MAX));
+            case "set_co2" -> room.co2(Math.max(DomainConstants.CO2_MIN, parseDouble(value, room.co2())));
+            case "set_pm25" -> room.pm25(Math.max(DomainConstants.PM25_MIN, parseDouble(value, room.pm25())));
+            case "pause" -> stop();
+            case "resume" -> start();
+            default -> {
+                return "unsupported_command";
+            }
+        }
+
+        LOGGER.info("[{}] Behavior command applied: {}={}", emulatorId, normalized, value);
+        return "ok";
+    }
+
+    public synchronized void emitTelemetryNow() {
+        ensureRoomReady();
+        sendData(collectData(), 0);
+    }
+
+    private void ensureRoomReady() {
+        if (room != null && simulationEngine != null) {
+            return;
+        }
+
+        applySetup(new DtoSetup(
+                emulatorId,
+                5,
+                35,
+                1,
+                new int[]{1, 2, 3, 4},
+                new int[]{1, 2, 3}));
+    }
+
     /**
      * Apply a configuration command received via MQTT.
      * 

@@ -6,12 +6,26 @@ export async function syncModels(): Promise<void> {
   logger.info("[Database] Synchronizing models with database schema (alter: true)...");
   // Always run alter: true so new columns (like otpCode, otpExpiresAt) are auto-generated on Render
   await sequelize.sync({ alter: true });
+  await ensureUserEnabledColumn();
   await sequelize.getQueryInterface().changeColumn("emulators", "roomId", {
     type: DataTypes.UUID,
     allowNull: true
   });
   await dropLegacyDeviceStateUniqueIndex();
   logger.info("[Database] Database synchronization completed successfully.");
+}
+
+async function ensureUserEnabledColumn(): Promise<void> {
+  const queryInterface = sequelize.getQueryInterface();
+  const usersTable = await queryInterface.describeTable("users");
+  if (!usersTable.enabled) {
+    await queryInterface.addColumn("users", "enabled", {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true
+    });
+    logger.info("[Database] Added users.enabled column");
+  }
 }
 
 async function dropLegacyDeviceStateUniqueIndex(): Promise<void> {

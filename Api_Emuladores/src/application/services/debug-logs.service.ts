@@ -390,6 +390,10 @@ function generateLogsHtml(logs: LogEntry[]): string {
     .auto-refresh input { accent-color: #238636; }
     .summary { display: flex; gap: 20px; margin-bottom: 20px; font-size: 13px; color: #8b949e; flex-wrap: wrap; }
     .global-notice { margin: -6px 0 18px; padding: 12px 14px; border: 1px solid #9e6a03; border-radius: 8px; background: rgba(158, 106, 3, 0.16); color: #f0d08a; font-size: 13px; line-height: 1.45; }
+    .debug-status { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 8px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 13px; }
+    .debug-status.error { display: block; border-color: #da3633; background: rgba(218, 54, 51, 0.12); color: #ffb4ad; }
+    .debug-status.success { display: block; border-color: #238636; background: rgba(35, 134, 54, 0.12); color: #b4f1b4; }
+    .debug-status.info { display: block; border-color: #1f6feb; background: rgba(31, 111, 235, 0.12); color: #b9d8ff; }
     .table-wrap { background: #161b22; border-radius: 8px; overflow: hidden; border: 1px solid #30363d; }
     table { width: 100%; border-collapse: collapse; }
     th { background: #21262d; padding: 12px; text-align: left; font-weight: 600; color: #8b949e; }
@@ -433,6 +437,7 @@ function generateLogsHtml(logs: LogEntry[]): string {
   <div class="global-notice">
     Esta vista muestra logs globales del sistema, incluyendo telemetría de emuladores como EMU-0001 y EMU-0002. No implica que esos eventos pertenezcan al usuario o room autenticado en el frontend.
   </div>
+  <div class="debug-status" id="debugStatus" role="status" aria-live="polite"></div>
   <div class="table-wrap">
     <table>
       <thead>

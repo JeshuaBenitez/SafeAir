@@ -47,7 +47,14 @@ export class EmulatorRepository {
   }
 
   async assignToRoom(emulatorId: string, roomId: string): Promise<EmulatorModel | null> {
-    const emulator = await EmulatorModel.findByPk(emulatorId);
+    const emulator = await EmulatorModel.findOne({
+      where: {
+        [Op.or]: [
+          { id: emulatorId },
+          { emulatorExternalId: emulatorId }
+        ]
+      }
+    });
     if (!emulator) {
       return null;
     }
@@ -110,6 +117,66 @@ export class EmulatorRepository {
 
   async findAllWithRooms(): Promise<EmulatorModel[]> {
     return EmulatorModel.findAll({
+      include: [
+        {
+          model: RoomModel,
+          as: "room",
+          required: false,
+          include: [
+            {
+              model: InstanceModel,
+              as: "instance",
+              required: false,
+              attributes: ["id", "userId", "name"]
+            }
+          ]
+        }
+      ],
+      order: [["createdAt", "ASC"]]
+    });
+  }
+
+  async findAssigned(): Promise<EmulatorModel[]> {
+    return EmulatorModel.findAll({
+      where: { roomId: { [Op.ne]: null } },
+      include: [
+        {
+          model: RoomModel,
+          as: "room",
+          required: false,
+          include: [
+            {
+              model: InstanceModel,
+              as: "instance",
+              required: false,
+              attributes: ["id", "userId", "name"]
+            }
+          ]
+        }
+      ],
+      order: [["createdAt", "ASC"]]
+    });
+  }
+
+  async findAssignedToUser(userId: string): Promise<EmulatorModel[]> {
+    return EmulatorModel.findAll({
+      where: { roomId: { [Op.ne]: null } },
+      include: [
+        {
+          model: RoomModel,
+          as: "room",
+          required: true,
+          include: [
+            {
+              model: InstanceModel,
+              as: "instance",
+              where: { userId },
+              required: true,
+              attributes: ["id", "userId", "name"]
+            }
+          ]
+        }
+      ],
       order: [["createdAt", "ASC"]]
     });
   }

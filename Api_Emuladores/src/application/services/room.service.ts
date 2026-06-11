@@ -16,8 +16,11 @@ export class RoomService {
     private readonly configurationService: ConfigurationService
   ) {}
 
-  async create(input: { instanceId: string; name: string }, userId: string): Promise<{ id: string; emulatorExternalId: string | null; emulatorAssigned: boolean }> {
-    const instance = await this.instanceRepository.findById(input.instanceId, userId);
+  async create(input: { instanceId?: string; name: string }, userId: string): Promise<{ id: string; emulatorExternalId: string | null; emulatorAssigned: boolean }> {
+    const instance = input.instanceId
+      ? await this.instanceRepository.findById(input.instanceId, userId)
+      : await this.findOrCreateDefaultInstance(userId);
+
     if (!instance) {
       throw new AppError("Instance not found", 404, "INSTANCE_NOT_FOUND");
     }
@@ -27,7 +30,7 @@ export class RoomService {
       throw new AppError("Maximum 3 rooms per user", 422, "MAX_ROOMS_REACHED");
     }
 
-    const room = await this.roomRepository.create(input);
+    const room = await this.roomRepository.create({ instanceId: instance.id, name: input.name });
     const emulator = await this.emulatorRepository.assignFirstAvailableToRoom(room.id);
     if (!emulator) {
       addLog({
@@ -62,6 +65,10 @@ export class RoomService {
     return { id: room.id, emulatorExternalId: emulator.emulatorExternalId, emulatorAssigned: true };
   }
 
+  async list(userId?: string): Promise<unknown[]> {
+    return this.roomRepository.findAll({ userId });
+  }
+
   async getById(roomId: string, userId?: string): Promise<unknown> {
     const room = await this.roomRepository.findById(roomId, userId);
     if (!room) {
@@ -71,7 +78,7 @@ export class RoomService {
     return room;
   }
 
-  async update(roomId: string, input: { name?: string }, userId: string): Promise<void> {
+  async update(roomId: string, input: { name?: string }, userId?: string): Promise<void> {
     const room = await this.roomRepository.findById(roomId, userId);
     if (!room) {
       throw new AppError("Room not found", 404, "ROOM_NOT_FOUND");
@@ -145,7 +152,7 @@ export class RoomService {
     }
   }
 
-  async getSetup(roomId: string, userId: string): Promise<unknown> {
+  async getSetup(roomId: string, userId?: string): Promise<unknown> {
     const room = await this.roomRepository.findById(roomId, userId);
     if (!room) {
       throw new AppError("Room not found", 404, "ROOM_NOT_FOUND");
@@ -157,7 +164,7 @@ export class RoomService {
     };
   }
 
-  async listDevices(roomId: string, userId: string): Promise<unknown[]> {
+  async listDevices(roomId: string, userId?: string): Promise<unknown[]> {
     await this.getById(roomId, userId);
     return this.roomRepository.listDevices(roomId);
   }
@@ -174,12 +181,25 @@ export class RoomService {
     return { id: device.id };
   }
 
-  async delete(roomId: string, userId: string): Promise<void> {
+  async delete(roomId: string, userId?: string): Promise<void> {
     const room = await this.roomRepository.findById(roomId, userId);
     if (!room) {
       throw new AppError("Room not found", 404, "ROOM_NOT_FOUND");
     }
 
     await this.roomRepository.delete(roomId);
+  }
+
+  private async findOrCreateDefaultInstance(userId: string) {
+    const instance = await this.instanceRepository.findFirstActive(userId);
+    if (instance) {
+      return instance;
+    }
+
+    return this.instanceRepository.create({
+      userId,
+      name: "Default Instance",
+      description: "Created automatically for CLI room management"
+    });
   }
 }

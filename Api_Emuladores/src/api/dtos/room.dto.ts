@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 export const createRoomSchema = z.object({
-  instanceId: z.string().uuid(),
+  instanceId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
+  userEmail: z.string().email().optional(),
   name: z.string().min(2).max(100)
 });
 

@@ -7,6 +7,7 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-public.js",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
+    "cli": "ts-node src/cli/safeairctl.ts",
     "seed": "node -r ts-node/register/transpile-only src/infrastructure/database/seeders/seed.ts",
     "clean-users": "node -r ts-node/register/transpile-only src/infrastructure/database/seeders/clean-users.ts",
     "emulator": "ts-node-dev --respawn --transpile-only src/emulator.ts",

@@ -7,6 +7,10 @@ import { createDeviceSchema, createRoomSchema, updateRoomSchema, upsertRoomSetup
 const controller = new RoomController();
 export const roomRouter = Router();
 
+roomRouter.get("/", authMiddleware, (req, res, next) => {
+  controller.list(req, res).catch(next);
+});
+
 roomRouter.post("/", authMiddleware, validateBody(createRoomSchema), (req, res, next) => {
   controller.create(req, res).catch(next);
 });
@@ -16,6 +20,10 @@ roomRouter.get("/:id", authMiddleware, (req, res, next) => {
 });
 
 roomRouter.put("/:id", authMiddleware, validateBody(updateRoomSchema), (req, res, next) => {
+  controller.update(req, res).catch(next);
+});
+
+roomRouter.patch("/:id", authMiddleware, validateBody(updateRoomSchema), (req, res, next) => {
   controller.update(req, res).catch(next);
 });
 
@@ -42,4 +50,3 @@ roomRouter.get("/:id/actions/history", authMiddleware, (req, res, next) => {
 roomRouter.delete("/:id", authMiddleware, (req, res, next) => {
   controller.delete(req, res).catch(next);
 });
-

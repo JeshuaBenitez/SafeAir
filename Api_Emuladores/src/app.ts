@@ -1,5 +1,6 @@
 import cors from "cors";
 import express, { type Express } from "express";
+import { existsSync } from "fs";
 import helmet from "helmet";
 import path from "path";
 import { env } from "./shared/config/env";
@@ -9,6 +10,31 @@ import { notFoundMiddleware } from "./api/middlewares/not-found.middleware";
 import { errorMiddleware } from "./api/middlewares/error.middleware";
 import { v1Router } from "./api/routes/v1";
 import { debugRouter } from "./api/routes/debug.routes";
+
+function resolveDebugAssetsPath(): string {
+  const sourcePublicPath = path.resolve(process.cwd(), "src", "public");
+  const rootPublicPath = path.resolve(process.cwd(), "public");
+  const distPublicPath = path.resolve(__dirname, "..", "public");
+  const adjacentPublicPath = path.resolve(__dirname, "public");
+  const isRunningFromSource = path.basename(__dirname) === "src";
+  const candidates = isRunningFromSource
+    ? [sourcePublicPath, rootPublicPath, distPublicPath, adjacentPublicPath]
+    : [rootPublicPath, distPublicPath, sourcePublicPath, adjacentPublicPath];
+
+  const selected = candidates.find((candidate) =>
+    existsSync(path.join(candidate, "debug-emulators.js")) &&
+    existsSync(path.join(candidate, "debug-logs.js"))
+  ) ?? candidates.find((candidate) => existsSync(candidate)) ?? rootPublicPath;
+
+  console.info(`[DebugAssets] Serving debug assets from ${selected}`);
+  return selected;
+}
+
+function setNoStoreHeaders(res: express.Response): void {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+}
 
 export function createApp(): Express {
   const app = express();
@@ -26,15 +52,23 @@ export function createApp(): Express {
     res.status(200).json({ status: "ok" });
   });
 
-  // Serve static debug assets (JS files)
-  // These are served from /debug/assets/* path
-  // In production: files are in /app/public (copied from src/public)
-  // In development: files are in src/public (TypeScript excludes this from build)
-  const publicPath = path.join(__dirname, "..", "public");
+  const publicPath = resolveDebugAssetsPath();
+  app.use("/debug/assets", (_req, res, next) => {
+    setNoStoreHeaders(res);
+    next();
+  });
   app.use("/debug/assets", express.static(publicPath, {
-    maxAge: "1h",
-    etag: true,
-    index: false
+    etag: false,
+    fallthrough: false,
+    index: false,
+    lastModified: false,
+    maxAge: 0,
+    setHeaders: (res, filePath) => {
+      setNoStoreHeaders(res);
+      if (filePath.endsWith(".js")) {
+        res.setHeader("Content-Type", "application/javascript; charset=utf-8");
+      }
+    }
   }));
 
   // Debug endpoints (accessible in development/demo mode)

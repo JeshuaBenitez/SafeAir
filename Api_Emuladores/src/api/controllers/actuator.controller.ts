@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { randomUUID } from "crypto";
 import { RoomRepository } from "../../infrastructure/repositories/room.repository";
 import { EmulatorRepository } from "../../infrastructure/repositories/emulator.repository";
 import { DeviceActionRepository } from "../../infrastructure/repositories/device-action.repository";
@@ -13,11 +14,13 @@ import { AppError } from "../../shared/errors/app-error";
  * Body for actuator command
  */
 interface ActuatorCommandBody {
-  action: "turn_on" | "turn_off" | "set_temperature";
-  value: boolean | number;
+  action: "turn_on" | "turn_off" | "set_temperature" | "set_speed" | "set_mode";
+  value: boolean | number | string;
   deviceIndex?: number;
-  source?: "frontend" | "api" | "rule-engine" | "debug-dashboard";
+  source?: "frontend" | "api" | "rule-engine" | "debug-dashboard" | "safeairctl";
 }
+
+const SUPPORTED_ACTIONS = ["turn_on", "turn_off", "set_temperature", "set_speed", "set_mode"];
 
 /**
  * Send command to actuator via MQTT
@@ -49,10 +52,10 @@ export async function sendActuatorCommand(
   });
 
   // 2. Validate parameters
-  if (!action || !["turn_on", "turn_off", "set_temperature"].includes(action)) {
+  if (!action || !SUPPORTED_ACTIONS.includes(action)) {
     res.status(400).json({
       success: false,
-      error: "Invalid action. Must be: turn_on, turn_off, or set_temperature",
+      error: `Invalid action. Must be: ${SUPPORTED_ACTIONS.join(", ")}`,
     });
     return;
   }
@@ -109,14 +112,16 @@ export async function sendActuatorCommand(
     }
 
     const targetId = emulator.emulatorExternalId;
+    const normalizedValue = normalizeActionValue(action, value);
 
     const mqttPayload = {
+      correlationId: randomUUID(),
       roomId,
       roomName: room.name,
       deviceType,
       deviceIndex,
       action,
-      value: action === "set_temperature" ? Number(value) : Boolean(value),
+      value: normalizedValue,
       source,
       timestamp: new Date().toISOString(),
     };
@@ -174,6 +179,22 @@ export async function sendActuatorCommand(
 function normalizeDeviceIndex(value: unknown): number {
   const parsed = Number(value ?? 1);
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 3 ? parsed : 1;
+}
+
+function normalizeActionValue(action: ActuatorCommandBody["action"], value: boolean | number | string): boolean | number | string {
+  if (action === "set_temperature" || action === "set_speed") {
+    return Number(value);
+  }
+
+  if (action === "turn_on") {
+    return true;
+  }
+
+  if (action === "turn_off") {
+    return false;
+  }
+
+  return String(value);
 }
 
 function getConfiguredUnits(

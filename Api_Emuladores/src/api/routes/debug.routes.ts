@@ -1,4 +1,4 @@
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { Router } from "express";
 import { DebugController, getEmulatorStates } from "../../application/services/debug-logs.service";
 import { container } from "../../application/container";
@@ -23,6 +23,12 @@ function toLocalTime(isoString: string | undefined): string {
 
 function localNow(): string {
   return new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+}
+
+function setNoStoreHeaders(res: Response): void {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
 }
 
 /** Round number to fixed decimals for display only */
@@ -105,10 +111,7 @@ debugRouter.get("/logs", (req, res, next) => {
 
 // Get logs as HTML
 debugRouter.get("/logs/html", (req, res, next) => {
-  // Disable caching to ensure fresh data on refresh
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
+  setNoStoreHeaders(res);
   debugController.getLogsHtml(req, res).catch(next);
 });
 
@@ -178,6 +181,7 @@ debugRouter.get("/emulators", async (req, res) => {
 // Get emulators dashboard as HTML - combines PostgreSQL config + memory telemetry
 debugRouter.get("/emulators/html", async (req, res) => {
   try {
+    setNoStoreHeaders(res);
     const { userId, global, emulatorsFromDb } = await getDebugEmulatorsForRequest(req);
 
     // Get real-time state from memory (telemetry)
@@ -413,6 +417,10 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     .token-section label { font-size: 13px; color: #8b949e; display: block; margin-bottom: 6px; }
     .token-section input { width: 100%; padding: 6px 10px; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; font-size: 13px; max-width: 600px; }
     .token-hint { font-size: 11px; color: #6e7681; margin-top: 4px; }
+    .debug-status { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 8px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 13px; }
+    .debug-status.error { display: block; border-color: #da3633; background: rgba(218, 54, 51, 0.12); color: #ffb4ad; }
+    .debug-status.success { display: block; border-color: #238636; background: rgba(35, 134, 54, 0.12); color: #b4f1b4; }
+    .debug-status.info { display: block; border-color: #1f6feb; background: rgba(31, 111, 235, 0.12); color: #b9d8ff; }
     .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }
     .emulator-card { background: #161b22; border-radius: 12px; border: 1px solid #30363d; padding: 16px; }
     .emulator-card:hover { border-color: #58a6ff; }
@@ -489,6 +497,8 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     <input type="text" id="jwtToken" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
     <div class="token-hint">El token se guarda en localStorage y en una cookie local de debug para que esta página renderice solo tus rooms. Al pegar uno nuevo, la página se recarga.</div>
   </div>
+
+  <div class="debug-status" id="debugStatus" role="status" aria-live="polite"></div>
 
   <div class="cards-grid">
     ${emulatorCards || emptyState}
