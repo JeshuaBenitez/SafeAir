@@ -12,7 +12,7 @@ export const environment = {
    * Backend API Base URL (MUST be set via build-time variable or runtime injection)
    * Examples:
    * - http://api.safeair.local
-   * - http://192.168.1.20:3000 (for local LAN multi-device)
+   * - http://IP_PC_API:3000 (for local LAN multi-device)
    * - https://api.safeair.cloud (remote)
    * 
    * Angular Build: ng build --configuration production --define API_BASE_URL=...
@@ -24,7 +24,7 @@ export const environment = {
    * MQTT Broker WebSocket URL for emulator telemetry subscriptions
    * Production should use:
    * - Secure WebSocket: wss://broker.safeair.local/mqtt
-   * - Same network LAN: ws://192.168.1.20:8083/mqtt
+   * - Same network LAN: ws://IP_PC_DB_MQTT:8084/mqtt
    * 
    * Ensure MQTT broker is accessible from frontend machine
    */

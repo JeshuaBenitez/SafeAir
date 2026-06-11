@@ -138,14 +138,14 @@ JWT_SECRET=tu-secret-aqui-mínimo-32-caracteres
 NODE_ENV=production
 PORT=3000
 API_HOST=0.0.0.0
-DB_HOST=192.168.1.100
+DB_HOST=IP_PC_DB_MQTT
 DB_PORT=5432
 DB_NAME=safeair
 DB_USER=postgres
 DB_PASSWORD=postgres
-MQTT_URL=mqtt://192.168.1.102:1883
+MQTT_URL=mqtt://IP_PC_DB_MQTT:1883
 AUTH_SKIP_OTP=true
-CORS_ORIGINS=http://192.168.1.104:8080,http://localhost:8080
+CORS_ORIGINS=http://IP_PC_FRONTEND:4200,http://localhost:4200,http://127.0.0.1:4200
 JWT_SECRET=tu-secret-aqui
 ```
 
@@ -310,12 +310,12 @@ docker build -t safeair-api .
 
 ```bash
 docker run -d -p 3000:3000 \
-  -e DB_HOST=192.168.1.100 \
+  -e DB_HOST=IP_PC_DB_MQTT \
   -e DB_PORT=5432 \
   -e DB_NAME=safeair \
   -e DB_USER=postgres \
   -e DB_PASSWORD=postgres \
-  -e MQTT_URL=mqtt://192.168.1.102:1883 \
+  -e MQTT_URL=mqtt://IP_PC_DB_MQTT:1883 \
   -e AUTH_SKIP_OTP=true \
   safeair-api
 ```

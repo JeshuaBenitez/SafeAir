@@ -7,8 +7,9 @@ import { CycleRepository } from "../../infrastructure/repositories/cycle.reposit
 import type { RoomModel } from "../../infrastructure/database/models";
 import { mqttGateway } from "../../infrastructure/mqtt/mqtt.gateway";
 import { actuatorStateTopic } from "../../infrastructure/mqtt/topics";
-import { logMqttPublished, logFrontend, logError, logPostgres } from "../../application/services/debug-logs.service";
+import { addLog, logMqttPublished, logFrontend, logError, logPostgres } from "../../application/services/debug-logs.service";
 import { AppError } from "../../shared/errors/app-error";
+import { eventBus, EVENTS } from "../../application/events/event-bus";
 
 /**
  * Body for actuator command
@@ -129,6 +130,26 @@ export async function sendActuatorCommand(
     // 6. Publish to MQTT using the external emulator ID (e.g., EMU-0001)
     const topic = actuatorStateTopic(targetId);
     await mqttGateway.publish(topic, mqttPayload);
+    eventBus.emit(EVENTS.ACTUATOR_COMMAND_SENT, {
+      topic,
+      emulatorId: targetId,
+      roomId,
+      deviceType,
+      deviceIndex,
+      action,
+      value: normalizedValue,
+      source
+    });
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "mqtt-published",
+      event: "actuator.command.sent",
+      message: `Actuator command sent to ${topic}`,
+      details: { topic, payload: mqttPayload },
+      roomId,
+      emulatorId: targetId
+    });
 
     // 7. Log: MQTT published
     logMqttPublished(topic, mqttPayload, targetId);

@@ -13,7 +13,7 @@ Simular dispositivos IoT que:
 
 | Tecnología | Versión | Propósito |
 |------------|---------|-----------|
-| Java | 17 | Lenguaje principal |
+| Java | 21 | Lenguaje principal |
 | Spring Boot | 3.x | Framework |
 | Eclipse Paho | - | Cliente MQTT |
 | Maven | - | Gestor de dependencias |
@@ -25,7 +25,7 @@ Simular dispositivos IoT que:
 ### Para desarrollo local
 
 ```bash
-# Java 17
+# Java 21
 java -version
 
 # Maven 3.8+
@@ -109,7 +109,7 @@ El emulador puede configurarse mediante variables de entorno:
 ### Ejemplo para LAN
 
 ```bash
-export MQTT_HOST=192.168.1.102
+export MQTT_HOST=IP_PC_DB_MQTT
 export MQTT_PORT=1883
 export MQTT_TLS_ENABLED=false
 export SPRING_PROFILES_ACTIVE=profile1
@@ -120,7 +120,7 @@ mvn spring-boot:run
 
 ```bash
 docker run -d \
-  -e MQTT_HOST=192.168.1.102 \
+  -e MQTT_HOST=IP_PC_DB_MQTT \
   -e MQTT_PORT=1883 \
   -e SPRING_PROFILES_ACTIVE=profile1 \
   safeair-emulator
@@ -216,7 +216,7 @@ docker build -t safeair-emulator .
 
 # Ejecución con perfil profile1 (2 emuladores)
 docker run -d \
-  -e MQTT_HOST=192.168.1.102 \
+  -e MQTT_HOST=IP_PC_DB_MQTT \
   -e MQTT_PORT=1883 \
   -e SPRING_PROFILES_ACTIVE=profile1 \
   -e MQTT_CONSOLE_LOG_ENABLED=true \

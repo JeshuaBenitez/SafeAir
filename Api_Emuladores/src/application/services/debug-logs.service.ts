@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { eventBus, EVENTS } from "../events/event-bus";
 
 type ActuatorType = "minisplit" | "purifier" | "extractor";
 interface ActuatorUnitState {
@@ -32,6 +33,23 @@ interface EmulatorState {
 }
 
 const emulatorStates = new Map<string, EmulatorState>();
+type DebugStream = "logs" | "emulators";
+type DebugEvent = { stream: DebugStream; event: string; payload?: unknown; id?: number };
+type DebugEventListener = (event: DebugEvent) => void;
+const debugEventListeners = new Set<DebugEventListener>();
+
+export function subscribeDebugEvents(listener: DebugEventListener): () => void {
+  debugEventListeners.add(listener);
+  return () => {
+    debugEventListeners.delete(listener);
+  };
+}
+
+function emitDebugEvent(event: DebugEvent): void {
+  for (const listener of debugEventListeners) {
+    listener(event);
+  }
+}
 
 /**
  * Update emulator state when telemetry is received
@@ -71,6 +89,9 @@ export function updateEmulatorState(
   }
 
   emulatorStates.set(emulatorId, existing);
+  const payload = { emulatorId, roomId: existing.roomId, state: existing };
+  eventBus.emit(EVENTS.EMULATOR_UPDATED, payload);
+  emitDebugEvent({ stream: "emulators", event: "emulator", payload });
 }
 
 function mergeDeviceUpdates(
@@ -134,7 +155,7 @@ export interface LogEntry {
   id: number;
   timestamp: string;
   level: "info" | "warn" | "error" | "debug";
-  source: "api" | "mqtt-received" | "mqtt-published" | "frontend" | "emulator" | "postgres" | "system";
+  source: "api" | "mqtt" | "mqtt-received" | "mqtt-published" | "frontend" | "emulator" | "postgres" | "system";
   event: string;
   message: string;
   details?: Record<string, unknown>;
@@ -160,6 +181,17 @@ export function addLog(entry: Omit<LogEntry, "id">): void {
   }
 
   logIndex = (logIndex + 1) % LOG_BUFFER_SIZE;
+  eventBus.emit(EVENTS.DEBUG_LOG_CREATED, fullEntry);
+  emitDebugEvent({ stream: "logs", event: "log", payload: fullEntry, id: fullEntry.id });
+  if (
+    fullEntry.source === "frontend" ||
+    fullEntry.source === "mqtt" ||
+    fullEntry.source === "mqtt-published" ||
+    fullEntry.source === "mqtt-received" ||
+    fullEntry.source === "emulator"
+  ) {
+    emitDebugEvent({ stream: "emulators", event: "log", payload: fullEntry, id: fullEntry.id });
+  }
 }
 
 /**
@@ -288,6 +320,17 @@ export function getLogs(options?: {
   }
 
   return filtered;
+}
+
+export function getLogSnapshot(limit = 200): LogEntry[] {
+  return getLogs({ limit }).sort((a, b) => a.id - b.id);
+}
+
+export function getLogsAfterId(lastEventId: number, limit = 500): LogEntry[] {
+  return [...logBuffer]
+    .filter((log) => log.id > lastEventId)
+    .sort((a, b) => a.id - b.id)
+    .slice(-limit);
 }
 
 /**
@@ -422,14 +465,14 @@ function generateLogsHtml(logs: LogEntry[]): string {
     <div class="header-left">
       <h1>SafeAir Debug Logs Globales</h1>
       <div class="summary">
-        <span>Total: ${logs.length} logs</span>
+        <span>Total: <span id="logCount">${logs.length}</span> logs</span>
         <span>Actualizado: <span id="clock">${localNow()}</span></span>
         <span>Zona: América/México (CDMX)</span>
       </div>
     </div>
     <div class="header-right">
       <label class="auto-refresh">
-        <input type="checkbox" id="autoRefresh" checked> Auto-refresh cada 5s
+        <input type="checkbox" id="autoRefresh"> Auto-refresh cada 5s
       </label>
       <button class="refrescar" id="refreshBtn">Refresh</button>
     </div>
@@ -450,7 +493,7 @@ function generateLogsHtml(logs: LogEntry[]): string {
           <th>Emulator</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="logsTableBody">
         ${logs.length > 0 ? logRows : '<tr><td colspan="6" class="empty">Sin logs disponibles. Los eventos aparecerán aquí en tiempo real.</td></tr>'}
       </tbody>
     </table>

@@ -1,6 +1,13 @@
 import type { Request, Response } from "express";
 import { Router } from "express";
-import { DebugController, getEmulatorStates } from "../../application/services/debug-logs.service";
+import {
+  DebugController,
+  addLog,
+  getEmulatorStates,
+  getLogSnapshot,
+  getLogsAfterId,
+  subscribeDebugEvents
+} from "../../application/services/debug-logs.service";
 import { container } from "../../application/container";
 import { EmulatorRepository } from "../../infrastructure/repositories/emulator.repository";
 import { verifyToken } from "../../shared/security/jwt";
@@ -29,6 +36,8 @@ function setNoStoreHeaders(res: Response): void {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  res.removeHeader("ETag");
 }
 
 /** Round number to fixed decimals for display only */
@@ -106,6 +115,7 @@ function deviceDisplay(isOn: boolean | null | undefined, targetTemp: number | nu
 
 // Get logs as JSON
 debugRouter.get("/logs", (req, res, next) => {
+  setNoStoreHeaders(res);
   debugController.getLogs(req, res).catch(next);
 });
 
@@ -115,10 +125,79 @@ debugRouter.get("/logs/html", (req, res, next) => {
   debugController.getLogsHtml(req, res).catch(next);
 });
 
+debugRouter.get("/events/logs", (req, res) => {
+  openSseStream(req, res, "logs");
+});
+
 // Get system status
 debugRouter.get("/status", (req, res, next) => {
+  setNoStoreHeaders(res);
   debugController.getStatus(req, res).catch(next);
 });
+
+debugRouter.get("/events/emulators", (req, res) => {
+  openSseStream(req, res, "emulators");
+});
+
+function openSseStream(req: Request, res: Response, eventType: "logs" | "emulators"): void {
+  setNoStoreHeaders(res);
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+
+  const send = (event: string, data: unknown, id?: number): void => {
+    if (id !== undefined) {
+      res.write(`id: ${id}\n`);
+    }
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  send("connected", { stream: eventType, timestamp: new Date().toISOString() });
+  if (eventType === "logs") {
+    const lastEventId = Number(req.header("last-event-id") ?? req.header("Last-Event-ID"));
+    const logs = Number.isFinite(lastEventId) && lastEventId >= 0
+      ? getLogsAfterId(lastEventId)
+      : getLogSnapshot();
+    send("snapshot", { stream: eventType, logs, timestamp: new Date().toISOString() });
+  } else {
+    send("snapshot", { stream: eventType, emulators: getEmulatorStates(), timestamp: new Date().toISOString() });
+  }
+
+  const unsubscribe = subscribeDebugEvents((event) => {
+    if (event.stream === eventType) {
+      send(event.event, { stream: event.stream, timestamp: new Date().toISOString(), payload: event.payload }, event.id);
+    }
+  });
+
+  addLog({
+    timestamp: new Date().toISOString(),
+    level: "info",
+    source: "api",
+    event: "debug.client.connected",
+    message: `Debug ${eventType} SSE client connected`,
+    details: { stream: eventType, ip: req.ip, userAgent: req.get("user-agent") ?? null }
+  });
+
+  const heartbeat = setInterval(() => {
+    send("heartbeat", { stream: eventType, ts: new Date().toISOString() });
+  }, 10000);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "api",
+      event: "debug.client.disconnected",
+      message: `Debug ${eventType} SSE client disconnected`,
+      details: { stream: eventType, ip: req.ip }
+    });
+    res.end();
+  });
+}
 
 function buildDebugEmulatorView(req: Request) {
   const auth = getDebugAuth(req);
@@ -142,6 +221,7 @@ async function getDebugEmulatorsForRequest(req: Request) {
 
 // Get emulators dashboard as JSON
 debugRouter.get("/emulators", async (req, res) => {
+  setNoStoreHeaders(res);
   const { userId, role, global, emulatorsFromDb } = await getDebugEmulatorsForRequest(req);
   if (!userId) {
     res.status(401).json({
@@ -164,6 +244,11 @@ debugRouter.get("/emulators", async (req, res) => {
       roomId: emuDb.roomId,
       roomName: emuDb.roomName,
       status: emuDb.status,
+      roomArea: emuDb.roomArea,
+      windowCount: emuDb.windowCount,
+      minisplitCount: emuDb.minisplitCount,
+      purifierCount: emuDb.purifierCount,
+      extractorCount: emuDb.extractorCount,
       hasEmulator: emuDb.hasEmulator,
       ownedByUser: emuDb.ownedByUser,
       assignmentStatus: emuDb.assignmentStatus,
@@ -486,7 +571,7 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     </div>
     <div class="header-right">
       <label class="auto-refresh">
-        <input type="checkbox" id="autoRefresh" checked> Auto-refresh cada 5s
+        <input type="checkbox" id="autoRefresh"> Auto-refresh cada 5s
       </label>
       <button class="refrescar" id="refreshBtn">Refresh</button>
     </div>
@@ -500,7 +585,7 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
 
   <div class="debug-status" id="debugStatus" role="status" aria-live="polite"></div>
 
-  <div class="cards-grid">
+  <div class="cards-grid" id="emulatorCardsGrid">
     ${emulatorCards || emptyState}
   </div>
 

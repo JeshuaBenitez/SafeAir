@@ -1,21 +1,25 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   application:
     name: safe-air-emulator
   profiles:
-    active: production
+    active: ${SPRING_PROFILES_ACTIVE:production,profile1}
 
 mqtt:
-  enabled: false
-  host: localhost
-  port: 8883
+  enabled: ${MQTT_ENABLED:true}
+  host: ${MQTT_HOST:127.0.0.1}
+  port: ${MQTT_PORT:1883}
   tls:
-    enabled: true
-  username: safeair
-  password: safeair
-  console-log-enabled: true
+    enabled: ${MQTT_TLS_ENABLED:false}
+  username: ${MQTT_USERNAME:}
+  password: ${MQTT_PASSWORD:}
+  console-log-enabled: ${MQTT_CONSOLE_LOG_ENABLED:true}
   validation:
-    availability-target: 0.995
-    reconnect-window-seconds: 10
+    availability-target: ${MQTT_VALIDATION_AVAILABILITY:0.995}
+    reconnect-window-seconds: ${MQTT_VALIDATION_RECONNECT_WINDOW:10}
+
+safeair:
+  emulator:
+    ids: ${SAFEAIR_EMULATOR_IDS:}

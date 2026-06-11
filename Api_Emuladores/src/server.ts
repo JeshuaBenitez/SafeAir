@@ -11,6 +11,7 @@ import { mapActuatorStatePayload } from "./infrastructure/mappers/actuator-state
 import { ensureSeedEmulatorPool, runDatabaseSeed } from "./infrastructure/database/seeders/seed-fn";
 import { logMqttReceived, logError, updateEmulatorState, addLog } from "./application/services/debug-logs.service";
 import { AppError } from "./shared/errors/app-error";
+import { eventBus, EVENTS } from "./application/events/event-bus";
 
 const UNASSIGNED_EMULATOR_LOG_INTERVAL_MS = 30_000;
 const unassignedEmulatorWarnings = new Map<string, { lastLoggedAt: number; suppressed: number }>();
@@ -99,9 +100,42 @@ export async function startServer(): Promise<void> {
       try {
         // Log MQTT message received
         logMqttReceived(message.topic, message.payload, message.emulatorId);
+        eventBus.emit(EVENTS.TELEMETRY_RECEIVED, {
+          topic: message.topic,
+          emulatorId: message.emulatorId,
+          payload: message.payload
+        });
+        addLog({
+          timestamp: new Date().toISOString(),
+          level: "info",
+          source: "mqtt-received",
+          event: "mqtt.telemetry.received",
+          message: `Telemetry received from ${message.topic}`,
+          details: { topic: message.topic, payload: message.payload },
+          emulatorId: message.emulatorId
+        });
 
         const payload = mapTelemetryPayload({ ...message.payload, emulatorId: message.emulatorId });
         const resolvedTelemetry = await container.telemetryIngestionService.handleIncomingTelemetry(payload, "mqtt");
+        eventBus.emit(EVENTS.TELEMETRY_PERSISTED, {
+          topic: message.topic,
+          emulatorId: message.emulatorId,
+          roomId: resolvedTelemetry.roomId,
+          emulatorExternalId: resolvedTelemetry.emulatorExternalId
+        });
+        addLog({
+          timestamp: new Date().toISOString(),
+          level: "info",
+          source: "postgres",
+          event: "mqtt.telemetry.persisted",
+          message: `Telemetry persisted for ${message.emulatorId}`,
+          details: {
+            topic: message.topic,
+            roomId: resolvedTelemetry.roomId,
+            emulatorExternalId: resolvedTelemetry.emulatorExternalId
+          },
+          emulatorId: message.emulatorId
+        });
 
         // Update emulator state for dashboard
         const roomId = resolvedTelemetry.roomId;
@@ -164,6 +198,13 @@ export async function startServer(): Promise<void> {
               mappedState,
               "mqtt"
             );
+            eventBus.emit(EVENTS.ACTUATOR_STATE_PERSISTED, {
+              topic: message.topic,
+              emulatorId: message.emulatorId,
+              roomId,
+              deviceType,
+              deviceIndex: state.deviceIndex
+            });
           }
         }
 
@@ -189,6 +230,13 @@ export async function startServer(): Promise<void> {
             mappedState,
             "mqtt"
           );
+          eventBus.emit(EVENTS.ACTUATOR_STATE_PERSISTED, {
+            topic: message.topic,
+            emulatorId: message.emulatorId,
+            roomId: mappedState.roomId,
+            deviceType: mappedState.deviceType,
+            deviceIndex: mappedState.deviceIndex
+          });
         }
       } catch (error: unknown) {
         if (error instanceof AppError && error.code === "EMULATOR_UNASSIGNED") {
@@ -204,6 +252,20 @@ export async function startServer(): Promise<void> {
       try {
         // Log MQTT actuator state received
         logMqttReceived(message.topic, message.payload, message.emulatorId);
+        eventBus.emit(EVENTS.ACTUATOR_STATE_RECEIVED, {
+          topic: message.topic,
+          emulatorId: message.emulatorId,
+          payload: message.payload
+        });
+        addLog({
+          timestamp: new Date().toISOString(),
+          level: "info",
+          source: "mqtt-received",
+          event: "actuator.state.received",
+          message: `Actuator state received from ${message.topic}`,
+          details: { topic: message.topic, payload: message.payload },
+          emulatorId: message.emulatorId
+        });
 
         if (
           (message.payload as Record<string, unknown>).isOn === undefined &&
@@ -214,6 +276,27 @@ export async function startServer(): Promise<void> {
 
         const payload = mapActuatorStatePayload({ ...message.payload, emulatorId: message.emulatorId });
         const resolvedState = await container.actuatorStateIngestionService.handleIncomingState(payload, "mqtt");
+        eventBus.emit(EVENTS.ACTUATOR_STATE_PERSISTED, {
+          topic: message.topic,
+          emulatorId: message.emulatorId,
+          roomId: resolvedState.roomId,
+          deviceType: payload.deviceType,
+          deviceIndex: payload.deviceIndex
+        });
+        addLog({
+          timestamp: new Date().toISOString(),
+          level: "info",
+          source: "postgres",
+          event: "actuator.state.persisted",
+          message: `Actuator state persisted for ${message.emulatorId}`,
+          details: {
+            topic: message.topic,
+            roomId: resolvedState.roomId,
+            deviceType: payload.deviceType,
+            deviceIndex: payload.deviceIndex
+          },
+          emulatorId: message.emulatorId
+        });
 
         // Update emulator state for dashboard
         updateEmulatorState(

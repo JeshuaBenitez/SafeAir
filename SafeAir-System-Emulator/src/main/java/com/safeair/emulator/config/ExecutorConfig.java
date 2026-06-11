@@ -11,16 +11,16 @@ public class ExecutorConfig {
 
     @Bean(name = "emulatorManagerExecutor")
     public ExecutorService emulatorManagerExecutor() {
-        return Executors.newCachedThreadPool();
+        return Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @Bean(name = "telemetryDispatcherExecutor")
     public ExecutorService telemetryDispatcherExecutor() {
-        return Executors.newSingleThreadExecutor();
+        return Executors.newVirtualThreadPerTaskExecutor();
     }
 
     @Bean(name = "configDispatcherExecutor")
     public ExecutorService configDispatcherExecutor() {
-        return Executors.newSingleThreadExecutor();
+        return Executors.newVirtualThreadPerTaskExecutor();
     }
 }

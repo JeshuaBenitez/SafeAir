@@ -77,23 +77,40 @@ public class MQTTConnector {
         }
     }
 
-    public void publish(String topic, byte[] payload, int qos) {
+    public boolean publish(String topic, byte[] payload, int qos) {
         if (!properties.isEnabled()) {
-            return;
+            LOGGER.warn("MQTT publish skipped because MQTT is disabled topic={}", topic);
+            return false;
         }
         connectIfNeeded();
         synchronized (lock) {
             if (client == null || !client.isConnected()) {
-                return;
+                LOGGER.warn(
+                        "MQTT publish skipped because client is not connected topic={} broker={}",
+                        topic,
+                        brokerUrl());
+                return false;
             }
             try {
                 MqttMessage message = new MqttMessage(payload);
                 message.setQos(qos);
                 client.publish(topic, message);
+                return true;
             } catch (MqttException e) {
-                LOGGER.warn("Failed to publish to topic {}", topic, e);
+                LOGGER.error(
+                        "Failed to publish MQTT message topic={} broker={} cause={}",
+                        topic,
+                        brokerUrl(),
+                        e.getMessage(),
+                        e);
+                return false;
             }
         }
+    }
+
+    public String brokerUrl() {
+        String scheme = properties.getTls().isEnabled() ? "ssl" : "tcp";
+        return scheme + "://" + properties.getHost() + ":" + properties.getPort();
     }
 
     private boolean isConnected() {
@@ -112,9 +129,7 @@ public class MQTTConnector {
                 client = null;
             }
             try {
-                String scheme = properties.getTls().isEnabled() ? "ssl" : "tcp";
-                String brokerUrl = scheme + "://" + properties.getHost() + ":" + properties.getPort();
-                client = new MqttClient(brokerUrl, MqttClient.generateClientId(), new MemoryPersistence());
+                client = new MqttClient(brokerUrl(), MqttClient.generateClientId(), new MemoryPersistence());
 
                 MqttConnectOptions options = new MqttConnectOptions();
                 options.setAutomaticReconnect(false);
@@ -135,16 +150,21 @@ public class MQTTConnector {
                 client.setCallback(new ConnectorCallback());
                 client.connect(options);
                 LOGGER.info(
-                        "Connected to MQTT broker {}:{} as user {}",
-                        properties.getHost(),
-                        properties.getPort(),
-                        properties.getUsername());
+                        "Connected to MQTT broker {} as user {} TLS={}",
+                        brokerUrl(),
+                        properties.getUsername(),
+                        properties.getTls().isEnabled());
 
                 for (Subscription subscription : new ArrayList<>(subscriptions)) {
                     subscribeInternal(subscription);
                 }
             } catch (MqttException e) {
-                LOGGER.warn("Failed to connect MQTT client", e);
+                LOGGER.error(
+                        "Failed to connect MQTT client broker={} TLS={} cause={}",
+                        brokerUrl(),
+                        properties.getTls().isEnabled(),
+                        e.getMessage(),
+                        e);
             }
         }
     }

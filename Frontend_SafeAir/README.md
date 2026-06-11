@@ -93,10 +93,10 @@ export const environment = {
 API_BASE_URL: 'http://localhost:3000'
 
 // POR ESTO (usar IP de la laptop con el API):
-API_BASE_URL: 'http://192.168.1.100:3000'
+API_BASE_URL: 'http://IP_PC_API:3000'
 ```
 
-**Nota**: Cambiar `192.168.1.100` por la IP real de la máquina donde corre el API.
+**Nota**: Cambiar `IP_PC_API` por la IP de la maquina donde corre el API.
 
 ### Cómo saber la IP de tu máquina
 
@@ -153,7 +153,7 @@ docker build -t safeair-frontend .
 
 **Para LAN (especificar IP del API):**
 ```bash
-docker build --build-arg API_BASE_URL=http://192.168.1.100:3000 -t safeair-frontend .
+docker build --build-arg API_BASE_URL=http://IP_PC_API:3000 -t safeair-frontend .
 ```
 
 ### Ejecutar contenedor
@@ -218,7 +218,7 @@ El frontend se comunica con los siguientes endpoints del API:
 
 En el archivo `.env.docker` del proyecto raíz:
 ```bash
-CORS_ORIGINS=http://localhost:4200,http://localhost:8080,http://192.168.1.100:8080
+CORS_ORIGINS=http://localhost:4200,http://localhost:8080,http://IP_PC_FRONTEND:4200
 ```
 
 ### Error: No conecta al API

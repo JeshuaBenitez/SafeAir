@@ -40,7 +40,11 @@ export class HttpClientAdapter extends ApiClientPort {
   ): Promise<ApiClientResponse<TResponse>> {
     try {
       const url = this.buildUrl(request.url);
-      const headers = this.buildHeaders(request.headers);
+      const isLiveGet = request.method === 'GET' && this.isLiveEndpoint(request.url);
+      const headers = this.buildHeaders(request.headers, isLiveGet);
+      const params = isLiveGet
+        ? { ...(request.params ?? {}), __ts: Date.now() }
+        : request.params;
 
       console.debug(
         `[ApiClient] ${request.method} ${url}`,
@@ -53,7 +57,7 @@ export class HttpClientAdapter extends ApiClientPort {
         case 'GET':
           response$ = this.httpClient.get<TResponse>(url, { 
             headers, 
-            params: request.params,
+            params,
             observe: 'response'
           });
           break;
@@ -205,7 +209,7 @@ export class HttpClientAdapter extends ApiClientPort {
   /**
    * Build HTTP headers with authorization and defaults
    */
-  private buildHeaders(customHeaders?: Record<string, string>): HttpHeaders {
+  private buildHeaders(customHeaders?: Record<string, string>, noStore = false): HttpHeaders {
     this.restoreAuthTokenFromStorage();
 
     let headers = new HttpHeaders({
@@ -217,6 +221,12 @@ export class HttpClientAdapter extends ApiClientPort {
       headers = headers.set('Authorization', `Bearer ${this.authToken}`);
     }
 
+    if (noStore) {
+      headers = headers
+        .set('Cache-Control', 'no-cache, no-store, must-revalidate')
+        .set('Pragma', 'no-cache');
+    }
+
     // Add custom headers
     if (customHeaders) {
       for (const [key, value] of Object.entries(customHeaders)) {
@@ -225,6 +235,11 @@ export class HttpClientAdapter extends ApiClientPort {
     }
 
     return headers;
+  }
+
+  private isLiveEndpoint(path: string): boolean {
+    return /\/api\/v1\/rooms\/[^/]+\/metrics\/current(?:$|\?)/.test(path) ||
+      /\/api\/v1\/rooms\/[^/]+\/actuators\/state(?:$|\?)/.test(path);
   }
 
   private restoreAuthTokenFromStorage(): void {

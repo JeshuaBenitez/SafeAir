@@ -4,13 +4,13 @@ spring:
       on-profile: production
 
 server:
-  port: ${PORT:8080}
+  port: ${SERVER_PORT:${PORT:8080}}
 
 # Production mode: require external configuration via MQTT or environment variables
 
 mqtt:
   enabled: true
-  host: ${MQTT_HOST:}
+  host: ${MQTT_HOST:127.0.0.1}
   port: ${MQTT_PORT:1883}
   tls:
     enabled: ${MQTT_TLS_ENABLED:false}

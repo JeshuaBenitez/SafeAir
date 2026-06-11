@@ -1,7 +1,8 @@
 import dotenv from "dotenv";
+import path from "path";
 import { z } from "zod";
 
-const dotenvResult = dotenv.config();
+const dotenvResult = dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 const dotenvLoadedKeys = Object.keys(dotenvResult.parsed ?? {}).length;
 
 function normalizeBoolean(value: string | undefined, defaultValue = false): boolean {

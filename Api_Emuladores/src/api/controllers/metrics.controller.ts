@@ -4,6 +4,14 @@ import { addLog } from "../../application/services/debug-logs.service";
 import { RoomRepository } from "../../infrastructure/repositories/room.repository";
 import { AppError } from "../../shared/errors/app-error";
 
+function setLiveHeaders(res: Response): void {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  res.removeHeader("ETag");
+}
+
 /**
  * Generate CSV content from metrics data
  */
@@ -94,6 +102,7 @@ export class MetricsController {
   }
 
   async current(req: Request, res: Response): Promise<void> {
+    setLiveHeaders(res);
     await this.ensureRoomAccess(String(req.params.id), req.auth?.sub);
     const result = await container.metricsQueryService.current(String(req.params.id));
     res.status(200).json(result);
@@ -144,6 +153,7 @@ export class MetricsController {
   }
 
   async actuatorState(req: Request, res: Response): Promise<void> {
+    setLiveHeaders(res);
     await this.ensureRoomAccess(String(req.params.id), req.auth?.sub);
     const result = await container.metricsQueryService.actuatorState(String(req.params.id));
     res.status(200).json(result);

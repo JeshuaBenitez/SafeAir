@@ -54,6 +54,14 @@ export class DashboardEnvironmentMockService {
     interval(UPDATE_INTERVAL_MS).subscribe(() => {
       this.tick();
     });
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          this.resumeTelemetry();
+        }
+      });
+    }
   }
 
   pauseTelemetry(): void {

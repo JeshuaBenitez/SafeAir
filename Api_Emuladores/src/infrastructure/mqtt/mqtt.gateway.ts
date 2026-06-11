@@ -3,6 +3,7 @@ import { env } from "../../shared/config/env";
 import { logger } from "../../shared/config/logger";
 import { decodeMqttPayload } from "./payload-codec";
 import { addLog } from "../../application/services/debug-logs.service";
+import { eventBus, EVENTS } from "../../application/events/event-bus";
 
 type TelemetryMessage = {
   topic: string;
@@ -150,13 +151,20 @@ class MqttGateway {
         clientId: env.mqttClientId
       });
 
+      const payload = {
+        phase,
+        connectCount: this.connectCount,
+        clientId: env.mqttClientId,
+        url: env.mqttUrl
+      };
+      eventBus.emit(phase === "initial" ? EVENTS.MQTT_CONNECTED : EVENTS.MQTT_RECONNECTED, payload);
       addLog({
         timestamp: new Date().toISOString(),
         level: "info",
-        source: "mqtt-published",
-        event: "mqtt-connected",
+        source: "mqtt",
+        event: phase === "initial" ? "mqtt.connected" : "mqtt.reconnected",
         message: `MQTT connection established (${phase})`,
-        details: { phase, connectCount: this.connectCount, clientId: env.mqttClientId }
+        details: payload
       });
 
       client.subscribe(env.mqttTelemetryTopic, { qos: env.mqttQos as 0 | 1 | 2 }, (error) => {
@@ -188,11 +196,29 @@ class MqttGateway {
       logger.info("MQTT reconnect event", {
         clientId: env.mqttClientId
       });
+      eventBus.emit(EVENTS.MQTT_RECONNECTED, { clientId: env.mqttClientId, url: env.mqttUrl });
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "info",
+        source: "mqtt",
+        event: "mqtt.reconnecting",
+        message: "MQTT reconnect attempt started",
+        details: { clientId: env.mqttClientId, url: env.mqttUrl }
+      });
     });
 
     client.on("offline", () => {
       logger.info("MQTT client offline", {
         clientId: env.mqttClientId
+      });
+      eventBus.emit(EVENTS.MQTT_DISCONNECTED, { clientId: env.mqttClientId, url: env.mqttUrl, reason: "offline" });
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "warn",
+        source: "mqtt",
+        event: "mqtt.disconnected",
+        message: "MQTT client offline",
+        details: { clientId: env.mqttClientId, url: env.mqttUrl, reason: "offline" }
       });
     });
 
@@ -200,6 +226,20 @@ class MqttGateway {
       logger.info("MQTT connection closed", {
         clientId: env.mqttClientId,
         hadConnected: this.connectCount > 0
+      });
+      eventBus.emit(EVENTS.MQTT_DISCONNECTED, {
+        clientId: env.mqttClientId,
+        url: env.mqttUrl,
+        reason: "close",
+        hadConnected: this.connectCount > 0
+      });
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "warn",
+        source: "mqtt",
+        event: "mqtt.disconnected",
+        message: "MQTT connection closed",
+        details: { clientId: env.mqttClientId, url: env.mqttUrl, reason: "close", hadConnected: this.connectCount > 0 }
       });
     });
 
@@ -209,12 +249,29 @@ class MqttGateway {
 
     client.on("error", (error) => {
       logger.error("MQTT client error", error);
+      eventBus.emit(EVENTS.MQTT_ERROR, { clientId: env.mqttClientId, url: env.mqttUrl, error });
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "error",
+        source: "mqtt",
+        event: "mqtt.error",
+        message: error.message,
+        details: { clientId: env.mqttClientId, url: env.mqttUrl, error: error.stack ?? error.message }
+      });
     });
   }
 
   private async handleIncomingMessage(topic: string, payloadRaw: Buffer): Promise<void> {
     try {
       const payload = decodeMqttPayload(topic, payloadRaw);
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "debug",
+        source: "mqtt",
+        event: topic.endsWith("/telemetry") ? "mqtt.telemetry.decoded" : "mqtt.message.decoded",
+        message: `Decoded MQTT message from ${topic}`,
+        details: { topic, payload }
+      });
 
       const telemetryEmulatorId = this.extractEmulatorId(topic, "telemetry");
       if (telemetryEmulatorId && this.telemetryHandler) {

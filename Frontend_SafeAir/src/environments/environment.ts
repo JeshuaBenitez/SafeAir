@@ -5,7 +5,7 @@
  * Used for local development on a single machine
  * 
  * Para ejecutar en RED LOCAL (LAN), cambia API_BASE_URL por la IP de la laptop de la API:
- * API_BASE_URL: 'http://192.168.1.100:3000'  (ajusta la IP según tu red)
+ * API_BASE_URL: 'http://IP_PC_API:3000'  (ajusta el placeholder según tu red)
  */
 
 export const environment = {
@@ -14,7 +14,7 @@ export const environment = {
   /**
    * Backend API Base URL
    * Desarrollo local: http://localhost:3000
-   * Red local (LAN): http://192.168.x.x:3000 (usa la IP de la laptop donde corre la API)
+   * Red local (LAN): http://IP_PC_API:3000 (usa la IP de la laptop donde corre la API)
    * Render producción: https://safeair-api.onrender.com
    * 
    * CONFIGURAR: Si vas a usar en LAN, cambia 'localhost' por la IP real de la API
@@ -24,7 +24,7 @@ export const environment = {
   /**
    * MQTT Broker WebSocket URL for emulator telemetry subscriptions
    * Desarrollo: ws://localhost:8084/mqtt (EMQX WebSocket port)
-   * Red local: ws://192.168.x.x:8084/mqtt
+   * Red local: ws://IP_PC_DB_MQTT:8084/mqtt
    * Producción: wss://safeair-mqtt.onrender.com/mqtt
    */
   MQTT_BROKER_URL: (window as any).__env?.MQTT_BROKER_URL || 'ws://localhost:8084/mqtt',

@@ -38,6 +38,7 @@ function setNoStoreHeaders(res: express.Response): void {
 
 export function createApp(): Express {
   const app = express();
+  app.disable("etag");
 
   app.use(helmet());
   app.use(cors({
@@ -47,6 +48,20 @@ export function createApp(): Express {
   app.use(express.json({ limit: "1mb" }));
   app.use(requestAuditMiddleware);
   app.use(requestLoggerMiddleware);
+
+  app.use((req, res, next) => {
+    const isLiveEndpoint =
+      req.path.startsWith("/debug") ||
+      /^\/api\/v1\/rooms\/[^/]+\/metrics\/current$/.test(req.path) ||
+      /^\/api\/v1\/rooms\/[^/]+\/actuators\/state$/.test(req.path);
+
+    if (isLiveEndpoint) {
+      setNoStoreHeaders(res);
+      res.setHeader("Surrogate-Control", "no-store");
+    }
+
+    next();
+  });
 
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok" });

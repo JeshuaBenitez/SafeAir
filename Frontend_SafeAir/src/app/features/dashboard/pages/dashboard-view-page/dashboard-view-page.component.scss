@@ -184,6 +184,60 @@
   border-radius: 0.75rem;
   border: 1px solid rgba(tokens.$color-border, 0.2);
 
+  .range-panel {
+    display: grid;
+    grid-template-columns: minmax(220px, 0.75fr) minmax(280px, 1.25fr);
+    gap: 1rem;
+    align-items: stretch;
+
+    @media (max-width: 860px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .range-calendar,
+  .range-clocks {
+    border: 1px solid rgba(tokens.$color-border, 0.24);
+    background: rgba(#20223f, 0.5);
+    border-radius: 0.65rem;
+    padding: 1rem;
+  }
+
+  .range-calendar {
+    display: grid;
+    gap: 0.65rem;
+    align-content: start;
+  }
+
+  .range-clocks {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(170px, 1fr));
+    gap: 1rem;
+
+    @media (max-width: 640px) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .range-group--clock {
+    align-items: center;
+    justify-content: center;
+    min-height: 190px;
+    border-radius: 50%;
+    border: 1px solid rgba(tokens.$color-accent, 0.26);
+    background:
+      radial-gradient(circle, rgba(tokens.$color-accent, 0.08) 0%, rgba(#20223f, 0.4) 58%),
+      rgba(#17192f, 0.76);
+  }
+
+  .range-summary {
+    margin: 0.9rem 0;
+    color: tokens.$color-text-primary;
+    font-size: 0.94rem;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
   // Selector de tipo de rango
   .range-type-selector {
     margin-bottom: 1.25rem;
@@ -359,6 +413,7 @@
   .time-separator {
     color: tokens.$color-text-muted;
     font-weight: 600;
+    font-size: 1.2rem;
   }
 
   .period-select {

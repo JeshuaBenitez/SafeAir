@@ -16,11 +16,11 @@ SAFEAIR_MQTT_URL=mqtt://localhost:1883
 SAFEAIR_TOKEN=
 ```
 
-Tailscale:
+LAN:
 
 ```env
-SAFEAIR_API_URL=http://100.66.40.85:3000
-SAFEAIR_MQTT_URL=mqtt://100.79.106.54:1883
+SAFEAIR_API_URL=http://IP_PC_API:3000
+SAFEAIR_MQTT_URL=mqtt://IP_PC_DB_MQTT:1883
 SAFEAIR_TOKEN=
 ```
 
@@ -78,22 +78,22 @@ Consultas administrativas por API:
 npm run cli -- emulators list
 npm run cli -- emulators free
 npm run cli -- emulators assigned
-npm run cli -- emulators get --id EMU-U001-R001
-npm run cli -- emulators assign --roomId <roomId> --emulator EMU-U001-R001
-npm run cli -- emulators release --emulator EMU-U001-R001
+npm run cli -- emulators get --id <emulatorExternalId>
+npm run cli -- emulators assign --roomId <roomId> --emulator <emulatorExternalId>
+npm run cli -- emulators release --emulator <emulatorExternalId>
 ```
 
 Comportamiento por MQTT directo:
 
 ```bash
-npm run cli -- emulators scenario --emulator EMU-U001-R001 --scenario hot-room
-npm run cli -- emulators scenario --emulator EMU-U001-R001 --scenario normal
-npm run cli -- emulators set-temp --emulator EMU-U001-R001 --value 32
-npm run cli -- emulators set-humidity --emulator EMU-U001-R001 --value 70
-npm run cli -- emulators set-co2 --emulator EMU-U001-R001 --value 900
-npm run cli -- emulators set-pm25 --emulator EMU-U001-R001 --value 80
-npm run cli -- emulators pause --emulator EMU-U001-R001
-npm run cli -- emulators resume --emulator EMU-U001-R001
+npm run cli -- emulators scenario --emulator <emulatorExternalId> --scenario hot-room
+npm run cli -- emulators scenario --emulator <emulatorExternalId> --scenario normal
+npm run cli -- emulators set-temp --emulator <emulatorExternalId> --value 32
+npm run cli -- emulators set-humidity --emulator <emulatorExternalId> --value 70
+npm run cli -- emulators set-co2 --emulator <emulatorExternalId> --value 900
+npm run cli -- emulators set-pm25 --emulator <emulatorExternalId> --value 80
+npm run cli -- emulators pause --emulator <emulatorExternalId>
+npm run cli -- emulators resume --emulator <emulatorExternalId>
 ```
 
 Escenarios soportados por el emulador Java:
@@ -138,7 +138,7 @@ npm run cli -- logs api
 npm run cli -- logs emulators
 npm run cli -- logs tail
 npm run cli -- logs room --roomId <roomId>
-npm run cli -- logs emulator --emulator EMU-U001-R001
+npm run cli -- logs emulator --emulator <emulatorExternalId>
 ```
 
 `tail` usa polling.
