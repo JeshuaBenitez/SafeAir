@@ -23,3 +23,6 @@ mqtt:
 safeair:
   emulator:
     ids: ${SAFEAIR_EMULATOR_IDS:}
+  cli:
+    enabled: ${SAFEAIR_CLI_ENABLED:true}
+    suppress-telemetry-output: ${SAFEAIR_CLI_SUPPRESS_TELEMETRY_OUTPUT:false}

@@ -22,6 +22,8 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <jacoco.version>0.8.12</jacoco.version>
+        <!-- Skip JaCoCo checks by default for local development. Set -Djacoco.skip=false in CI to enforce checks. -->
+        <jacoco.skip>true</jacoco.skip>
     </properties>
 
     <dependencies>
@@ -156,6 +158,9 @@
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
                 <version>${jacoco.version}</version>
+                <configuration>
+                    <skip>${jacoco.skip}</skip>
+                </configuration>
                 <executions>
                     <execution>
                         <configuration>

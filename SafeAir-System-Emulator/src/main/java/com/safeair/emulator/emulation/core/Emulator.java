@@ -23,7 +23,9 @@ import com.safeair.emulator.emulation.simulation.Room;
 import com.safeair.emulator.emulation.simulation.RoomEnvironmentHelper;
 import com.safeair.emulator.emulation.simulation.SeededRandomSource;
 import com.safeair.emulator.emulation.simulation.SimulationEngine;
+import com.safeair.emulator.manager.EmulatorEventListener;
 import com.safeair.emulator.manager.EmulatorLifecycleState;
+import com.safeair.emulator.manager.EmulatorSnapshot;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +37,7 @@ public class Emulator {
     private final SensorFactory sensorFactory = new SensorFactory();
     private final ElectrodomesticFactory electrodomesticFactory = new ElectrodomesticFactory();
     private final AtomicLong tickCounter = new AtomicLong(0);
+    private final EmulatorEventListener eventListener;
 
     private final List<Sensor> sensors = new ArrayList<>();
     private final List<Electrodomestic> electrodomestics = new ArrayList<>();
@@ -48,9 +51,14 @@ public class Emulator {
     private volatile int activeEmulatorCount = 1;
 
     public Emulator(String emulatorId, TelemetryQueue telemetryQueue) {
+        this(emulatorId, telemetryQueue, EmulatorEventListener.NO_OP);
+    }
+
+    public Emulator(String emulatorId, TelemetryQueue telemetryQueue, EmulatorEventListener eventListener) {
         this.emulatorId = emulatorId;
         this.telemetryQueue = telemetryQueue;
         this.randomSource = new SeededRandomSource(EmulatorSeedStrategy.seedFrom(emulatorId));
+        this.eventListener = eventListener == null ? EmulatorEventListener.NO_OP : eventListener;
     }
 
     public String emulatorId() {
@@ -72,6 +80,8 @@ public class Emulator {
         }
 
         state = EmulatorLifecycleState.CONFIGURED;
+        recordEvent("setup", "Configured room " + dto.roomSquareMeters() + "m2, windows=" + dto.windowCount()
+                + ", interval=" + dto.updateIntervalSec() + "s");
     }
 
     private java.util.function.Supplier<Double> sensorSupplier(int type) {
@@ -92,6 +102,7 @@ public class Emulator {
         executor = Executors.newScheduledThreadPool(1);
         long intervalMs = room.updateIntervalSec() * 1000L;
         executor.scheduleAtFixedRate(this::tickCycle, 0, intervalMs, TimeUnit.MILLISECONDS);
+        recordEvent("lifecycle", "Emulator started");
     }
 
     public synchronized void stop() {
@@ -103,6 +114,7 @@ public class Emulator {
             executor.shutdown();
         }
         state = EmulatorLifecycleState.STOPPED;
+        recordEvent("lifecycle", "Emulator stopped");
     }
 
     public void setActiveEmulatorCount(int count) {
@@ -147,6 +159,7 @@ public class Emulator {
         }
 
         LOGGER.info("[{}] Scenario applied: {}", emulatorId, normalized);
+        recordEvent("scenario", "Applied scenario " + normalized);
         return "ok";
     }
 
@@ -166,6 +179,7 @@ public class Emulator {
         }
 
         LOGGER.info("[{}] Behavior command applied: {}={}", emulatorId, normalized, value);
+        recordEvent("behavior", "Applied behavior " + normalized + "=" + value);
         return "ok";
     }
 
@@ -305,9 +319,11 @@ public class Emulator {
 
             LOGGER.info("[{}] ✓ Dynamic room config applied successfully", emulatorId);
             LOGGER.info("[{}] =======================================", emulatorId);
+            recordEvent("config", "Dynamic room config applied");
 
         } catch (Exception e) {
             LOGGER.error("[{}] ✗ Failed to apply room config: {}", emulatorId, e.getMessage(), e);
+            recordEvent("error", "Failed to apply room config: " + e.getMessage());
         }
     }
 
@@ -376,7 +392,13 @@ public class Emulator {
         tickEnvironment();
         Map<String, Double> sensorData = collectData();
         sendData(sensorData, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start));
-        tickCounter.incrementAndGet();
+        long tick = tickCounter.incrementAndGet();
+        recordEvent(
+                "telemetry",
+                "Tick " + tick + " temp=" + format(room.temperature())
+                        + "C humidity=" + format(room.humidity())
+                        + "% co2=" + format(room.co2())
+                        + " ppm pm25=" + format(room.pm25()));
     }
 
     public Map<String, Double> collectData() {
@@ -429,10 +451,31 @@ public class Emulator {
         return state;
     }
 
+    public synchronized EmulatorSnapshot snapshot() {
+        return new EmulatorSnapshot(
+                emulatorId,
+                state,
+                room == null ? 0 : room.updateIntervalSec(),
+                room == null ? 0 : room.roomSquareMeters(),
+                room == null ? 0 : room.windowCount(),
+                tickCounter.get(),
+                telemetryQueue.size(),
+                sensors.stream().map(sensor -> sensor.getClass().getSimpleName()).toList(),
+                electrodomestics.stream().map(Electrodomestic::getType).toList());
+    }
+
     /**
      * Get all electrodomestic devices (for actuator command processing)
      */
     public List<Electrodomestic> getElectrodomestics() {
         return List.copyOf(electrodomestics);
+    }
+
+    private void recordEvent(String category, String message) {
+        eventListener.onEvent(emulatorId, category, message);
+    }
+
+    private String format(double value) {
+        return String.format("%.2f", value);
     }
 }
