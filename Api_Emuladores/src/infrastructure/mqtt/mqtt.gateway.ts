@@ -262,17 +262,49 @@ class MqttGateway {
   }
 
   private async handleIncomingMessage(topic: string, payloadRaw: Buffer): Promise<void> {
+    const isTelemetryTopic = topic.endsWith("/telemetry");
+
+    if (isTelemetryTopic) {
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "info",
+        source: "mqtt-received",
+        event: "mqtt-telemetry-received",
+        message: `Telemetry frame received from ${topic}`,
+        details: { topic, byteLength: payloadRaw.length }
+      });
+    }
+
+    let payload: Record<string, unknown>;
+
     try {
-      const payload = decodeMqttPayload(topic, payloadRaw);
+      payload = decodeMqttPayload(topic, payloadRaw);
       addLog({
         timestamp: new Date().toISOString(),
         level: "debug",
         source: "mqtt",
-        event: topic.endsWith("/telemetry") ? "mqtt.telemetry.decoded" : "mqtt.message.decoded",
+        event: isTelemetryTopic ? "mqtt-telemetry-decoded" : "mqtt.message.decoded",
         message: `Decoded MQTT message from ${topic}`,
         details: { topic, payload }
       });
+    } catch (error: unknown) {
+      logger.error("MQTT message parse error", error);
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "error",
+        source: "mqtt",
+        event: isTelemetryTopic ? "mqtt-telemetry-parse-error" : "mqtt-message-parse-error",
+        message: error instanceof Error ? error.message : String(error),
+        details: {
+          topic,
+          byteLength: payloadRaw.length,
+          error: error instanceof Error ? error.stack ?? error.message : String(error)
+        }
+      });
+      return;
+    }
 
+    try {
       const telemetryEmulatorId = this.extractEmulatorId(topic, "telemetry");
       if (telemetryEmulatorId && this.telemetryHandler) {
         await this.telemetryHandler({ topic, emulatorId: telemetryEmulatorId, payload });

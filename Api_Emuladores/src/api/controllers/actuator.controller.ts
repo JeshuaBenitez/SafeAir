@@ -168,7 +168,7 @@ export async function sendActuatorCommand(
         deviceType: deviceType as "minisplit" | "purifier" | "extractor",
         deviceIndex,
         action,
-        reason: `Command from ${source}`,
+        reason: `Command from ${source}; value=${normalizedValue}`,
         requestedBy: source === "rule-engine" ? "rule-engine" : "manual",
       });
 

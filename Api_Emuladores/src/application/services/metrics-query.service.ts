@@ -70,20 +70,40 @@ export class MetricsQueryService {
       return null;
     };
 
+    const getActionSetpoint = (action?: { action?: string; reason?: string | null }): number | null => {
+      if (action?.action !== "set_temperature") {
+        return null;
+      }
+
+      const match = String(action.reason ?? "").match(/value=([0-9]+(?:\.[0-9]+)?)/);
+      if (!match) {
+        return null;
+      }
+
+      const parsed = Number(match[1]);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+
     const buildUnits = (type: ActuatorType) => {
       const statesByIndex = new Map((reportedStates[type] ?? []).map((state) => [state.deviceIndex, state]));
-      const actionsByIndex = new Map((latestActions[type] ?? []).map((action) => [action.deviceIndex, action]));
+      const actions = latestActions[type] ?? [];
       const count = unitCounts[type];
 
       return Array.from({ length: count }, (_, index) => {
         const deviceIndex = index + 1;
         const reported = statesByIndex.get(deviceIndex);
-        const action = actionsByIndex.get(deviceIndex);
+        const deviceActions = actions.filter((item) => item.deviceIndex === deviceIndex);
+        const action = deviceActions[0];
+        const stateAction = deviceActions.find((item) => mapState(item.action) !== null);
+        const setpointAction = deviceActions.find((item) => getActionSetpoint(item) !== null);
         const reportedAt = reported?.reportedAt ? new Date(reported.reportedAt).getTime() : 0;
-        const actionAt = action?.executedAt ? new Date(action.executedAt).getTime() : 0;
-        const actionState = mapState(action?.action);
-        const mqttConfirmsAction = Boolean(reported && action && actionState === reported.isOn);
-        const useActionState = Boolean(action && actionAt >= reportedAt && !mqttConfirmsAction);
+        const stateActionAt = stateAction?.executedAt ? new Date(stateAction.executedAt).getTime() : 0;
+        const setpointActionAt = setpointAction?.executedAt ? new Date(setpointAction.executedAt).getTime() : 0;
+        const actionState = mapState(stateAction?.action);
+        const actionSetpoint = getActionSetpoint(setpointAction);
+        const mqttConfirmsAction = Boolean(reported && stateAction && actionState === reported.isOn);
+        const useActionState = Boolean(stateAction && actionState !== null && stateActionAt >= reportedAt && !mqttConfirmsAction);
+        const useActionSetpoint = Boolean(type === "minisplit" && actionSetpoint !== null && setpointActionAt >= reportedAt);
 
         return {
           deviceType: type,
@@ -92,12 +112,16 @@ export class MetricsQueryService {
           isOn: useActionState ? actionState : reported?.isOn ?? actionState,
           lastAction: action?.action ?? null,
           mode: reported?.mode ?? null,
-          targetTemperature: reported?.targetTemperature ?? null,
+          targetTemperature: useActionSetpoint ? actionSetpoint : reported?.targetTemperature ?? actionSetpoint,
           ambientTemperature: reported?.ambientTemperature ?? null,
           ambientHumidity: reported?.ambientHumidity ?? null,
           level: action?.level ?? null,
-          updatedAt: useActionState ? action?.executedAt ?? null : reported?.reportedAt ?? action?.executedAt ?? null,
-          source: useActionState ? "manual" : reported?.source ?? (action ? "manual" : null)
+          updatedAt: useActionState
+            ? stateAction?.executedAt ?? null
+            : useActionSetpoint
+              ? setpointAction?.executedAt ?? null
+              : reported?.reportedAt ?? action?.executedAt ?? null,
+          source: useActionState || useActionSetpoint ? "manual" : reported?.source ?? (action ? "manual" : null)
         };
       });
     };

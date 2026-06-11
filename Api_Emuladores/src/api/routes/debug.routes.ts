@@ -219,6 +219,116 @@ async function getDebugEmulatorsForRequest(req: Request) {
   return { userId, role, global, emulatorsFromDb };
 }
 
+type DebugLatestMeasurement = {
+  temperature: number;
+  humidity: number;
+  co2: number;
+  pm25: number;
+  measuredAt: string | null;
+  receivedAt?: string | null;
+  source?: string | null;
+};
+
+function toIsoString(value: unknown): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const parsed = new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
+}
+
+function normalizeLatestMeasurement(value: unknown): DebugLatestMeasurement | null {
+  const raw = value && typeof value === "object" && "get" in value && typeof (value as { get?: unknown }).get === "function"
+    ? ((value as { get(options?: unknown): unknown }).get({ plain: true }) as Record<string, unknown>)
+    : value as Record<string, unknown> | null;
+
+  if (!raw) {
+    return null;
+  }
+
+  const metrics = (raw.metrics && typeof raw.metrics === "object"
+    ? raw.metrics
+    : raw) as Record<string, unknown>;
+
+  const temperature = Number(metrics.temperature);
+  const humidity = Number(metrics.humidity);
+  const co2 = Number(metrics.co2);
+  const pm25 = Number(metrics.pm25);
+
+  if (![temperature, humidity, co2, pm25].every(Number.isFinite)) {
+    return null;
+  }
+
+  return {
+    temperature,
+    humidity,
+    co2,
+    pm25,
+    measuredAt: toIsoString(raw.measuredAt),
+    receivedAt: toIsoString(raw.receivedAt),
+    source: typeof raw.source === "string" ? raw.source : null
+  };
+}
+
+function normalizeMemoryMetrics(memoryState: ReturnType<typeof getEmulatorStates>[number] | undefined): DebugLatestMeasurement | null {
+  if (!memoryState) {
+    return null;
+  }
+
+  const latest = normalizeLatestMeasurement({
+    ...memoryState.metrics,
+    measuredAt: memoryState.lastSeen
+  });
+
+  return latest;
+}
+
+async function buildDebugEmulatorPayload(
+  emuDb: NonNullable<Awaited<ReturnType<typeof getDebugEmulatorsForRequest>>["emulatorsFromDb"]>[number],
+  memoryMap: Map<string, ReturnType<typeof getEmulatorStates>[number]>
+) {
+  const memoryState = emuDb.emulatorExternalId ? memoryMap.get(emuDb.emulatorExternalId) : undefined;
+  const actuatorState = emuDb.assignmentStatus === "assigned" && emuDb.roomId
+    ? await container.metricsQueryService.actuatorState(emuDb.roomId) as { actuators?: unknown; metrics?: unknown; measuredAt?: unknown; receivedAt?: unknown }
+    : null;
+  const dbMeasurement = normalizeLatestMeasurement(actuatorState);
+  const memoryMeasurement = normalizeMemoryMetrics(memoryState);
+  const latestMeasurement = dbMeasurement ?? memoryMeasurement;
+
+  return {
+    emulatorId: emuDb.emulatorExternalId,
+    roomId: emuDb.roomId,
+    roomName: emuDb.roomName,
+    status: emuDb.status,
+    roomArea: emuDb.roomArea,
+    windowCount: emuDb.windowCount,
+    minisplitCount: emuDb.minisplitCount,
+    purifierCount: emuDb.purifierCount,
+    extractorCount: emuDb.extractorCount,
+    hasEmulator: emuDb.hasEmulator,
+    ownedByUser: emuDb.ownedByUser,
+    assignmentStatus: emuDb.assignmentStatus,
+    assignable: emuDb.assignmentStatus === "free" && emuDb.status === "online",
+    connected: emuDb.assignmentStatus === "assigned" ? (memoryState?.connected ?? (emuDb.status === "online")) : false,
+    lastSeen: latestMeasurement?.measuredAt ?? memoryState?.lastSeen ?? null,
+    latestMeasurement: emuDb.assignmentStatus === "assigned" ? latestMeasurement : null,
+    metrics: emuDb.assignmentStatus === "assigned" && latestMeasurement
+      ? {
+          temperature: latestMeasurement.temperature,
+          humidity: latestMeasurement.humidity,
+          co2: latestMeasurement.co2,
+          pm25: latestMeasurement.pm25
+        }
+      : null,
+    devices: emuDb.assignmentStatus === "assigned" ? (actuatorState?.actuators ?? memoryState?.devices ?? null) : null
+  };
+}
+
 // Get emulators dashboard as JSON
 debugRouter.get("/emulators", async (req, res) => {
   setNoStoreHeaders(res);
@@ -235,29 +345,7 @@ debugRouter.get("/emulators", async (req, res) => {
   const emulatorsFromMemory = getEmulatorStates();
   const memoryMap = new Map(emulatorsFromMemory.map(e => [e.emulatorId, e]));
   const emulators = await Promise.all((emulatorsFromDb ?? []).map(async (emuDb) => {
-    const memoryState = emuDb.emulatorExternalId ? memoryMap.get(emuDb.emulatorExternalId) : undefined;
-    const actuatorState = emuDb.assignmentStatus === "assigned" && emuDb.roomId
-      ? await container.metricsQueryService.actuatorState(emuDb.roomId) as { actuators?: unknown }
-      : null;
-    return {
-      emulatorId: emuDb.emulatorExternalId,
-      roomId: emuDb.roomId,
-      roomName: emuDb.roomName,
-      status: emuDb.status,
-      roomArea: emuDb.roomArea,
-      windowCount: emuDb.windowCount,
-      minisplitCount: emuDb.minisplitCount,
-      purifierCount: emuDb.purifierCount,
-      extractorCount: emuDb.extractorCount,
-      hasEmulator: emuDb.hasEmulator,
-      ownedByUser: emuDb.ownedByUser,
-      assignmentStatus: emuDb.assignmentStatus,
-      assignable: emuDb.assignmentStatus === "free" && emuDb.status === "online",
-      connected: emuDb.assignmentStatus === "assigned" ? (memoryState?.connected ?? (emuDb.status === "online")) : false,
-      lastSeen: memoryState?.lastSeen,
-      metrics: emuDb.assignmentStatus === "assigned" ? (memoryState?.metrics ?? null) : null,
-      devices: emuDb.assignmentStatus === "assigned" ? (actuatorState?.actuators ?? memoryState?.devices ?? null) : null
-    };
+    return buildDebugEmulatorPayload(emuDb, memoryMap);
   }));
 
   res.status(200).json({ count: emulators.length, mode: global ? "global-admin" : "user", role, emulators });
@@ -278,29 +366,7 @@ debugRouter.get("/emulators/html", async (req, res) => {
 
     // Combine both sources
     const combinedEmulators = await Promise.all(dbRows.map(async (emuDb) => {
-      const memoryState = emuDb.emulatorExternalId ? memoryMap.get(emuDb.emulatorExternalId) : undefined;
-      const actuatorState = emuDb.assignmentStatus === "assigned" && emuDb.roomId
-        ? await container.metricsQueryService.actuatorState(emuDb.roomId) as { actuators?: unknown }
-        : null;
-      return {
-        emulatorId: emuDb.emulatorExternalId,
-        roomId: emuDb.roomId,
-        roomName: emuDb.roomName,
-        status: emuDb.status,
-        roomArea: emuDb.roomArea,
-        windowCount: emuDb.windowCount,
-        minisplitCount: emuDb.minisplitCount,
-        purifierCount: emuDb.purifierCount,
-        extractorCount: emuDb.extractorCount,
-        hasEmulator: emuDb.hasEmulator,
-        ownedByUser: emuDb.ownedByUser,
-        assignmentStatus: emuDb.assignmentStatus,
-        assignable: emuDb.assignmentStatus === "free" && emuDb.status === "online",
-        connected: emuDb.assignmentStatus === "assigned" ? (memoryState?.connected ?? (emuDb.status === "online")) : false,
-        lastSeen: memoryState?.lastSeen,
-        metrics: emuDb.assignmentStatus === "assigned" ? (memoryState?.metrics || null) : null,
-        devices: emuDb.assignmentStatus === "assigned" ? (actuatorState?.actuators || memoryState?.devices || null) : null
-      };
+      return buildDebugEmulatorPayload(emuDb, memoryMap);
     }));
 
     const html = generateEmulatorsHtml(combinedEmulators, { authRequired: !userId, global });

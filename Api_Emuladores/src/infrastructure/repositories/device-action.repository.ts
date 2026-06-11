@@ -34,15 +34,8 @@ export class DeviceActionRepository {
   async latestByRoomAndType(roomId: string): Promise<Partial<Record<ActuatorType, DeviceActionModel[]>>> {
     const actions = await DeviceActionModel.findAll({ where: { roomId }, order: [["executedAt", "DESC"]], limit: 200 });
     const result: Partial<Record<ActuatorType, DeviceActionModel[]>> = {};
-    const seen = new Set<string>();
 
     for (const action of actions) {
-      const key = `${action.deviceType}:${action.deviceIndex}`;
-      if (seen.has(key)) {
-        continue;
-      }
-
-      seen.add(key);
       if (!result[action.deviceType]) {
         result[action.deviceType] = [];
       }

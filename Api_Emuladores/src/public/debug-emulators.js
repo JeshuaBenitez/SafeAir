@@ -13,6 +13,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let reconnectTimer = null;
   let refreshTimer = null;
   let lastEventAt = 0;
+  let activeJwt = '';
+  let refreshSequence = 0;
   const pendingControls = new Set();
   const STALE_AFTER_MS = 30000;
 
@@ -82,7 +84,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function getCurrentJwt() {
-    return (jwtInput && jwtInput.value.trim()) || safeLocalStorageGet(JWT_STORAGE_KEY) || readCookie(JWT_COOKIE_NAME);
+    return activeJwt;
   }
 
   function persistJwtFromInput() {
@@ -90,9 +92,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!jwt) {
       safeLocalStorageRemove(JWT_STORAGE_KEY);
       clearJwtCookie();
+      activeJwt = '';
       return '';
     }
 
+    activeJwt = jwt;
     safeLocalStorageSet(JWT_STORAGE_KEY, jwt);
     writeJwtCookie(jwt);
     return jwt;
@@ -129,7 +133,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!response.ok) {
       const body = await readErrorBody(response);
-      throw new Error('HTTP ' + response.status + ' ' + response.statusText + (body ? ': ' + body : ''));
+      const error = new Error('HTTP ' + response.status + ' ' + response.statusText + (body ? ': ' + body : ''));
+      error.status = response.status;
+      throw error;
     }
 
     return response.json();
@@ -163,7 +169,47 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function fmt(value, decimals) {
-    return value === null || value === undefined ? '—' : Number(Number(value).toFixed(decimals)).toString();
+    const numeric = Number(value);
+    return value === null || value === undefined || !Number.isFinite(numeric) ? '—' : Number(numeric.toFixed(decimals)).toString();
+  }
+
+  function normalizeTelemetry(emu) {
+    const candidates = [
+      emu && emu.latestMeasurement,
+      emu && emu.currentMetrics,
+      emu && emu.metrics,
+      emu && emu.telemetry,
+      emu && emu.roomState && emu.roomState.metrics,
+      emu && emu.roomState
+    ];
+
+    for (const candidate of candidates) {
+      if (!candidate || typeof candidate !== 'object') continue;
+
+      const metrics = candidate.metrics && typeof candidate.metrics === 'object'
+        ? candidate.metrics
+        : candidate;
+      const temperature = Number(metrics.temperature);
+      const humidity = Number(metrics.humidity);
+      const co2 = Number(metrics.co2);
+      const pm25 = Number(metrics.pm25);
+
+      if ([temperature, humidity, co2, pm25].every(Number.isFinite)) {
+        return {
+          temperature,
+          humidity,
+          co2,
+          pm25,
+          measuredAt: candidate.measuredAt || candidate.updatedAt || candidate.timestamp || emu.lastSeen || null
+        };
+      }
+    }
+
+    return null;
+  }
+
+  function telemetryLastSeen(emu, telemetry) {
+    return (telemetry && telemetry.measuredAt) || emu.lastSeen || null;
   }
 
   function deviceDisplay(isOn, targetTemp, label, hasTemp) {
@@ -232,6 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const purifierUnits = unitList(emu, 'purifier', purCount);
     const extractorUnits = unitList(emu, 'extractor', extCount);
     const controlsDisabled = !isAssigned;
+    const telemetry = isAssigned ? normalizeTelemetry(emu) : null;
 
     const miniBadge = isAssigned ? minisplitUnits.map(unit => deviceDisplay(unit.isOn, unit.targetTemperature, 'Minisplit Unidad ' + unit.deviceIndex, true)).join(' ') : '<span class="device-badge unknown">Minisplit (' + miniCount + '): N/A</span>';
     const purBadge = isAssigned ? purifierUnits.map(unit => deviceDisplay(unit.isOn, null, 'Purificador Unidad ' + unit.deviceIndex, false)).join(' ') : '<span class="device-badge unknown">Purificador (' + purCount + '): N/A</span>';
@@ -242,14 +289,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     return '<div class="emulator-card">' +
       '<div class="card-header"><div class="card-title"><div class="card-title-main"><strong>' + escapeHtml(primaryTitle) + '</strong><span>' + escapeHtml(secondaryTitle) + '</span></div><span class="status-badge ' + connClass + '">' + escapeHtml(connLabel) + '</span></div>' +
-      '<div class="card-meta">Último reporte: ' + escapeHtml(formatLocalTime(emu.lastSeen)) + '</div>' +
+      '<div class="card-meta">Último reporte: ' + escapeHtml(formatLocalTime(telemetryLastSeen(emu, telemetry))) + '</div>' +
       '<div class="card-meta">Habitación: <code>' + escapeHtml(roomInfo) + '</code></div>' +
       '<div class="card-meta">Área ' + escapeHtml(areaM2) + ' · ' + escapeHtml(windowCount) + ' ventanas · Minisplits ' + miniCount + ' · Purificadores ' + purCount + ' · Extractores ' + extCount + '</div></div>' +
       '<div class="metrics-grid">' +
-      '<div class="metric-box"><div class="metric-value">' + (isAssigned && emu.metrics ? fmt(emu.metrics.temperature, 2) + '°C' : '—') + '</div><div class="metric-label">' + (isAssigned && emu.metrics ? 'Temperatura' : 'Sin métricas disponibles') + '</div></div>' +
-      '<div class="metric-box"><div class="metric-value">' + (isAssigned && emu.metrics ? fmt(emu.metrics.humidity, 2) + '%' : '—') + '</div><div class="metric-label">Humedad</div></div>' +
-      '<div class="metric-box"><div class="metric-value">' + (isAssigned && emu.metrics ? fmt(emu.metrics.co2, 2) : '—') + '</div><div class="metric-label">CO₂ (ppm)</div></div>' +
-      '<div class="metric-box"><div class="metric-value">' + (isAssigned && emu.metrics ? fmt(emu.metrics.pm25, 2) : '—') + '</div><div class="metric-label">PM2.5 (μg/m³)</div></div>' +
+      '<div class="metric-box"><div class="metric-value">' + (telemetry ? fmt(telemetry.temperature, 2) + '°C' : '—') + '</div><div class="metric-label">' + (telemetry ? 'Temperatura' : 'Sin métricas disponibles') + '</div></div>' +
+      '<div class="metric-box"><div class="metric-value">' + (telemetry ? fmt(telemetry.humidity, 2) + '%' : '—') + '</div><div class="metric-label">Humedad</div></div>' +
+      '<div class="metric-box"><div class="metric-value">' + (telemetry ? fmt(telemetry.co2, 2) : '—') + '</div><div class="metric-label">CO₂ (ppm)</div></div>' +
+      '<div class="metric-box"><div class="metric-value">' + (telemetry ? fmt(telemetry.pm25, 2) : '—') + '</div><div class="metric-label">PM2.5 (μg/m³)</div></div>' +
       '<div class="metric-box"><div class="metric-value">' + escapeHtml(areaM2) + '</div><div class="metric-label">Área</div></div>' +
       '<div class="metric-box"><div class="metric-value">' + escapeHtml(windowCount) + '</div><div class="metric-label">Ventanas</div></div></div>' +
       '<div class="devices-section"><div class="section-label">Dispositivos</div><div class="device-badges">' + miniBadge + ' ' + purBadge + ' ' + extBadge + '</div></div>' +
@@ -270,23 +317,96 @@ document.addEventListener('DOMContentLoaded', () => {
       : '<div class="empty-state">No hay rooms configurados para este usuario. Cuando crees una habitación aparecerá aquí.</div>';
   }
 
+  function clearPendingControls() {
+    pendingControls.clear();
+  }
+
+  function renderEmptyState(message) {
+    if (!cardsGrid) return;
+    cardsGrid.innerHTML = '<div class="empty-state">' + escapeHtml(message) + '</div>';
+  }
+
+  function clearVisibleState(message, type) {
+    refreshSequence += 1;
+    clearPendingControls();
+    renderEmptyState(message || 'Sin JWT: pega un token válido para cargar rooms autorizadas.');
+    setStatus(message || 'Sin JWT: pega un token válido para cargar rooms autorizadas.', type || 'info');
+  }
+
+  function clearStoredJwt() {
+    activeJwt = '';
+    safeLocalStorageRemove(JWT_STORAGE_KEY);
+    clearJwtCookie();
+    if (jwtInput) {
+      jwtInput.value = '';
+    }
+  }
+
+  function clearAuthState(message, type) {
+    refreshing = false;
+    clearStoredJwt();
+    stopSse();
+    clearVisibleState(message || 'Sin JWT: pega un token válido para cargar rooms autorizadas.', type || 'info');
+  }
+
+  function applyJwt(jwt, reason) {
+    const nextJwt = String(jwt || '').trim();
+    stopSse();
+    refreshing = false;
+    refreshSequence += 1;
+    clearPendingControls();
+
+    if (!nextJwt) {
+      clearAuthState('Sin JWT: pega un token válido para cargar rooms autorizadas.', 'info');
+      return;
+    }
+
+    activeJwt = nextJwt;
+    if (jwtInput && jwtInput.value.trim() !== nextJwt) {
+      jwtInput.value = nextJwt;
+    }
+    safeLocalStorageSet(JWT_STORAGE_KEY, nextJwt);
+    writeJwtCookie(nextJwt);
+    renderEmptyState('Cargando rooms autorizadas...');
+    setStatus('Cargando snapshot fresco...', 'info');
+    startSse();
+    refreshView(reason || 'jwt-change');
+  }
+
   async function refreshView(reason) {
     if (refreshing) return;
-    refreshing = true;
 
-    const jwt = persistJwtFromInput() || getCurrentJwt();
+    const jwt = getCurrentJwt();
+    if (!jwt) {
+      clearAuthState('Sin JWT: pega un token válido para cargar rooms autorizadas.', 'info');
+      return;
+    }
+
+    refreshing = true;
+    const requestId = ++refreshSequence;
+    const requestJwt = jwt;
+
     console.log(LOG_PREFIX + ' refresh start', { reason: reason || 'manual', hasToken: Boolean(jwt) });
     setStatus('Actualizando datos...', 'info');
 
     try {
       const data = await validateEmulatorsEndpoint(jwt);
+      if (requestId !== refreshSequence || requestJwt !== activeJwt) {
+        console.log(LOG_PREFIX + ' stale refresh ignored', { reason: reason || 'manual' });
+        return;
+      }
       console.log(LOG_PREFIX + ' refresh success', { count: data.count, mode: data.mode });
       renderEmulators(data);
       setStatus('Datos actualizados. Tiempo real activo.', 'success');
-      refreshing = false;
     } catch (error) {
       console.error(LOG_PREFIX + ' refresh error', error);
+      if (error && (error.status === 401 || error.status === 403)) {
+        clearAuthState('JWT inválido o expirado: pega un token válido para cargar rooms autorizadas.', 'error');
+        return;
+      }
+      renderEmptyState('No se pudo cargar el snapshot de emuladores.');
       setStatus('Refresh error: ' + (error && error.message ? error.message : String(error)), 'error');
+    } finally {
       refreshing = false;
     }
   }
@@ -322,6 +442,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function startSse() {
+    if (!activeJwt) {
+      setStatus('Sin JWT: tiempo real detenido.', 'info');
+      return;
+    }
+
     if (!window.EventSource) {
       setStatus('SSE no disponible en este navegador. Usa Refresh o Auto-refresh.', 'error');
       return;
@@ -444,9 +569,6 @@ document.addEventListener('DOMContentLoaded', () => {
     stopAutoRefresh();
     stopSse();
   });
-  startAutoRefresh();
-  startSse();
-  refreshView('initial');
 
   setInterval(() => {
     const el = document.getElementById('clock');
@@ -455,41 +577,58 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, 1000);
 
-  if (jwtInput) {
+  function initializeJwt() {
     const saved = safeLocalStorageGet(JWT_STORAGE_KEY);
     const cookieJwt = readCookie(JWT_COOKIE_NAME);
     const loadedJwt = saved || cookieJwt;
 
-    if (loadedJwt) {
+    if (jwtInput && loadedJwt) {
       jwtInput.value = loadedJwt;
-      if (cookieJwt !== loadedJwt) {
-        writeJwtCookie(loadedJwt);
-        console.log(LOG_PREFIX + ' token loaded', { source: saved ? 'localStorage' : 'cookie', syncedCookie: true });
-        refreshView('token-cookie-sync');
-      }
     }
 
     console.log(LOG_PREFIX + ' token loaded', { hasToken: Boolean(loadedJwt), source: saved ? 'localStorage' : (cookieJwt ? 'cookie' : 'none') });
 
-    jwtInput.addEventListener('input', persistJwtFromInput);
+    if (!loadedJwt) {
+      clearAuthState('Sin JWT: pega un token válido para cargar rooms autorizadas.', 'info');
+      return;
+    }
+
+    applyJwt(loadedJwt, saved && cookieJwt !== loadedJwt ? 'token-cookie-sync' : 'initial');
+  }
+
+  if (jwtInput) {
+    jwtInput.addEventListener('input', () => {
+      const value = jwtInput.value.trim();
+      if (!value) {
+        clearAuthState('Sin JWT: pega un token válido para cargar rooms autorizadas.', 'info');
+        return;
+      }
+
+      if (activeJwt && value !== activeJwt) {
+        stopSse();
+        clearVisibleState('JWT cambiado: presiona Enter o sal del campo para cargar snapshot fresco.', 'info');
+      }
+    });
     jwtInput.addEventListener('paste', () => {
       setTimeout(() => {
-        persistJwtFromInput();
-        refreshView('token-paste');
+        applyJwt(jwtInput.value, 'token-paste');
       }, 0);
     });
     jwtInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
-        refreshView('token-enter');
+        applyJwt(jwtInput.value, 'token-enter');
       }
     });
     jwtInput.addEventListener('change', () => {
-      refreshView('token-change');
+      applyJwt(jwtInput.value, 'token-change');
     });
   } else {
-    console.log(LOG_PREFIX + ' token loaded', { hasToken: Boolean(getCurrentJwt()), source: getCurrentJwt() ? 'storage-or-cookie' : 'none' });
+    console.log(LOG_PREFIX + ' token input missing');
   }
+
+  startAutoRefresh();
+  initializeJwt();
 
   if (cardsGrid) {
     cardsGrid.addEventListener('click', async (event) => {

@@ -16,7 +16,7 @@ if (-not $env:MQTT_HOST) { $env:MQTT_HOST = "IP_PC_DB_MQTT" }
 if (-not $env:MQTT_PORT) { $env:MQTT_PORT = "1883" }
 if (-not $env:MQTT_TLS_ENABLED) { $env:MQTT_TLS_ENABLED = "false" }
 if (-not $env:MQTT_CONSOLE_LOG_ENABLED) { $env:MQTT_CONSOLE_LOG_ENABLED = "true" }
-if (-not $env:SAFEAIR_EMULATOR_IDS) { $env:SAFEAIR_EMULATOR_IDS = "EMU-DEMO-R001,EMU-DEMO-R002,EMU-DEMO-R003" }
+if (-not $env:SAFEAIR_EMULATOR_IDS) { $env:SAFEAIR_EMULATOR_IDS = "EMU-U001-R001,EMU-U001-R002,EMU-U001-R003" }
 if (-not $env:SERVER_PORT) { $env:SERVER_PORT = "8081" }
 
 if ($env:MQTT_HOST -eq "IP_PC_DB_MQTT") {
