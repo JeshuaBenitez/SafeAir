@@ -2,6 +2,10 @@ import type { RoomSetupDerived, RoomSetupInput } from "../types/room.types";
 import { AppError } from "../../shared/errors/app-error";
 
 export class RoomSetupDomainService {
+  private static isValidActuatorSize(value: unknown): boolean {
+    return value === "small" || value === "medium" || value === "large";
+  }
+
   private static clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(value, max));
   }
@@ -35,6 +39,18 @@ export class RoomSetupDomainService {
 
     if (setup.extractorCount < 1 || setup.extractorCount > 3) {
       throw new AppError("Extractor count must be between 1 and 3", 422, "EXTRACTOR_COUNT_INVALID");
+    }
+
+    if (!RoomSetupDomainService.isValidActuatorSize(setup.minisplitSize)) {
+      throw new AppError("Minisplit size must be small, medium or large", 422, "MINISPLIT_SIZE_INVALID");
+    }
+
+    if (!RoomSetupDomainService.isValidActuatorSize(setup.purifierSize)) {
+      throw new AppError("Purifier size must be small, medium or large", 422, "PURIFIER_SIZE_INVALID");
+    }
+
+    if (!RoomSetupDomainService.isValidActuatorSize(setup.extractorSize)) {
+      throw new AppError("Extractor size must be small, medium or large", 422, "EXTRACTOR_SIZE_INVALID");
     }
 
     const maxWindowArea = roomArea * 0.4;

@@ -1,6 +1,8 @@
 ﻿import { DataTypes, Model } from "sequelize";
 import type { Sequelize } from "sequelize";
 
+const ACTUATOR_SIZE_VALUES = ["small", "medium", "large"];
+
 export class RoomSetupModel extends Model {
   declare id: string;
   declare roomId: string;
@@ -12,6 +14,9 @@ export class RoomSetupModel extends Model {
   declare minisplitCount: number;
   declare purifierCount: number;
   declare extractorCount: number;
+  declare minisplitSize: string;
+  declare purifierSize: string;
+  declare extractorSize: string;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 }
@@ -61,6 +66,24 @@ export function initRoomSetupModel(sequelize: Sequelize): void {
         type: DataTypes.INTEGER,
         allowNull: false
       },
+      minisplitSize: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: "medium",
+        validate: { isIn: [ACTUATOR_SIZE_VALUES] }
+      },
+      purifierSize: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: "medium",
+        validate: { isIn: [ACTUATOR_SIZE_VALUES] }
+      },
+      extractorSize: {
+        type: DataTypes.STRING(16),
+        allowNull: false,
+        defaultValue: "medium",
+        validate: { isIn: [ACTUATOR_SIZE_VALUES] }
+      },
       createdAt: DataTypes.DATE,
       updatedAt: DataTypes.DATE
     },
@@ -70,4 +93,3 @@ export function initRoomSetupModel(sequelize: Sequelize): void {
     }
   );
 }
-

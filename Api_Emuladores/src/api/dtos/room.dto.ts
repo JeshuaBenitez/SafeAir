@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const actuatorSizeSchema = z.enum(["small", "medium", "large"]);
+
 export const createRoomSchema = z.object({
   instanceId: z.string().uuid().optional(),
   userId: z.string().uuid().optional(),
@@ -19,7 +21,10 @@ export const upsertRoomSetupSchema = z.object({
   windowAreaTotal: z.number().min(0),
   minisplitCount: z.number().int().min(1).max(3),
   purifierCount: z.number().int().min(1).max(3),
-  extractorCount: z.number().int().min(1).max(3)
+  extractorCount: z.number().int().min(1).max(3),
+  minisplitSize: actuatorSizeSchema.default("medium"),
+  purifierSize: actuatorSizeSchema.default("medium"),
+  extractorSize: actuatorSizeSchema.default("medium")
 });
 
 export const createDeviceSchema = z.object({

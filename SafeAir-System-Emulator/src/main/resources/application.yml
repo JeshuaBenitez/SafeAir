@@ -16,6 +16,12 @@ mqtt:
   username: ${MQTT_USERNAME:}
   password: ${MQTT_PASSWORD:}
   console-log-enabled: ${MQTT_CONSOLE_LOG_ENABLED:true}
+  client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:safeair-emulator}
+  keep-alive-seconds: ${MQTT_KEEP_ALIVE_SECONDS:60}
+  connection-timeout-seconds: ${MQTT_CONNECTION_TIMEOUT_SECONDS:10}
+  max-inflight: ${MQTT_MAX_INFLIGHT:100}
+  publish-warning-interval-seconds: ${MQTT_PUBLISH_WARNING_INTERVAL_SECONDS:30}
+  log-stacktrace: ${SAFEAIR_MQTT_LOG_STACKTRACE:false}
   validation:
     availability-target: ${MQTT_VALIDATION_AVAILABILITY:0.995}
     reconnect-window-seconds: ${MQTT_VALIDATION_RECONNECT_WINDOW:10}
@@ -32,3 +38,4 @@ logging:
     com.safeair.emulator.api.mqtt: ${SAFEAIR_MQTT_LOG_LEVEL:WARN}
     com.safeair.emulator.api.mqtt.ConsolePublisher: ${SAFEAIR_MQTT_CONSOLE_PUBLISHER_LOG_LEVEL:${SAFEAIR_MQTT_LOG_LEVEL:WARN}}
     com.safeair.emulator.api.mqtt.MqttPublisher: ${SAFEAIR_MQTT_PUBLISHER_LOG_LEVEL:${SAFEAIR_MQTT_LOG_LEVEL:WARN}}
+    com.safeair.emulator.emulation.core.Emulator: ${SAFEAIR_EMULATOR_CONFIG_LOG_LEVEL:WARN}

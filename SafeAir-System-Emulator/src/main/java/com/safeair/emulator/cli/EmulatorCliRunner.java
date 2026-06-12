@@ -5,10 +5,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
@@ -19,7 +16,8 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-import com.safeair.emulator.api.dto.ConfigCommand;
+import com.safeair.emulator.manager.ActuatorCommandResult;
+import com.safeair.emulator.manager.ActuatorSnapshot;
 import com.safeair.emulator.manager.EmulatorLogEntry;
 import com.safeair.emulator.manager.EmulatorLogStore;
 import com.safeair.emulator.manager.EmulatorManager;
@@ -81,7 +79,7 @@ public class EmulatorCliRunner implements ApplicationRunner, DisposableBean {
                 switch (option) {
                     case "1" -> showEmulators();
                     case "2" -> showLogs(reader);
-                    case "3" -> modifyBehavior(reader);
+                    case "3" -> controlActuators(reader);
                     case "0" -> {
                         System.out.println("CLI finalizada.");
                         return;
@@ -104,7 +102,7 @@ public class EmulatorCliRunner implements ApplicationRunner, DisposableBean {
         System.out.println();
         System.out.println("1. Listar emuladores");
         System.out.println("2. Ver logs");
-        System.out.println("3. Modificar comportamiento/configuracion");
+        System.out.println("3. Controlar actuadores");
         System.out.println("0. Salir");
     }
 
@@ -163,134 +161,233 @@ public class EmulatorCliRunner implements ApplicationRunner, DisposableBean {
         }
     }
 
-    private void modifyBehavior(BufferedReader reader) throws Exception {
+    private void controlActuators(BufferedReader reader) throws Exception {
+        String emulatorId = chooseEmulator(reader);
+        if (emulatorId == null) {
+            return;
+        }
+
+        ActuatorSnapshot actuator = chooseActuator(reader, emulatorId);
+        if (actuator == null) {
+            return;
+        }
+
+        runActuatorAction(reader, emulatorId, actuator);
+    }
+
+    private String chooseEmulator(BufferedReader reader) throws Exception {
+        List<EmulatorSnapshot> snapshots = emulatorManager.listSnapshots();
+        if (snapshots.isEmpty()) {
+            System.out.println("No hay emuladores registrados.");
+            return null;
+        }
+
         System.out.println();
-        System.out.println("1. Modificar un emulador");
-        System.out.println("2. Modificar el conjunto completo");
-        String option = readLine(reader, "Elige una opcion");
-        if ("1".equals(option)) {
-            modifySingleEmulator(reader);
-            return;
+        System.out.println("Selecciona un emulador:");
+        for (int i = 0; i < snapshots.size(); i++) {
+            EmulatorSnapshot snapshot = snapshots.get(i);
+            System.out.println((i + 1) + ". " + snapshot.emulatorId() + " [" + snapshot.state() + "]");
         }
-        if ("2".equals(option)) {
-            modifyAllEmulators(reader);
-            return;
+        System.out.println("0. Volver");
+
+        Integer option = readInt(reader, "Selecciona un emulador");
+        if (option == null || option == 0) {
+            return null;
         }
-        System.out.println("Opcion invalida.");
+        if (option < 1 || option > snapshots.size()) {
+            System.out.println("Opcion invalida.");
+            return null;
+        }
+
+        String emulatorId = snapshots.get(option - 1).emulatorId();
+        if (emulatorManager.getEmulator(emulatorId) == null) {
+            System.out.println("Emulador no encontrado.");
+            return null;
+        }
+        return emulatorId;
     }
 
-    private void modifySingleEmulator(BufferedReader reader) throws Exception {
-        String emulatorId = readLine(reader, "ID del emulador");
-        String action = chooseAction(reader);
-        if (action == null) {
-            return;
+    private ActuatorSnapshot chooseActuator(BufferedReader reader, String emulatorId) throws Exception {
+        List<ActuatorSnapshot> actuators = emulatorManager.listActuators(emulatorId);
+        if (actuators.isEmpty()) {
+            System.out.println("No hay dispositivos disponibles en este emulador.");
+            return null;
         }
-        if ("room_config".equals(action)) {
-            ConfigCommand command = buildConfigCommand(reader, ConfigCommand.Scope.EMULATOR, emulatorId);
-            emulatorManager.applyConfig(command);
-            System.out.println("Configuracion aplicada a " + emulatorId + ".");
-            return;
-        }
-        executeBehavior(reader, emulatorId, action, false);
-    }
 
-    private void modifyAllEmulators(BufferedReader reader) throws Exception {
-        String action = chooseAction(reader);
-        if (action == null) {
-            return;
-        }
-        if ("room_config".equals(action)) {
-            ConfigCommand command = buildConfigCommand(reader, ConfigCommand.Scope.GLOBAL, null);
-            emulatorManager.applyConfig(command);
-            System.out.println("Configuracion global aplicada.");
-            return;
-        }
-        executeBehavior(reader, null, action, true);
-    }
-
-    private String chooseAction(BufferedReader reader) throws Exception {
         System.out.println();
-        System.out.println("1. Aplicar escenario");
-        System.out.println("2. Ajustar variable ambiental");
-        System.out.println("3. Pausar emulacion");
-        System.out.println("4. Reanudar emulacion");
-        System.out.println("5. Reconfigurar sala");
-        String option = readLine(reader, "Selecciona una accion");
-        return switch (option) {
-            case "1" -> "scenario";
-            case "2" -> "environment";
-            case "3" -> "pause";
-            case "4" -> "resume";
-            case "5" -> "room_config";
+        System.out.println("Selecciona dispositivo:");
+        for (int i = 0; i < actuators.size(); i++) {
+            System.out.println((i + 1) + ". " + formatActuator(actuators.get(i)));
+        }
+        System.out.println("0. Volver");
+
+        Integer option = readInt(reader, "Selecciona un dispositivo");
+        if (option == null || option == 0) {
+            return null;
+        }
+        if (option < 1 || option > actuators.size()) {
+            System.out.println("Opcion invalida.");
+            return null;
+        }
+        return actuators.get(option - 1);
+    }
+
+    private void runActuatorAction(BufferedReader reader, String emulatorId, ActuatorSnapshot actuator) throws Exception {
+        System.out.println();
+        System.out.println("Estado actual:");
+        System.out.println(formatActuator(actuator));
+        printActuatorActions(actuator);
+
+        Integer option = readInt(reader, "Selecciona una accion");
+        if (option == null || option == 0) {
+            return;
+        }
+
+        String action;
+        Integer value = null;
+        if (option == 1) {
+            action = "turn_on";
+        } else if (option == 2) {
+            action = "turn_off";
+        } else if (option == 3 && supportsStateChange(actuator)) {
+            action = stateActionFor(actuator);
+            value = readStateValue(reader, actuator);
+            if (value == null) {
+                return;
+            }
+        } else if ((option == 3 && !supportsStateChange(actuator)) || option == 4) {
+            printLatestActuatorState(emulatorId, actuator);
+            return;
+        } else {
+            System.out.println("Opcion invalida.");
+            return;
+        }
+
+        ActuatorCommandResult result = emulatorManager.applyActuatorCommand(
+                emulatorId,
+                actuator.deviceType(),
+                actuator.deviceIndex(),
+                action,
+                value);
+        if (!result.success()) {
+            printActuatorError(result.message());
+            return;
+        }
+
+        System.out.println("Cambio aplicado correctamente.");
+        System.out.println("Cambio aplicado:");
+        System.out.println(formatActuator(result.snapshot()));
+    }
+
+    private void printActuatorActions(ActuatorSnapshot actuator) {
+        System.out.println();
+        System.out.println("Acciones disponibles para " + actuatorLabel(actuator) + ":");
+        System.out.println("1. Encender");
+        System.out.println("2. Apagar");
+        if ("minisplit".equals(actuator.deviceType())) {
+            System.out.println("3. Cambiar temperatura objetivo");
+        } else if ("purifier".equals(actuator.deviceType())) {
+            System.out.println("3. Cambiar nivel (1-5)");
+        }
+        System.out.println((supportsStateChange(actuator) ? "4" : "3") + ". Mostrar estado actual");
+        System.out.println("0. Volver");
+    }
+
+    private boolean supportsStateChange(ActuatorSnapshot actuator) {
+        return "minisplit".equals(actuator.deviceType()) || "purifier".equals(actuator.deviceType());
+    }
+
+    private Integer readStateValue(BufferedReader reader, ActuatorSnapshot actuator) throws Exception {
+        return switch (actuator.deviceType()) {
+            case "minisplit" -> readIntInRange(reader, "Temperatura objetivo (19-30)", 19, 30);
+            case "extractor" -> readIntInRange(reader, "Estado (0=OFF, 1=ON)", 0, 1);
+            case "purifier" -> readIntInRange(reader, "Nivel (1-5)", 1, 5);
             default -> null;
         };
     }
 
-    private void executeBehavior(BufferedReader reader, String emulatorId, String action, boolean applyToAll) throws Exception {
-        if ("scenario".equals(action)) {
-            String scenario = readLine(reader, "Escenario (normal, hot-room, poor-air, high-humidity, high-co2)");
-            if (applyToAll) {
-                emulatorManager.applyScenarioToAll(scenario);
-                System.out.println("Escenario aplicado a todos los emuladores.");
-            } else {
-                System.out.println("Resultado: " + emulatorManager.applyScenario(emulatorId, scenario));
-            }
-            return;
-        }
+    private String stateActionFor(ActuatorSnapshot actuator) {
+        return switch (actuator.deviceType()) {
+            case "minisplit" -> "set_temperature";
+            case "extractor" -> "set_state";
+            case "purifier" -> "set_level";
+            default -> "";
+        };
+    }
 
-        if ("pause".equals(action) || "resume".equals(action)) {
-            if (applyToAll) {
-                emulatorManager.applyBehaviorToAll(action, "");
-                System.out.println("Accion aplicada a todos los emuladores.");
-            } else {
-                System.out.println("Resultado: " + emulatorManager.applyBehavior(emulatorId, action, ""));
-            }
-            return;
-        }
+    private void printLatestActuatorState(String emulatorId, ActuatorSnapshot actuator) {
+        List<ActuatorSnapshot> current = emulatorManager.listActuators(emulatorId);
+        current.stream()
+                .filter(item -> item.deviceType().equals(actuator.deviceType())
+                        && item.deviceIndex() == actuator.deviceIndex())
+                .findFirst()
+                .ifPresentOrElse(
+                        item -> System.out.println(formatActuator(item)),
+                        () -> System.out.println("Dispositivo no disponible en este emulador."));
+    }
 
-        if ("environment".equals(action)) {
-            System.out.println("1. set_temperature");
-            System.out.println("2. set_humidity");
-            System.out.println("3. set_co2");
-            System.out.println("4. set_pm25");
-            String variable = switch (readLine(reader, "Selecciona la variable")) {
-                case "1" -> "set_temperature";
-                case "2" -> "set_humidity";
-                case "3" -> "set_co2";
-                case "4" -> "set_pm25";
-                default -> null;
-            };
-            if (variable == null) {
-                System.out.println("Variable invalida.");
-                return;
-            }
-            String value = readLine(reader, "Nuevo valor");
-            if (applyToAll) {
-                emulatorManager.applyBehaviorToAll(variable, value);
-                System.out.println("Variable aplicada a todos los emuladores.");
-            } else {
-                System.out.println("Resultado: " + emulatorManager.applyBehavior(emulatorId, variable, value));
-            }
+    private String formatActuator(ActuatorSnapshot actuator) {
+        return actuatorLabel(actuator)
+                + " ["
+                + (actuator.on() ? "ON" : "OFF")
+                + ", "
+                + stateLabel(actuator)
+                + "="
+                + actuator.state()
+                + "]";
+    }
+
+    private String actuatorLabel(ActuatorSnapshot actuator) {
+        return switch (actuator.deviceType()) {
+            case "minisplit" -> "MiniSplit#" + actuator.deviceIndex();
+            case "extractor" -> "AirExtractor#" + actuator.deviceIndex();
+            case "purifier" -> "HumidifierPurifier#" + actuator.deviceIndex();
+            default -> actuator.deviceType() + "#" + actuator.deviceIndex();
+        };
+    }
+
+    private String stateLabel(ActuatorSnapshot actuator) {
+        return switch (actuator.deviceType()) {
+            case "minisplit" -> "setpoint";
+            case "extractor" -> "state";
+            case "purifier" -> "level";
+            default -> "state";
+        };
+    }
+
+    private void printActuatorError(String message) {
+        switch (message) {
+            case "emulator_not_found" -> System.out.println("Emulador no encontrado.");
+            case "device_not_found" -> System.out.println("Dispositivo no disponible en este emulador.");
+            case "value_out_of_range" -> System.out.println("Valor fuera de rango.");
+            default -> System.out.println("No se pudo aplicar el cambio: " + message);
         }
     }
 
-    private ConfigCommand buildConfigCommand(BufferedReader reader, ConfigCommand.Scope scope, String emulatorId) throws Exception {
-        Map<String, String> payload = new LinkedHashMap<>();
-        payload.put("roomSquareMeters", readLine(reader, "Area de la sala en m2"));
-        payload.put("windowCount", readLine(reader, "Numero de ventanas"));
-        payload.put("updateIntervalSec", readLine(reader, "Intervalo de actualizacion en segundos"));
-        payload.put("sensorTypes", readLine(reader, "Tipos de sensores CSV (1=Humidity,2=Temperature,3=PM25,4=CO2)"));
-        payload.put("deviceTypes", readLine(reader, "Tipos de dispositivos CSV (1=MiniSplit,2=HumidifierPurifier,3=AirExtractor)"));
-        payload.put("roomId", emulatorId == null ? "GLOBAL" : emulatorId);
-        payload.put("roomName", emulatorId == null ? "CLI_GLOBAL" : "CLI_" + emulatorId);
+    private Integer readInt(BufferedReader reader, String prompt) throws Exception {
+        String value = readLine(reader, prompt);
+        if (value == null || value.isBlank()) {
+            System.out.println("Entrada vacia.");
+            return null;
+        }
+        try {
+            return Integer.parseInt(value.trim());
+        } catch (NumberFormatException ex) {
+            System.out.println("Entrada no numerica.");
+            return null;
+        }
+    }
 
-        return new ConfigCommand(
-                UUID.randomUUID().toString(),
-                scope,
-                emulatorId,
-                null,
-                System.nanoTime(),
-                payload);
+    private Integer readIntInRange(BufferedReader reader, String prompt, int min, int max) throws Exception {
+        Integer value = readInt(reader, prompt);
+        if (value == null) {
+            return null;
+        }
+        if (value < min || value > max) {
+            System.out.println("Valor fuera de rango.");
+            return null;
+        }
+        return value;
     }
 
     private String readLine(BufferedReader reader, String prompt) throws Exception {

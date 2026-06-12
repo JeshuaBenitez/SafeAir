@@ -66,7 +66,8 @@ public class EmulatorProvisioningSubscriber {
             ProvisionCommand command = parse(raw);
             provision(command);
         } catch (RuntimeException | IOException ex) {
-            LOGGER.error("emulator.provision.failed topic={} payload={}", topic, raw, ex);
+            LOGGER.warn("emulator.provision.failed topic={} cause={}", topic, ex.getMessage());
+            LOGGER.debug("emulator.provision.failed payload={}", raw, ex);
             logStore.onEvent("provision", "emulator.provision.failed", ex.getMessage());
         }
     }

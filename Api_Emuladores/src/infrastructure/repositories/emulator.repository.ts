@@ -13,6 +13,9 @@ export interface DebugRoomEmulatorDetails {
   minisplitCount: number | null;
   purifierCount: number | null;
   extractorCount: number | null;
+  minisplitSize: string | null;
+  purifierSize: string | null;
+  extractorSize: string | null;
   status: string;
   hasEmulator: boolean;
   ownedByUser: boolean;
@@ -278,6 +281,9 @@ export class EmulatorRepository {
       minisplitCount: setup?.minisplitCount ?? null,
       purifierCount: setup?.purifierCount ?? null,
       extractorCount: setup?.extractorCount ?? null,
+      minisplitSize: setup?.minisplitSize ?? null,
+      purifierSize: setup?.purifierSize ?? null,
+      extractorSize: setup?.extractorSize ?? null,
       status: emulator?.status ?? "unassigned",
       hasEmulator: Boolean(emulator),
       ownedByUser,
@@ -295,6 +301,9 @@ export class EmulatorRepository {
       minisplitCount: null,
       purifierCount: null,
       extractorCount: null,
+      minisplitSize: null,
+      purifierSize: null,
+      extractorSize: null,
       status: emulator.status,
       hasEmulator: true,
       ownedByUser: false,

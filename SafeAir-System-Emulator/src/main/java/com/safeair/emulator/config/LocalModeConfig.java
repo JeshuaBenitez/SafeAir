@@ -58,8 +58,8 @@ public class LocalModeConfig {
     }
 
     @Bean(initMethod = "start", destroyMethod = "stop")
-    public MQTTConnector mqttConnector(MqttProperties properties) {
-        return new MQTTConnector(properties);
+    public MQTTConnector mqttConnector(MqttProperties properties, EmulatorLogStore logStore) {
+        return new MQTTConnector(properties, logStore);
     }
 
     @Bean

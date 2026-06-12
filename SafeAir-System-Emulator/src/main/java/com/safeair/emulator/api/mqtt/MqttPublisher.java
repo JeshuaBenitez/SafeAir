@@ -1,6 +1,8 @@
 package com.safeair.emulator.api.mqtt;
 
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,9 +17,11 @@ import com.safeair.emulator.emulation.core.TelemetryPayload;
  */
 public class MqttPublisher extends SendInfo implements Subject {
   private static final Logger LOGGER = LoggerFactory.getLogger(MqttPublisher.class);
+  private static final long WARNING_INTERVAL_MS = TimeUnit.SECONDS.toMillis(30);
 
   private final MQTTConnector connector;
   private final TelemetryAdapter telemetryAdapter;
+  private final AtomicLong lastWarningAt = new AtomicLong(0);
 
   public MqttPublisher() {
     this.connector = null;
@@ -67,7 +71,18 @@ public class MqttPublisher extends SendInfo implements Subject {
         LOGGER.debug("Published MQTT message successfully topic={} broker={}", topic, connector.brokerUrl());
       }
     } else {
-      LOGGER.error("Failed to publish MQTT message topic={} broker={}", topic, connector.brokerUrl());
+      warnRateLimited("MQTT publish not completed topic=" + topic + " broker=" + connector.brokerUrl());
     }
+  }
+
+  private void warnRateLimited(String message) {
+    long now = System.currentTimeMillis();
+    long previous = lastWarningAt.get();
+    if (now - previous < WARNING_INTERVAL_MS || !lastWarningAt.compareAndSet(previous, now)) {
+      LOGGER.debug(message);
+      return;
+    }
+
+    LOGGER.warn(message);
   }
 }

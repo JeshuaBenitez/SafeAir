@@ -1,244 +1,295 @@
 import { Request, Response } from "express";
-import { randomUUID } from "crypto";
-import { RoomRepository } from "../../infrastructure/repositories/room.repository";
-import { EmulatorRepository } from "../../infrastructure/repositories/emulator.repository";
-import { DeviceActionRepository } from "../../infrastructure/repositories/device-action.repository";
-import { CycleRepository } from "../../infrastructure/repositories/cycle.repository";
-import type { RoomModel } from "../../infrastructure/database/models";
-import { mqttGateway } from "../../infrastructure/mqtt/mqtt.gateway";
-import { actuatorStateTopic } from "../../infrastructure/mqtt/topics";
-import { addLog, logMqttPublished, logFrontend, logError, logPostgres } from "../../application/services/debug-logs.service";
+import { container } from "../../application/container";
+import { addLog } from "../../application/services/debug-logs.service";
 import { AppError } from "../../shared/errors/app-error";
-import { eventBus, EVENTS } from "../../application/events/event-bus";
 
-/**
- * Body for actuator command
- */
-interface ActuatorCommandBody {
-  action: "turn_on" | "turn_off" | "set_temperature" | "set_speed" | "set_mode";
-  value: boolean | number | string;
+interface RoomActuatorCommandBody {
+  action: string;
+  value?: boolean | number | string;
   deviceIndex?: number;
   source?: "frontend" | "api" | "rule-engine" | "debug-dashboard" | "safeairctl";
 }
 
-const SUPPORTED_ACTIONS = ["turn_on", "turn_off", "set_temperature", "set_speed", "set_mode"];
+interface ParsedEditCommand {
+  actuator: string;
+  deviceType: "minisplit" | "extractor" | "purifier";
+  deviceIndex: number;
+  responseAction: "turn_on" | "turn_off" | "set_state";
+  mqttAction: "turn_on" | "turn_off" | "set_temperature" | "set_speed";
+  value?: number;
+}
+
+const STRUCTURAL_FIELDS = new Set([
+  "roomName",
+  "roomId",
+  "userId",
+  "area",
+  "squareMeters",
+  "windows",
+  "windowCount",
+  "sensors",
+  "sensorTypes",
+  "deviceTypes",
+  "emulatorExternalId"
+]);
+
+const LEGACY_FIELDS = new Set([
+  "emulator",
+  "extractor1",
+  "minisplit1",
+  "minisplit1Setpoint",
+  "purifier1",
+  "purifier1Level"
+]);
+
+const RECOMMENDED_FIELDS = new Set(["actuator", "action", "value"]);
 
 /**
- * Send command to actuator via MQTT
+ * Send command to actuator via MQTT.
  * Flow: Frontend -> API -> EMQX -> Emulator
  */
-export async function sendActuatorCommand(
-  req: Request,
-  res: Response
-): Promise<void> {
-  // Extract and convert params to strings
-  const roomId = String(req.params.roomId);
-  const deviceType = String(req.params.deviceType);
-  const { action, value, source = "frontend" } = req.body as ActuatorCommandBody;
-  const deviceIndex = normalizeDeviceIndex((req.body as ActuatorCommandBody).deviceIndex);
+export async function sendActuatorCommand(req: Request, res: Response): Promise<void> {
   const userId = req.auth?.sub;
-
   if (!userId) {
     throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
   }
 
-  // 1. Log: Received action from frontend
-  logFrontend(`Command received: ${deviceType} ${action} for room ${roomId}`, {
-    roomId,
-    deviceType,
-    deviceIndex,
-    action,
-    value,
-    source,
+  const body = req.body as RoomActuatorCommandBody;
+  const result = await container.actuatorCommandService.sendCommand({
+    roomId: String(req.params.roomId),
+    userId,
+    deviceType: String(req.params.deviceType),
+    deviceIndex: body.deviceIndex,
+    action: body.action,
+    value: body.value,
+    source: body.source ?? "frontend"
   });
 
-  // 2. Validate parameters
-  if (!action || !SUPPORTED_ACTIONS.includes(action)) {
-    res.status(400).json({
-      success: false,
-      error: `Invalid action. Must be: ${SUPPORTED_ACTIONS.join(", ")}`,
-    });
-    return;
-  }
+  res.status(200).json({
+    success: true,
+    message: result.message,
+    topic: result.topic,
+    payload: result.payload
+  });
+}
 
-  if (action === "set_temperature" && typeof value !== "number") {
-    res.status(400).json({
-      success: false,
-      error: "set_temperature requires a number value for temperature",
-    });
-    return;
-  }
-
-  if (!["minisplit", "purifier", "extractor"].includes(deviceType)) {
-    res.status(400).json({
-      success: false,
-      error: "Invalid deviceType. Must be: minisplit, purifier, or extractor",
-    });
-    return;
-  }
-
+export async function editEmulatorActuator(req: Request, res: Response): Promise<void> {
   try {
-    // 3. Get room (just to verify it exists)
-    const roomRepository = new RoomRepository();
-    const room = await roomRepository.findById(roomId, userId);
-
-    if (!room) {
-      res.status(404).json({
-        success: false,
-        error: "Room not found",
-      });
-      return;
+    const userId = req.auth?.sub;
+    if (!userId) {
+      throw new AppError("Unauthorized", 401, "UNAUTHORIZED");
     }
 
-    const configuredUnits = getConfiguredUnits(room, deviceType as "minisplit" | "purifier" | "extractor");
-    if (configuredUnits < 1 || deviceIndex > configuredUnits) {
-      res.status(400).json({
-        success: false,
-        error: `${deviceType} unit ${deviceIndex} is not configured for this room`,
-        configuredUnits,
-      });
-      return;
-    }
-
-    // 4. Get emulator external ID (e.g., EMU-0001) for this room
-    const emulatorRepository = new EmulatorRepository();
-    const emulator = await emulatorRepository.findByRoomId(roomId);
-
-    if (!emulator) {
-      res.status(409).json({
-        success: false,
-        error: "Room has no emulator assigned",
-      });
-      return;
-    }
-
-    const targetId = emulator.emulatorExternalId;
-    const normalizedValue = normalizeActionValue(action, value);
-
-    const mqttPayload = {
-      correlationId: randomUUID(),
-      roomId,
-      roomName: room.name,
-      deviceType,
-      deviceIndex,
-      action,
-      value: normalizedValue,
-      source,
-      timestamp: new Date().toISOString(),
-    };
-
-    // 6. Publish to MQTT using the external emulator ID (e.g., EMU-0001)
-    const topic = actuatorStateTopic(targetId);
-    await mqttGateway.publish(topic, mqttPayload);
-    eventBus.emit(EVENTS.ACTUATOR_COMMAND_SENT, {
-      topic,
-      emulatorId: targetId,
-      roomId,
-      deviceType,
-      deviceIndex,
-      action,
-      value: normalizedValue,
-      source
-    });
-    addLog({
-      timestamp: new Date().toISOString(),
-      level: "info",
-      source: "mqtt-published",
-      event: "actuator.command.sent",
-      message: `Actuator command sent to ${topic}`,
-      details: { topic, payload: mqttPayload },
-      roomId,
-      emulatorId: targetId
+    const emulatorId = String(req.params.emulatorId);
+    const command = parseEditCommand(req.body);
+    const result = await container.actuatorCommandService.sendCommandToEmulator({
+      emulatorId,
+      userId,
+      deviceType: command.deviceType,
+      deviceIndex: command.deviceIndex,
+      action: command.mqttAction,
+      value: command.value,
+      source: "api"
     });
 
-    // 7. Log: MQTT published
-    logMqttPublished(topic, mqttPayload, targetId);
-
-    // 8. Save action to PostgreSQL
-    try {
-      const deviceActionRepo = new DeviceActionRepository();
-      const cycleRepo = new CycleRepository();
-      
-      // Get or create open cycle
-      const cycle = await cycleRepo.openOrCreate(roomId);
-      
-      await deviceActionRepo.create({
-        roomId,
-        cycleId: cycle.id,
-        deviceType: deviceType as "minisplit" | "purifier" | "extractor",
-        deviceIndex,
-        action,
-        reason: `Command from ${source}; value=${normalizedValue}`,
-        requestedBy: source === "rule-engine" ? "rule-engine" : "manual",
-      });
-
-      // Log: PostgreSQL insert
-      logPostgres("INSERT", "device_actions", { roomId, deviceType, deviceIndex, action });
-    } catch (dbError) {
-      logError("postgres", "device-action-save-failed", dbError);
-      // Continue despite DB error - command was sent
-    }
-
-    // 9. Respond success
     res.status(200).json({
-      success: true,
-      message: `Command '${action}' sent to ${deviceType} unit ${deviceIndex} (emulator: ${targetId})`,
-      topic,
-      payload: mqttPayload,
+      ok: true,
+      emulatorExternalId: result.emulatorExternalId,
+      command: {
+        actuator: command.actuator,
+        action: command.responseAction,
+        ...(command.value === undefined ? {} : { value: command.value })
+      },
+      correlationId: result.correlationId
     });
   } catch (error) {
-    // 10. Log error
-    logError("api", "actuator-command-failed", error);
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "error",
+      source: "api",
+      event: "api.actuator-command.failed",
+      message: error instanceof Error ? error.message : "Actuator command failed",
+      details: {
+        emulatorExternalId: String(req.params.emulatorId),
+        code: error instanceof AppError ? error.code : "INTERNAL_SERVER_ERROR"
+      },
+      emulatorId: String(req.params.emulatorId)
+    });
+
+    if (error instanceof AppError) {
+      res.status(error.statusCode).json({
+        ok: false,
+        code: error.code,
+        message: error.message,
+        details: error.details ?? null
+      });
+      return;
+    }
 
     res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to send command",
+      ok: false,
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Unexpected server error"
     });
   }
 }
 
-function normalizeDeviceIndex(value: unknown): number {
-  const parsed = Number(value ?? 1);
-  return Number.isInteger(parsed) && parsed >= 1 && parsed <= 3 ? parsed : 1;
+function parseEditCommand(body: unknown): ParsedEditCommand {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new AppError("Body must be a JSON object", 422, "INVALID_ACTUATOR_COMMAND");
+  }
+
+  const raw = body as Record<string, unknown>;
+  const keys = Object.keys(raw);
+  const blocked = keys.filter((key) => STRUCTURAL_FIELDS.has(key));
+  if (blocked.length > 0) {
+    throw new AppError(`Structural fields are not allowed: ${blocked.join(", ")}`, 422, "INVALID_ACTUATOR_COMMAND");
+  }
+
+  if (keys.includes("actuator") || keys.includes("action") || keys.includes("value")) {
+    const unknown = keys.filter((key) => !RECOMMENDED_FIELDS.has(key));
+    if (unknown.length > 0) {
+      throw new AppError(`Unknown fields: ${unknown.join(", ")}`, 422, "INVALID_ACTUATOR_COMMAND");
+    }
+    return parseRecommendedCommand(raw);
+  }
+
+  const unknown = keys.filter((key) => !LEGACY_FIELDS.has(key));
+  if (unknown.length > 0) {
+    throw new AppError(`Unknown fields: ${unknown.join(", ")}`, 422, "INVALID_ACTUATOR_COMMAND");
+  }
+
+  return parseLegacyCommand(raw);
 }
 
-function normalizeActionValue(action: ActuatorCommandBody["action"], value: boolean | number | string): boolean | number | string {
-  if (action === "set_temperature" || action === "set_speed") {
-    return Number(value);
+function parseRecommendedCommand(raw: Record<string, unknown>): ParsedEditCommand {
+  if (typeof raw.actuator !== "string" || typeof raw.action !== "string") {
+    throw new AppError("actuator and action are required strings", 422, "INVALID_ACTUATOR_COMMAND");
   }
 
-  if (action === "turn_on") {
-    return true;
+  const actuator = parseActuator(raw.actuator);
+  const action = raw.action.trim();
+
+  if (action === "turn_on" || action === "turn_off") {
+    return {
+      actuator: actuator.label,
+      deviceType: actuator.deviceType,
+      deviceIndex: actuator.deviceIndex,
+      responseAction: action,
+      mqttAction: action
+    };
   }
 
-  if (action === "turn_off") {
-    return false;
+  if (action !== "set_state") {
+    throw new AppError("Unsupported actuator action", 422, "INVALID_ACTUATOR_COMMAND");
   }
 
-  return String(value);
+  if (actuator.deviceType === "extractor") {
+    throw new AppError("AirExtractor only supports turn_on and turn_off", 422, "INVALID_ACTUATOR_COMMAND");
+  }
+
+  const value = parseInteger(raw.value, "value");
+  return {
+    actuator: actuator.label,
+    deviceType: actuator.deviceType,
+    deviceIndex: actuator.deviceIndex,
+    responseAction: "set_state",
+    mqttAction: actuator.deviceType === "minisplit" ? "set_temperature" : "set_speed",
+    value
+  };
 }
 
-function getConfiguredUnits(
-  room: RoomModel,
-  deviceType: "minisplit" | "purifier" | "extractor"
-): number {
-  const setup = room.get("setup") as {
-    minisplitCount?: number;
-    purifierCount?: number;
-    extractorCount?: number;
-  } | null;
-
-  const setupCount =
-    deviceType === "minisplit"
-      ? setup?.minisplitCount
-      : deviceType === "purifier"
-        ? setup?.purifierCount
-        : setup?.extractorCount;
-
-  if (Number.isFinite(Number(setupCount))) {
-    return Number(setupCount);
+function parseLegacyCommand(raw: Record<string, unknown>): ParsedEditCommand {
+  const commandKeys = Object.keys(raw).filter((key) => key !== "emulator" && raw[key] !== undefined);
+  if (commandKeys.length !== 1) {
+    throw new AppError("Exactly one actuator command is required", 422, "INVALID_ACTUATOR_COMMAND");
   }
 
-  const devices = room.get("devices") as Array<{ type?: string }> | undefined;
-  return devices?.filter((device) => device.type === deviceType).length ?? 0;
+  const key = commandKeys[0];
+  const value = raw[key];
+
+  if (key === "extractor1") {
+    return parseLegacyOnOff("AirExtractor#1", "extractor", value);
+  }
+  if (key === "minisplit1") {
+    return parseLegacyOnOff("MiniSplit#1", "minisplit", value);
+  }
+  if (key === "purifier1") {
+    return parseLegacyOnOff("HumidifierPurifier#1", "purifier", value);
+  }
+  if (key === "minisplit1Setpoint") {
+    return {
+      actuator: "MiniSplit#1",
+      deviceType: "minisplit",
+      deviceIndex: 1,
+      responseAction: "set_state",
+      mqttAction: "set_temperature",
+      value: parseInteger(value, key)
+    };
+  }
+  if (key === "purifier1Level") {
+    return {
+      actuator: "HumidifierPurifier#1",
+      deviceType: "purifier",
+      deviceIndex: 1,
+      responseAction: "set_state",
+      mqttAction: "set_speed",
+      value: parseInteger(value, key)
+    };
+  }
+
+  throw new AppError("Invalid actuator command", 422, "INVALID_ACTUATOR_COMMAND");
+}
+
+function parseLegacyOnOff(
+  actuator: string,
+  deviceType: "minisplit" | "extractor" | "purifier",
+  value: unknown
+): ParsedEditCommand {
+  if (value !== "on" && value !== "off") {
+    throw new AppError(`${actuator} expects "on" or "off"`, 422, "INVALID_ACTUATOR_COMMAND");
+  }
+
+  const responseAction = value === "on" ? "turn_on" : "turn_off";
+  return {
+    actuator,
+    deviceType,
+    deviceIndex: 1,
+    responseAction,
+    mqttAction: responseAction
+  };
+}
+
+function parseActuator(value: string): {
+  label: string;
+  deviceType: "minisplit" | "extractor" | "purifier";
+  deviceIndex: number;
+} {
+  const match = value.trim().match(/^([A-Za-z]+)#([1-3])$/);
+  if (!match) {
+    throw new AppError("actuator must look like MiniSplit#1, AirExtractor#1, or HumidifierPurifier#1", 422, "INVALID_ACTUATOR_COMMAND");
+  }
+
+  const rawType = match[1].toLowerCase();
+  const deviceIndex = Number(match[2]);
+  if (rawType === "minisplit") {
+    return { label: `MiniSplit#${deviceIndex}`, deviceType: "minisplit", deviceIndex };
+  }
+  if (rawType === "airextractor" || rawType === "extractor") {
+    return { label: `AirExtractor#${deviceIndex}`, deviceType: "extractor", deviceIndex };
+  }
+  if (rawType === "humidifierpurifier" || rawType === "purifier") {
+    return { label: `HumidifierPurifier#${deviceIndex}`, deviceType: "purifier", deviceIndex };
+  }
+
+  throw new AppError("Unsupported actuator type", 422, "INVALID_ACTUATOR_COMMAND");
+}
+
+function parseInteger(value: unknown, field: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed)) {
+    throw new AppError(`${field} must be an integer`, 422, "INVALID_ACTUATOR_COMMAND");
+  }
+
+  return parsed;
 }

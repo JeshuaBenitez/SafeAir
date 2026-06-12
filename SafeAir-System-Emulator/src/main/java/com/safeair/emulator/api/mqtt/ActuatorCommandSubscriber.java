@@ -85,7 +85,12 @@ public class ActuatorCommandSubscriber {
             LOGGER.info("[{}] MQTT actuator command applied action={} correlationId={} result=ok", emulatorId, action, correlationId);
             
         } catch (Exception e) {
-            LOGGER.error("[{}] MQTT actuator command failed action={} correlationId={} result=error", emulatorId, action, correlationId, e);
+            LOGGER.warn("[{}] MQTT actuator command failed action={} correlationId={} result=error cause={}",
+                    emulatorId,
+                    action,
+                    correlationId,
+                    e.getMessage());
+            LOGGER.debug("[{}] MQTT actuator command failed", emulatorId, e);
         }
     }
 
@@ -118,7 +123,12 @@ public class ActuatorCommandSubscriber {
             emulator.emitTelemetryNow();
             LOGGER.info("[{}] MQTT command received topic={} action={} value={} correlationId={} result={}", emulatorId, topic, action, value, correlationId, result);
         } catch (Exception ex) {
-            LOGGER.error("[{}] MQTT behavior command failed topic={} correlationId={} result=error", emulatorId, topic, correlationId, ex);
+            LOGGER.warn("[{}] MQTT behavior command failed topic={} correlationId={} result=error cause={}",
+                    emulatorId,
+                    topic,
+                    correlationId,
+                    ex.getMessage());
+            LOGGER.debug("[{}] MQTT behavior command failed", emulatorId, ex);
         }
     }
     
@@ -194,7 +204,8 @@ public class ActuatorCommandSubscriber {
                 LOGGER.debug("Published actuator state update for emulator {} {} #{}", emulatorId, deviceType, deviceIndex);
             }
         } catch (Exception e) {
-            LOGGER.error("Failed to publish state update", e);
+            LOGGER.warn("Failed to publish state update: {}", e.getMessage());
+            LOGGER.debug("Failed to publish state update", e);
         }
     }
 

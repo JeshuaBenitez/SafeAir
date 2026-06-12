@@ -12,6 +12,12 @@ mqtt:
   username: ${MQTT_USERNAME:}
   password: ${MQTT_PASSWORD:}
   console-log-enabled: ${MQTT_CONSOLE_LOG_ENABLED:false}
+  client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:safeair-emulator}
+  keep-alive-seconds: ${MQTT_KEEP_ALIVE_SECONDS:60}
+  connection-timeout-seconds: ${MQTT_CONNECTION_TIMEOUT_SECONDS:10}
+  max-inflight: ${MQTT_MAX_INFLIGHT:100}
+  publish-warning-interval-seconds: ${MQTT_PUBLISH_WARNING_INTERVAL_SECONDS:30}
+  log-stacktrace: ${SAFEAIR_MQTT_LOG_STACKTRACE:false}
 
 safeair:
   profile1:

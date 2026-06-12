@@ -81,6 +81,27 @@ public class EmulatorManager {
                 .toList();
     }
 
+    public List<ActuatorSnapshot> listActuators(String emulatorId) {
+        Emulator emulator = emulators.get(emulatorId);
+        if (emulator == null) {
+            return List.of();
+        }
+        return emulator.actuatorSnapshots();
+    }
+
+    public ActuatorCommandResult applyActuatorCommand(
+            String emulatorId,
+            String deviceType,
+            int deviceIndex,
+            String action,
+            Integer value) {
+        Emulator emulator = emulators.get(emulatorId);
+        if (emulator == null) {
+            return ActuatorCommandResult.error("emulator_not_found");
+        }
+        return emulator.applyActuatorCommand(deviceType, deviceIndex, action, value);
+    }
+
     public void applyConfig(ConfigCommand command) {
         if (command.isGlobal()) {
             runAcrossEmulators(emulator -> emulator.applyConfig(command));

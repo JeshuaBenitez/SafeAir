@@ -9,6 +9,7 @@ import { InstanceRepository } from "../infrastructure/repositories/instance.repo
 import { RoomRepository } from "../infrastructure/repositories/room.repository";
 import { UserRepository } from "../infrastructure/repositories/user.repository";
 import { AlarmService } from "./services/alarm.service";
+import { ActuatorCommandService } from "./services/actuator-command.service";
 import { AuthService } from "./services/auth.service";
 import { EmailService } from "./services/email.service";
 import { ConfigurationService } from "./services/configuration.service";
@@ -55,6 +56,7 @@ const cycleService = new CycleService(cycleRepository);
 const metricsQueryService = new MetricsQueryService(cycleRepository, deviceActionRepository, deviceStateRepository, roomRepository);
 const ruleEvaluationService = new RuleEvaluationService();
 const deviceActionService = new DeviceActionService(deviceActionRepository);
+const actuatorCommandService = new ActuatorCommandService(roomRepository, emulatorRepository, deviceActionRepository, cycleRepository);
 const actuatorStateIngestionService = new ActuatorStateIngestionService(emulatorResolutionService, deviceStateRepository);
 const alarmService = new AlarmService(alarmRepository);
 const telemetryIngestionService = new TelemetryIngestionService(
@@ -72,6 +74,7 @@ export const container = {
   cycleService,
   metricsQueryService,
   deviceActionService,
+  actuatorCommandService,
   actuatorStateIngestionService,
   alarmService,
   configurationService,

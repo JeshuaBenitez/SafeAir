@@ -170,6 +170,9 @@ export class RoomService {
           minisplitCount: setup.minisplitCount,
           purifierCount: setup.purifierCount,
           extractorCount: setup.extractorCount,
+          minisplitSize: setup.minisplitSize,
+          purifierSize: setup.purifierSize,
+          extractorSize: setup.extractorSize,
           derivedRoomArea: derived.roomArea
         }
       },
