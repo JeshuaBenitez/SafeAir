@@ -1,3 +1,5 @@
+export type ActuatorSize = "small" | "medium" | "large";
+
 export interface RoomSetupInput {
   roomWidth: number;
   roomLength: number;
@@ -7,6 +9,9 @@ export interface RoomSetupInput {
   minisplitCount: number;
   purifierCount: number;
   extractorCount: number;
+  minisplitSize: ActuatorSize;
+  purifierSize: ActuatorSize;
+  extractorSize: ActuatorSize;
 }
 
 export interface RoomSetupDerived {

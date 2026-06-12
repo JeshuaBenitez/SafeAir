@@ -17,3 +17,15 @@ export function emulatorConfigTopic(emulatorId: string): string {
 export function actuatorStateTopic(emulatorId: string): string {
   return `safeair/${emulatorId}/actuator-state`;
 }
+
+export function emulatorScenarioTopic(emulatorId: string): string {
+  return `safeair/${emulatorId}/scenario`;
+}
+
+export function emulatorCommandTopic(emulatorId: string): string {
+  return `safeair/${emulatorId}/commands`;
+}
+
+export function emulatorProvisionTopic(): string {
+  return "safeair/emulator-control/provision";
+}

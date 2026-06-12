@@ -13,6 +13,9 @@ export interface DebugRoomEmulatorDetails {
   minisplitCount: number | null;
   purifierCount: number | null;
   extractorCount: number | null;
+  minisplitSize: string | null;
+  purifierSize: string | null;
+  extractorSize: string | null;
   status: string;
   hasEmulator: boolean;
   ownedByUser: boolean;
@@ -47,7 +50,14 @@ export class EmulatorRepository {
   }
 
   async assignToRoom(emulatorId: string, roomId: string): Promise<EmulatorModel | null> {
-    const emulator = await EmulatorModel.findByPk(emulatorId);
+    const emulator = await EmulatorModel.findOne({
+      where: {
+        [Op.or]: [
+          { id: emulatorId },
+          { emulatorExternalId: emulatorId }
+        ]
+      }
+    });
     if (!emulator) {
       return null;
     }
@@ -104,12 +114,145 @@ export class EmulatorRepository {
     }
   }
 
+  async createOrAssignToRoom(data: { roomId: string; emulatorExternalId: string }): Promise<EmulatorModel> {
+    try {
+      return await EmulatorModel.sequelize!.transaction(async (transaction) => {
+        const existingForRoom = await EmulatorModel.findOne({
+          where: { roomId: data.roomId },
+          transaction,
+          lock: transaction.LOCK.UPDATE
+        });
+        if (existingForRoom) {
+          return existingForRoom;
+        }
+
+        const existingForExternalId = await EmulatorModel.findOne({
+          where: { emulatorExternalId: data.emulatorExternalId },
+          transaction,
+          lock: transaction.LOCK.UPDATE
+        });
+
+        if (existingForExternalId) {
+          if (existingForExternalId.roomId && existingForExternalId.roomId !== data.roomId) {
+            throw new Error(`Emulator ${data.emulatorExternalId} is already assigned to room ${existingForExternalId.roomId}`);
+          }
+
+          existingForExternalId.roomId = data.roomId;
+          existingForExternalId.status = "online";
+          await existingForExternalId.save({ transaction });
+          return existingForExternalId;
+        }
+
+        return EmulatorModel.create({
+          roomId: data.roomId,
+          emulatorExternalId: data.emulatorExternalId,
+          status: "online"
+        }, { transaction });
+      });
+    } catch (error) {
+      if (error instanceof UniqueConstraintError) {
+        const existing = await this.findByRoomId(data.roomId);
+        if (existing) {
+          return existing;
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  async findAssignedExternalIdsByUser(userId: string): Promise<string[]> {
+    const emulators = await EmulatorModel.findAll({
+      where: { roomId: { [Op.ne]: null } },
+      attributes: ["emulatorExternalId"],
+      include: [
+        {
+          model: RoomModel,
+          as: "room",
+          required: true,
+          include: [
+            {
+              model: InstanceModel,
+              as: "instance",
+              where: { userId },
+              required: true,
+              attributes: []
+            }
+          ],
+          attributes: []
+        }
+      ]
+    });
+
+    return emulators.map((emulator) => emulator.emulatorExternalId);
+  }
+
   async releaseRoom(roomId: string): Promise<void> {
     await EmulatorModel.update({ roomId: null }, { where: { roomId } });
   }
 
   async findAllWithRooms(): Promise<EmulatorModel[]> {
     return EmulatorModel.findAll({
+      include: [
+        {
+          model: RoomModel,
+          as: "room",
+          required: false,
+          include: [
+            {
+              model: InstanceModel,
+              as: "instance",
+              required: false,
+              attributes: ["id", "userId", "name"]
+            }
+          ]
+        }
+      ],
+      order: [["createdAt", "ASC"]]
+    });
+  }
+
+  async findAssigned(): Promise<EmulatorModel[]> {
+    return EmulatorModel.findAll({
+      where: { roomId: { [Op.ne]: null } },
+      include: [
+        {
+          model: RoomModel,
+          as: "room",
+          required: false,
+          include: [
+            {
+              model: InstanceModel,
+              as: "instance",
+              required: false,
+              attributes: ["id", "userId", "name"]
+            }
+          ]
+        }
+      ],
+      order: [["createdAt", "ASC"]]
+    });
+  }
+
+  async findAssignedToUser(userId: string): Promise<EmulatorModel[]> {
+    return EmulatorModel.findAll({
+      where: { roomId: { [Op.ne]: null } },
+      include: [
+        {
+          model: RoomModel,
+          as: "room",
+          required: true,
+          include: [
+            {
+              model: InstanceModel,
+              as: "instance",
+              where: { userId },
+              required: true,
+              attributes: ["id", "userId", "name"]
+            }
+          ]
+        }
+      ],
       order: [["createdAt", "ASC"]]
     });
   }
@@ -138,6 +281,9 @@ export class EmulatorRepository {
       minisplitCount: setup?.minisplitCount ?? null,
       purifierCount: setup?.purifierCount ?? null,
       extractorCount: setup?.extractorCount ?? null,
+      minisplitSize: setup?.minisplitSize ?? null,
+      purifierSize: setup?.purifierSize ?? null,
+      extractorSize: setup?.extractorSize ?? null,
       status: emulator?.status ?? "unassigned",
       hasEmulator: Boolean(emulator),
       ownedByUser,
@@ -155,6 +301,9 @@ export class EmulatorRepository {
       minisplitCount: null,
       purifierCount: null,
       extractorCount: null,
+      minisplitSize: null,
+      purifierSize: null,
+      extractorSize: null,
       status: emulator.status,
       hasEmulator: true,
       ownedByUser: false,

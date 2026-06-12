@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
 
 import { DASHBOARD_INITIAL_ROOMS } from '@features/dashboard/data/mock/dashboard-mock-state';
+import { ActuatorSize } from '@features/dashboard/domain/models/actuator-size.model';
 import { CreateRoomDraft } from '@features/dashboard/domain/models/create-room-draft.model';
 import { DashboardRoom } from '@features/dashboard/domain/models/dashboard-room.model';
 import { RoomActuatorsMap } from '@features/dashboard/domain/models/room-actuator-config.model';
@@ -117,6 +118,9 @@ export class DashboardMockStateService {
         minisplitCount: draft.actuatorQuantities.minisplit,
         purifierCount: draft.actuatorQuantities.purifier,
         extractorCount: draft.actuatorQuantities.extractor,
+        minisplitSize: draft.actuatorSizes.minisplit,
+        purifierSize: draft.actuatorSizes.purifier,
+        extractorSize: draft.actuatorSizes.extractor,
       });
 
       // 3. Registrar dispositivos individuales en el backend
@@ -298,6 +302,9 @@ export class DashboardMockStateService {
           minisplitCount: 1,
           purifierCount: 1,
           extractorCount: 1,
+          minisplitSize: 'medium',
+          purifierSize: 'medium',
+          extractorSize: 'medium',
           roomWidth: 10,
           roomLength: 10,
         };
@@ -308,17 +315,17 @@ export class DashboardMockStateService {
           minisplit: {
             type: 'minisplit',
             quantity: setup.minisplitCount,
-            size: 'medium',
+            size: normalizeActuatorSize(setup.minisplitSize),
           },
           purifier: {
             type: 'purifier',
             quantity: setup.purifierCount,
-            size: 'medium',
+            size: normalizeActuatorSize(setup.purifierSize),
           },
           extractor: {
             type: 'extractor',
             quantity: setup.extractorCount,
-            size: 'medium',
+            size: normalizeActuatorSize(setup.extractorSize),
           },
         };
 
@@ -628,5 +635,8 @@ const hasActuatorConfig = (
 const isValidActuatorQuantityForSave = (quantity: unknown): boolean =>
   typeof quantity === 'number' && Number.isInteger(quantity) && quantity >= 0 && quantity <= 3;
 
-const isValidActuatorSize = (size: unknown): boolean =>
+const isValidActuatorSize = (size: unknown): size is ActuatorSize =>
   size === 'small' || size === 'medium' || size === 'large';
+
+const normalizeActuatorSize = (size: unknown): ActuatorSize =>
+  isValidActuatorSize(size) ? size : 'medium';

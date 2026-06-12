@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware";
-import { sendActuatorCommand } from "../../controllers/actuator.controller";
+import { editEmulatorActuator, sendActuatorCommand } from "../../controllers/actuator.controller";
 
 export const actuatorRouter = Router();
 
@@ -29,5 +29,31 @@ actuatorRouter.post(
   authMiddleware,
   (req, res, next) => {
     sendActuatorCommand(req, res).catch(next);
+  }
+);
+
+/**
+ * Edit actuator behavior by emulator external ID.
+ *
+ * POST /api/v1/edit/emulador/:emulatorId
+ */
+actuatorRouter.post(
+  "/edit/emulador/:emulatorId",
+  authMiddleware,
+  (req, res) => {
+    editEmulatorActuator(req, res);
+  }
+);
+
+/**
+ * REST alias for the Spanish route above.
+ *
+ * POST /api/v1/emulators/:emulatorId/actuators
+ */
+actuatorRouter.post(
+  "/emulators/:emulatorId/actuators",
+  authMiddleware,
+  (req, res) => {
+    editEmulatorActuator(req, res);
   }
 );

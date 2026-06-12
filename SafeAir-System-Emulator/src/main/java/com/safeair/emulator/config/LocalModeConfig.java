@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,9 +20,11 @@ import com.safeair.emulator.api.mqtt.MQTTConnector;
 import com.safeair.emulator.api.mqtt.MqttPublisher;
 import com.safeair.emulator.api.mqtt.MQTTSubscriber;
 import com.safeair.emulator.api.mqtt.ActuatorCommandSubscriber;
+import com.safeair.emulator.api.mqtt.EmulatorProvisioningSubscriber;
 import com.safeair.emulator.emulation.core.DomainConstants;
 import com.safeair.emulator.emulation.core.TelemetryQueue;
 import com.safeair.emulator.manager.ConfigDispatcher;
+import com.safeair.emulator.manager.EmulatorLogStore;
 import com.safeair.emulator.manager.EmulatorManager;
 import com.safeair.emulator.manager.TelemetryDispatcher;
 
@@ -55,8 +58,8 @@ public class LocalModeConfig {
     }
 
     @Bean(initMethod = "start", destroyMethod = "stop")
-    public MQTTConnector mqttConnector(MqttProperties properties) {
-        return new MQTTConnector(properties);
+    public MQTTConnector mqttConnector(MqttProperties properties, EmulatorLogStore logStore) {
+        return new MQTTConnector(properties, logStore);
     }
 
     @Bean
@@ -69,10 +72,18 @@ public class LocalModeConfig {
             TelemetryQueue queue,
             ConsolePublisher consolePublisher,
             MqttPublisher mqttPublisher,
-            MqttProperties properties) {
-        List<SendInfo> channels = properties.isConsoleLogEnabled()
-                ? List.of(consolePublisher, mqttPublisher)
-                : List.of(mqttPublisher);
+            MqttProperties properties,
+            @Value("${safeair.cli.suppress-telemetry-output:false}") boolean suppressTelemetryOutput) {
+        List<SendInfo> channels;
+        if (!suppressTelemetryOutput && properties.isConsoleLogEnabled() && properties.isEnabled()) {
+            channels = List.of(consolePublisher, mqttPublisher);
+        } else if (!suppressTelemetryOutput && properties.isConsoleLogEnabled()) {
+            channels = List.of(consolePublisher);
+        } else if (properties.isEnabled()) {
+            channels = List.of(mqttPublisher);
+        } else {
+            channels = List.of();
+        }
         return new TelemetryDispatcher(queue, channels);
     }
 
@@ -98,6 +109,16 @@ public class LocalModeConfig {
             EmulatorManager emulatorManager,
             MqttPublisher mqttPublisher) {
         return new ActuatorCommandSubscriber(connector, emulatorManager, mqttPublisher);
+    }
+
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    @Profile({"profile1", "local-demo"})
+    public EmulatorProvisioningSubscriber emulatorProvisioningSubscriber(
+            MQTTConnector connector,
+            EmulatorManager emulatorManager,
+            TelemetryQueue telemetryQueue,
+            EmulatorLogStore logStore) {
+        return new EmulatorProvisioningSubscriber(connector, emulatorManager, telemetryQueue, logStore);
     }
 
     @Bean(initMethod = "startDispatch", destroyMethod = "stopDispatch")

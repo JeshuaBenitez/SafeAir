@@ -45,12 +45,13 @@ class MqttPublisherReconnectIntegrationTest {
         }
 
         @Override
-        public void publish(String topic, byte[] payload, int qos) {
+        public boolean publish(String topic, byte[] payload, int qos) {
             if (!connected) {
-                return;
+                return false;
             }
             publishCount++;
             lastTopic = topic;
+            return true;
         }
 
         int publishCount() {

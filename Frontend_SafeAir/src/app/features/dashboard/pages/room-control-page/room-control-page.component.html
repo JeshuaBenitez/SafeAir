@@ -104,8 +104,9 @@
             type="button"
             class="power-toggle"
             [class.is-on]="isUnitOn(unit)"
+            [disabled]="isUnitPending(unit)"
             (click)="toggleUnit(unit)">
-            <span>{{ isUnitOn(unit) ? 'ON' : 'OFF' }}</span>
+            <span>{{ isUnitPending(unit) ? 'ENVIANDO' : (isUnitOn(unit) ? 'ON' : 'OFF') }}</span>
             <span class="power-toggle__dot"></span>
           </button>
         </div>
@@ -117,6 +118,7 @@
       min="19"
       max="30"
       [value]="getUnitValue(unit)"
+      [disabled]="isUnitPending(unit)"
       (input)="setUnitValue(unit, $event)"
       (change)="commitUnitTemperature(unit)" />
 
@@ -150,8 +152,9 @@
             type="button"
             class="power-toggle"
             [class.is-on]="isUnitOn(unit)"
+            [disabled]="isUnitPending(unit)"
             (click)="toggleUnit(unit)">
-            <span>{{ isUnitOn(unit) ? 'ON' : 'OFF' }}</span>
+            <span>{{ isUnitPending(unit) ? 'ENVIANDO' : (isUnitOn(unit) ? 'ON' : 'OFF') }}</span>
             <span class="power-toggle__dot"></span>
           </button>
         </div>
@@ -178,8 +181,9 @@
     type="button"
     class="activate-all-button"
     [class.activate-all-button--off]="areAllSelectedUnitsOn()"
+    [disabled]="hasPendingCommands()"
     (click)="toggleAllSelected()">
-    {{ areAllSelectedUnitsOn() ? 'DESACTIVAR TODOS' : 'ACTIVAR TODOS' }}
+    {{ hasPendingCommands() ? 'ENVIANDO...' : (areAllSelectedUnitsOn() ? 'DESACTIVAR TODOS' : 'ACTIVAR TODOS') }}
   </button>
 </div>
 

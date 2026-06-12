@@ -36,7 +36,10 @@ public class TelemetryDispatcher implements Runnable {
                     try {
                         channel.send(payload);
                     } catch (RuntimeException ex) {
-                        LOGGER.warn("Failed to dispatch telemetry payload on channel {}", channel.getClass().getSimpleName(), ex);
+                        LOGGER.warn("Failed to dispatch telemetry payload on channel {}: {}",
+                                channel.getClass().getSimpleName(),
+                                ex.getMessage());
+                        LOGGER.debug("Failed to dispatch telemetry payload", ex);
                     }
                 }
             } catch (InterruptedException e) {

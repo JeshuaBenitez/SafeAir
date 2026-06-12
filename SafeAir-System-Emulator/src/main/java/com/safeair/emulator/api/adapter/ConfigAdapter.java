@@ -75,7 +75,7 @@ public class ConfigAdapter {
           parseSequence(payloadMap.get("sequence")),
           payloadMap);
     } catch (Exception jsonError) {
-      throw new IllegalArgumentException("Invalid Protobuf or JSON config payload", protobufError);
+      throw new IllegalArgumentException("Invalid Protobuf config payload", protobufError);
     }
   }
 

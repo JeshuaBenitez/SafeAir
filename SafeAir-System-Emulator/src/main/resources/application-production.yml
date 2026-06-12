@@ -4,19 +4,25 @@ spring:
       on-profile: production
 
 server:
-  port: ${PORT:8080}
+  port: ${SERVER_PORT:${PORT:8080}}
 
 # Production mode: require external configuration via MQTT or environment variables
 
 mqtt:
   enabled: true
-  host: ${MQTT_HOST:}
+  host: ${MQTT_HOST:127.0.0.1}
   port: ${MQTT_PORT:1883}
   tls:
     enabled: ${MQTT_TLS_ENABLED:false}
   username: ${MQTT_USERNAME:}
   password: ${MQTT_PASSWORD:}
   console-log-enabled: ${MQTT_CONSOLE_LOG_ENABLED:false}
+  client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:safeair-emulator}
+  keep-alive-seconds: ${MQTT_KEEP_ALIVE_SECONDS:60}
+  connection-timeout-seconds: ${MQTT_CONNECTION_TIMEOUT_SECONDS:10}
+  max-inflight: ${MQTT_MAX_INFLIGHT:100}
+  publish-warning-interval-seconds: ${MQTT_PUBLISH_WARNING_INTERVAL_SECONDS:30}
+  log-stacktrace: ${SAFEAIR_MQTT_LOG_STACKTRACE:false}
   validation:
     availability-target: ${MQTT_VALIDATION_AVAILABILITY:0.995}
     reconnect-window-seconds: ${MQTT_VALIDATION_RECONNECT_WINDOW:10}
@@ -26,5 +32,9 @@ logging:
   level:
     root: WARN
     com.safeair.emulator: INFO
+    com.safeair.emulator.api.mqtt: ${SAFEAIR_MQTT_LOG_LEVEL:WARN}
+    com.safeair.emulator.api.mqtt.ConsolePublisher: ${SAFEAIR_MQTT_CONSOLE_PUBLISHER_LOG_LEVEL:${SAFEAIR_MQTT_LOG_LEVEL:WARN}}
+    com.safeair.emulator.api.mqtt.MqttPublisher: ${SAFEAIR_MQTT_PUBLISHER_LOG_LEVEL:${SAFEAIR_MQTT_LOG_LEVEL:WARN}}
+    com.safeair.emulator.emulation.core.Emulator: ${SAFEAIR_EMULATOR_CONFIG_LOG_LEVEL:WARN}
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

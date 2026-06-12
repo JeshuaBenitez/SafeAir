@@ -56,6 +56,10 @@ export class AuthService {
       throw new AppError("Invalid credentials", 401, "INVALID_CREDENTIALS");
     }
 
+    if (!user.enabled) {
+      throw new AppError("User account is disabled", 403, "USER_DISABLED");
+    }
+
     const valid = await bcrypt.compare(input.password, user.passwordHash);
     if (!valid) {
       throw new AppError("Invalid credentials", 401, "INVALID_CREDENTIALS");
@@ -127,6 +131,11 @@ export class AuthService {
       throw new AppError("User not found", 404, "USER_NOT_FOUND");
     }
 
+    if (!user.enabled) {
+      logger.info("[AuthService] verifyOtp failed: user disabled", { userId: user.id });
+      throw new AppError("User account is disabled", 403, "USER_DISABLED");
+    }
+
     logger.info("[AuthService] verifyOtp received", {
       userId: user.id,
       hasActiveOtp: Boolean(user.otpCode && user.otpExpiresAt)
@@ -180,6 +189,10 @@ export class AuthService {
       throw new AppError("User not found", 404, "USER_NOT_FOUND");
     }
 
+    if (!user.enabled) {
+      throw new AppError("User account is disabled", 403, "USER_DISABLED");
+    }
+
     // Generar y guardar nuevo OTP
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     user.otpCode = code;
@@ -190,7 +203,7 @@ export class AuthService {
     await this.emailService.sendOtpEmail(user.email, user.fullName, code);
   }
 
-  async me(userId: string): Promise<{ id: string; email: string; fullName: string; role: string }> {
+  async me(userId: string): Promise<{ id: string; email: string; fullName: string; role: string; enabled: boolean }> {
     const user = await this.userRepository.findById(userId);
     if (!user) {
       throw new AppError("User not found", 404, "USER_NOT_FOUND");
@@ -200,7 +213,8 @@ export class AuthService {
       id: user.id,
       email: user.email,
       fullName: user.fullName,
-      role: user.role
+      role: user.role,
+      enabled: user.enabled
     };
   }
 }

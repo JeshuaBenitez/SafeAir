@@ -8,15 +8,21 @@ mqtt:
   host: ${MQTT_HOST:localhost}
   port: ${MQTT_PORT:1883}
   tls:
-    enabled: ${MQTT_TLS_ENABLED:true}
+    enabled: ${MQTT_TLS_ENABLED:false}
   username: ${MQTT_USERNAME:}
   password: ${MQTT_PASSWORD:}
-  console-log-enabled: true
+  console-log-enabled: ${MQTT_CONSOLE_LOG_ENABLED:false}
+  client-id-prefix: ${MQTT_CLIENT_ID_PREFIX:safeair-emulator}
+  keep-alive-seconds: ${MQTT_KEEP_ALIVE_SECONDS:60}
+  connection-timeout-seconds: ${MQTT_CONNECTION_TIMEOUT_SECONDS:10}
+  max-inflight: ${MQTT_MAX_INFLIGHT:100}
+  publish-warning-interval-seconds: ${MQTT_PUBLISH_WARNING_INTERVAL_SECONDS:30}
+  log-stacktrace: ${SAFEAIR_MQTT_LOG_STACKTRACE:false}
 
 safeair:
   profile1:
     emulators:
-      - emulatorId: ${SAFEAIR_EMULATOR_ID_1:EMU-U001-R001}
+      - emulatorId: ${SAFEAIR_EMULATOR_ID_1:EMU-DEMO-R001}
         updateIntervalSec: 1
         roomSquareMeters: 35
         windowCount: 1
@@ -25,14 +31,14 @@ safeair:
         # Device types: 1=MiniSplit, 2=HumidifierPurifier, 3=AirExtractor
         deviceTypes: [1, 2, 3]
 
-      - emulatorId: ${SAFEAIR_EMULATOR_ID_2:EMU-U001-R002}
+      - emulatorId: ${SAFEAIR_EMULATOR_ID_2:EMU-DEMO-R002}
         updateIntervalSec: 2
         roomSquareMeters: 60
         windowCount: 3
         sensorTypes: [2, 4]
         deviceTypes: [1, 3]
 
-      - emulatorId: ${SAFEAIR_EMULATOR_ID_3:EMU-U001-R003}
+      - emulatorId: ${SAFEAIR_EMULATOR_ID_3:EMU-DEMO-R003}
         updateIntervalSec: 2
         roomSquareMeters: 40
         windowCount: 2

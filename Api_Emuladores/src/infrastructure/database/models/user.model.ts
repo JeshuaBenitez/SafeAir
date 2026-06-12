@@ -7,6 +7,7 @@ export class UserModel extends Model {
   declare passwordHash: string;
   declare fullName: string;
   declare role: "admin" | "operator";
+  declare enabled: boolean;
   declare otpCode: string | null;
   declare otpExpiresAt: Date | null;
   declare readonly createdAt: Date;
@@ -39,6 +40,11 @@ export function initUserModel(sequelize: Sequelize): void {
         allowNull: false,
         defaultValue: "operator"
       },
+      enabled: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true
+      },
       otpCode: {
         type: DataTypes.STRING(6),
         allowNull: true
@@ -56,4 +62,3 @@ export function initUserModel(sequelize: Sequelize): void {
     }
   );
 }
-

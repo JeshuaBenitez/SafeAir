@@ -37,9 +37,13 @@ export class ConfigurationService {
     const setup = room.get("setup") as {
       roomWidth: number;
       roomLength: number;
+      windowCount: number;
       minisplitCount: number;
       purifierCount: number;
       extractorCount: number;
+      minisplitSize: string;
+      purifierSize: string;
+      extractorSize: string;
     } | null;
 
     if (!setup) {
@@ -102,10 +106,13 @@ export class ConfigurationService {
       roomSquareMeters: String(roomSquareMeters),
       roomWidth: String(setup.roomWidth),
       roomLength: String(setup.roomLength),
-      windowCount: String(0), // Not in DtoSetup; available in telemetry RoomStateSnapshot
+      windowCount: String(setup.windowCount),
       minisplitCount: String(setup.minisplitCount),
       purifierCount: String(setup.purifierCount),
       extractorCount: String(setup.extractorCount),
+      minisplitSize: setup.minisplitSize,
+      purifierSize: setup.purifierSize,
+      extractorSize: setup.extractorSize,
       updateIntervalSec: "5",
       sensorTypes: sensorTypes.join(","),
       deviceTypes: deviceTypes.join(","),
@@ -129,7 +136,7 @@ export class ConfigurationService {
         payload: {
           ...payload,
           // Log friendly summary
-          summary: `${room.name}: ${roomSquareMeters}m², sensors=${sensorTypes.length}, devices=${deviceTypes.length} (mini=${setup.minisplitCount}, puri=${setup.purifierCount}, ex=${setup.extractorCount})`
+          summary: `${room.name}: ${roomSquareMeters}m², sensors=${sensorTypes.length}, devices=${deviceTypes.length} (mini=${setup.minisplitCount}/${setup.minisplitSize}, puri=${setup.purifierCount}/${setup.purifierSize}, ex=${setup.extractorCount}/${setup.extractorSize})`
         }
       },
       roomId,

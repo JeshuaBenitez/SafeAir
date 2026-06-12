@@ -63,6 +63,7 @@ export class DashboardViewPageComponent {
   readonly historyData$ = new BehaviorSubject<MetricsHistoryRow[]>([]);
   
   historyRangeLabel = '';
+  selectedRangeSummary = '';
   selectedRoomId: string | null = null;
   private activeHistoryRequestKey = '';
 
@@ -71,12 +72,12 @@ export class DashboardViewPageComponent {
 
   // Variables para el modo reporte
   startDate = this.formatDateForInput(new Date());
-  startHour = '09';
+  startHour = '00';
   startMinute = '00';
 
   endDate = this.formatDateForInput(new Date());
-  endHour = '10';
-  endMinute = '00';
+  endHour = '23';
+  endMinute = '59';
 
   rangeError = '';
 
@@ -117,12 +118,13 @@ export class DashboardViewPageComponent {
   openReportMode(): void {
     // Inicializar fechas con valores por defecto
     this.startDate = this.formatDateForInput(new Date());
-    this.startHour = '09';
+    this.startHour = '00';
     this.startMinute = '00';
     this.endDate = this.formatDateForInput(new Date());
-    this.endHour = '10';
-    this.endMinute = '00';
+    this.endHour = '23';
+    this.endMinute = '59';
     this.rangeError = '';
+    this.selectedRangeSummary = this.buildRangeSummary();
 
     this.environmentMockState.pauseTelemetry();
     this.isHistoryMode$.next(true);
@@ -137,8 +139,11 @@ export class DashboardViewPageComponent {
   }
 
   clearHistoryFilter(): void {
+    this.activeHistoryRequestKey = '';
     this.isHistoryMode$.next(false);
     this.historyData$.next([]);
+    this.rangeError = '';
+    this.selectedRangeSummary = '';
     this.environmentMockState.resumeTelemetry();
 
     this.selectedTelemetryDate = this.formatDateForInput(new Date());
@@ -194,10 +199,12 @@ export class DashboardViewPageComponent {
 
   applyTimeRange(): void {
     this.rangeError = '';
+    this.selectedRangeSummary = this.buildRangeSummary();
     const error = this.validateTimeRange();
 
     if (error) {
       this.rangeError = error;
+      this.historyData$.next([]);
       return;
     }
 
@@ -221,6 +228,7 @@ export class DashboardViewPageComponent {
     });
 
     this.historyRangeLabel = `Reporte del ${this.formatInputDateTime(this.startDate, startHour, startMinute)} al ${this.formatInputDateTime(this.endDate, endHour, endMinute)}`;
+    this.selectedRangeSummary = this.buildRangeSummary();
     this.loadHistoryWithRange(startDateTime, endDateTime);
   }
 
@@ -261,19 +269,12 @@ export class DashboardViewPageComponent {
       return 'La fecha y hora de fin debe ser mayor que la fecha y hora de inicio.';
     }
 
-    // Calcular diferencia en minutos
-    const diffMs = endDateTime.getTime() - startDateTime.getTime();
-    const diffMinutes = diffMs / (60 * 1000);
-
-    // Validar mínimo 20 minutos
-    if (diffMinutes < 20) {
-      return 'El rango mínimo permitido es de 20 minutos.';
-    }
-
-    // Validar máximo 30 días (límite razonable)
-    const maxMinutes = 30 * 24 * 60;
-    if (diffMinutes > maxMinutes) {
-      return `El rango máximo permitido es de 30 días (${maxMinutes} minutos).`;
+    // Validar máximo 15 días calendario incluyendo fecha inicial y final.
+    const startDay = this.buildFullDateTimeObj(this.startDate, '00', '00');
+    const endDay = this.buildFullDateTimeObj(this.endDate, '00', '00');
+    const selectedDays = Math.floor((endDay.getTime() - startDay.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    if (selectedDays > 15) {
+      return 'El rango máximo permitido es de 15 días.';
     }
 
     return '';
@@ -281,7 +282,14 @@ export class DashboardViewPageComponent {
 
   private buildFullDateTime(dateStr: string, hour: string, minute: string): string {
     const dateTime = this.buildFullDateTimeObj(dateStr, hour, minute);
-    return dateTime.toISOString();
+    const year = dateTime.getFullYear();
+    const month = String(dateTime.getMonth() + 1).padStart(2, '0');
+    const day = String(dateTime.getDate()).padStart(2, '0');
+    const hours = String(dateTime.getHours()).padStart(2, '0');
+    const minutes = String(dateTime.getMinutes()).padStart(2, '0');
+    const seconds = String(dateTime.getSeconds()).padStart(2, '0');
+
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
   }
 
   private buildFullDateTimeObj(dateStr: string, hour: string, minute: string): Date {
@@ -339,10 +347,14 @@ export class DashboardViewPageComponent {
         });
 
         this.historyData$.next(rows);
+        this.rangeError = '';
       })
       .catch((error) => {
         console.error('Error cargando historial:', error);
         this.historyData$.next([]);
+        this.rangeError = error instanceof Error
+          ? error.message
+          : 'No se pudo cargar el reporte para el rango seleccionado.';
       });
   }
 
@@ -463,6 +475,10 @@ export class DashboardViewPageComponent {
     return `${safeDate} ${this.normalizeTimePart(hour, 0, 23)}:${this.normalizeTimePart(minute, 0, 59)}`;
   }
 
+  buildRangeSummary(): string {
+    return `Rango seleccionado: ${this.formatInputDateTime(this.startDate, this.startHour, this.startMinute)} → ${this.formatInputDateTime(this.endDate, this.endHour, this.endMinute)}`;
+  }
+
   private buildDebugUrl(endpoint: string, params: { from: string; to: string }): string {
     const baseUrl = (this.apiClient as unknown as { getBaseUrl?: () => string }).getBaseUrl?.() ?? '';
     const query = new URLSearchParams(params).toString();
@@ -530,7 +546,16 @@ export class DashboardViewPageComponent {
   formatDateLocal(isoString: string | null | undefined): string {
     if (!isoString) return '—';
     try {
-      return new Date(isoString).toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
+      return new Date(isoString).toLocaleString('es-MX', {
+        timeZone: 'America/Mexico_City',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      });
     } catch {
       return isoString;
     }

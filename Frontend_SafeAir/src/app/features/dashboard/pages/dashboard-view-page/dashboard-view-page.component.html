@@ -66,24 +66,37 @@
       <div class="history-table-container" *ngIf="(isHistoryMode$ | async) && envVm.selectedRoomId">
         <!-- Controles de Rango de Fecha y Hora -->
         <div class="history-range-controls">
-          <!-- Selectores de Fecha y Hora en Formato 12H -->
-          <div class="range-inputs range-inputs--dates">
+          <div class="range-panel">
+            <div class="range-calendar">
+              <label class="range-group__label">Fecha inicio</label>
+              <input
+                type="date"
+                [(ngModel)]="startDate"
+                (ngModelChange)="selectedRangeSummary = buildRangeSummary()"
+                title="Fecha inicio"
+                class="date-input"
+              />
+              <label class="range-group__label">Fecha fin</label>
+              <input
+                type="date"
+                [(ngModel)]="endDate"
+                (ngModelChange)="selectedRangeSummary = buildRangeSummary()"
+                title="Fecha fin"
+                class="date-input"
+              />
+            </div>
+
+            <div class="range-clocks">
             <!-- FECHA/HORA INICIO -->
-            <div class="range-group">
-              <label class="range-group__label">Fecha y Hora Inicio:</label>
-              <div class="range-datetime-picker">
-                <input
-                  type="date"
-                  [(ngModel)]="startDate"
-                  title="Fecha inicio"
-                  class="date-input"
-                />
+              <div class="range-group range-group--clock">
+                <label class="range-group__label">Hora inicio</label>
                 <div class="time-picker">
                   <input
                     type="number"
                     min="0"
                     max="23"
                     [(ngModel)]="startHour"
+                    (ngModelChange)="selectedRangeSummary = buildRangeSummary()"
                     title="Hora (0-23)"
                     placeholder="00-23"
                     class="time-input time-input--hour"
@@ -94,30 +107,24 @@
                     min="0"
                     max="59"
                     [(ngModel)]="startMinute"
+                    (ngModelChange)="selectedRangeSummary = buildRangeSummary()"
                     title="Minuto (0-59)"
                     placeholder="MM"
                     class="time-input time-input--minute"
                   />
                 </div>
               </div>
-            </div>
 
             <!-- FECHA/HORA FIN -->
-            <div class="range-group">
-              <label class="range-group__label">Fecha y Hora Fin:</label>
-              <div class="range-datetime-picker">
-                <input
-                  type="date"
-                  [(ngModel)]="endDate"
-                  title="Fecha fin"
-                  class="date-input"
-                />
+              <div class="range-group range-group--clock">
+                <label class="range-group__label">Hora fin</label>
                 <div class="time-picker">
                   <input
                     type="number"
                     min="0"
                     max="23"
                     [(ngModel)]="endHour"
+                    (ngModelChange)="selectedRangeSummary = buildRangeSummary()"
                     title="Hora (0-23)"
                     placeholder="00-23"
                     class="time-input time-input--hour"
@@ -128,6 +135,7 @@
                     min="0"
                     max="59"
                     [(ngModel)]="endMinute"
+                    (ngModelChange)="selectedRangeSummary = buildRangeSummary()"
                     title="Minuto (0-59)"
                     placeholder="MM"
                     class="time-input time-input--minute"
@@ -135,11 +143,13 @@
                 </div>
               </div>
             </div>
-
-            <button type="button" class="btn btn--primary" (click)="applyTimeRange()">
-              📊 Aplicar Rango
-            </button>
           </div>
+
+          <div class="range-summary">{{ selectedRangeSummary }}</div>
+
+          <button type="button" class="btn btn--primary" (click)="applyTimeRange()">
+            Aplicar Rango
+          </button>
 
           <!-- Mensaje de Error -->
           <div class="range-error" *ngIf="rangeError">{{ rangeError }}</div>
@@ -147,8 +157,8 @@
 
         <!-- Botones de Exportación -->
         <div class="history-export-actions">
-          <button type="button" class="btn btn--secondary" (click)="exportToCsv()">📥 Descargar CSV</button>
-          <button type="button" class="btn btn--secondary" (click)="exportToPdf()">📄 Imprimir PDF</button>
+          <button type="button" class="btn btn--secondary" (click)="exportToCsv()">Descargar CSV</button>
+          <button type="button" class="btn btn--secondary" (click)="exportToPdf()">Imprimir PDF</button>
         </div>
 
         <table class="history-table" *ngIf="historyData$ | async as data">

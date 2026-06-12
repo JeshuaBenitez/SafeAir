@@ -11,6 +11,12 @@ public class MqttProperties {
     private String username = "safeair";
     private String password = "safeair";
     private boolean consoleLogEnabled = true;
+    private String clientIdPrefix = "safeair-emulator";
+    private int keepAliveSeconds = 60;
+    private int connectionTimeoutSeconds = 10;
+    private int maxInflight = 100;
+    private int publishWarningIntervalSeconds = 30;
+    private boolean logStacktrace = false;
 
     public boolean isEnabled() {
         return enabled;
@@ -62,6 +68,54 @@ public class MqttProperties {
 
     public void setConsoleLogEnabled(boolean consoleLogEnabled) {
         this.consoleLogEnabled = consoleLogEnabled;
+    }
+
+    public String getClientIdPrefix() {
+        return clientIdPrefix;
+    }
+
+    public void setClientIdPrefix(String clientIdPrefix) {
+        this.clientIdPrefix = clientIdPrefix;
+    }
+
+    public int getKeepAliveSeconds() {
+        return keepAliveSeconds;
+    }
+
+    public void setKeepAliveSeconds(int keepAliveSeconds) {
+        this.keepAliveSeconds = keepAliveSeconds;
+    }
+
+    public int getConnectionTimeoutSeconds() {
+        return connectionTimeoutSeconds;
+    }
+
+    public void setConnectionTimeoutSeconds(int connectionTimeoutSeconds) {
+        this.connectionTimeoutSeconds = connectionTimeoutSeconds;
+    }
+
+    public int getMaxInflight() {
+        return maxInflight;
+    }
+
+    public void setMaxInflight(int maxInflight) {
+        this.maxInflight = maxInflight;
+    }
+
+    public int getPublishWarningIntervalSeconds() {
+        return publishWarningIntervalSeconds;
+    }
+
+    public void setPublishWarningIntervalSeconds(int publishWarningIntervalSeconds) {
+        this.publishWarningIntervalSeconds = publishWarningIntervalSeconds;
+    }
+
+    public boolean isLogStacktrace() {
+        return logStacktrace;
+    }
+
+    public void setLogStacktrace(boolean logStacktrace) {
+        this.logStacktrace = logStacktrace;
     }
 
     public static class Tls {

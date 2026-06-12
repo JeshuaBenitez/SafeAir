@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { ApiRequestLogRepository } from "../../infrastructure/repositories/api-request-log.repository";
 import { logger } from "../../shared/config/logger";
+import { addLog } from "../../application/services/debug-logs.service";
 
 const repository = new ApiRequestLogRepository();
 
@@ -14,6 +15,18 @@ export function requestAuditMiddleware(req: Request, res: Response, next: NextFu
   // Log request start
   const requestId = `${req.method} ${req.originalUrl} [${Date.now()}]`;
   logger.debug(`[Audit] Request started: ${requestId} (Active: ${activeRequests})`);
+  const shouldDebugLog = shouldLogRequest(req);
+
+  if (shouldDebugLog) {
+    addLog({
+      timestamp: receivedAt.toISOString(),
+      level: "debug",
+      source: "api",
+      event: "api.request.started",
+      message: `${req.method} ${req.originalUrl} started`,
+      details: { method: req.method, path: req.originalUrl, activeRequests }
+    });
+  }
 
   res.on("finish", () => {
     const respondedAt = new Date();
@@ -24,6 +37,23 @@ export function requestAuditMiddleware(req: Request, res: Response, next: NextFu
     logger.debug(
       `[Audit] Request completed: ${requestId} - Status: ${res.statusCode}, Duration: ${durationMs}ms (Active: ${activeRequests})`
     );
+
+    if (shouldDebugLog) {
+      addLog({
+        timestamp: respondedAt.toISOString(),
+        level: res.statusCode >= 400 ? "warn" : "debug",
+        source: "api",
+        event: "api.request.completed",
+        message: `${req.method} ${req.originalUrl} -> ${res.statusCode} (${durationMs}ms)`,
+        details: {
+          method: req.method,
+          path: req.originalUrl,
+          statusCode: res.statusCode,
+          durationMs,
+          activeRequests
+        }
+      });
+    }
 
     // Persist audit record (async, don't wait for it)
     void repository
@@ -43,6 +73,11 @@ export function requestAuditMiddleware(req: Request, res: Response, next: NextFu
   });
 
   next();
+}
+
+function shouldLogRequest(req: Request): boolean {
+  const path = req.path;
+  return !path.startsWith("/debug/events") && !path.startsWith("/debug/assets");
 }
 
 /**

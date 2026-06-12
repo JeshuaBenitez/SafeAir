@@ -28,38 +28,55 @@ public class RoomEnvironmentHelper {
         double deltaCEnv = kEnv * (room.externalCo2() - room.co2());
         double deltaPEnv = kEnv * (room.externalPm25() - room.pm25());
 
+        // ── Temperature: env exchange always applies; miniSplit effect + noise only when ON ─
+        double tempNoise = 0.0;
         double deltaTAc = 0.0;
         if (miniSplit != null && miniSplit.isOn()) {
             double error = miniSplit.getSetpoint() - room.temperature();
             deltaTAc = DomainValidators.clamp(0.15 * error, -0.8, 0.8);
+            tempNoise = randomSource.nextDouble(-0.05, 0.05);
+        }
+        // When miniSplit is OFF: no device effect, no noise. Temperature stays
+        // at its current value (building envelope is assumed to maintain temperature).
+        // Environmental exchange does NOT apply for temperature when miniSplit is OFF.
+        if (miniSplit != null && miniSplit.isOn()) {
+            room.temperature(DomainValidators.clamp(
+                    room.temperature() + deltaTEnv + deltaTAc + tempNoise,
+                    DomainConstants.TEMP_MIN, DomainConstants.TEMP_MAX));
         }
 
+        // ── Humidity: env exchange continues; device effect + noise stop ─────
+        double humNoise = 0.0;
         double deltaHDevice = 0.0;
         if (humidifier != null && humidifier.isOn()) {
             double kHum = 0.02 * humidifier.getLevel();
             deltaHDevice = kHum * (50.0 - room.humidity());
+            humNoise = randomSource.nextDouble(-0.2, 0.2);
         }
+        room.humidity(DomainValidators.clamp(
+                room.humidity() + deltaHEnv + deltaHDevice + humNoise,
+                DomainConstants.HUMIDITY_MIN, DomainConstants.HUMIDITY_MAX));
 
+        // ── CO₂: env exchange + occupancy continue; extractor effect + noise stop ──
+        double co2Noise = 0.0;
         double deltaCExtractor = 0.0;
+        double occupancyC = room.closedEnvironment() ? 3.0 : 0.0;
         if (extractor != null && extractor.isOn()) {
             deltaCExtractor = -0.12 * (room.co2() - room.externalCo2());
+            co2Noise = randomSource.nextDouble(-1.0, 1.0);
         }
-        double occupancyC = room.closedEnvironment() ? 3.0 : 0.0;
+        room.co2(Math.max(DomainConstants.CO2_MIN,
+                room.co2() + deltaCEnv + deltaCExtractor + occupancyC + co2Noise));
 
+        // ── PM2.5: env exchange continues; purifier effect + noise stop ──────
+        double pmNoise = 0.0;
         double deltaPDevice = 0.0;
         if (humidifier != null && humidifier.isOn()) {
             double kFilter = 0.01;
             deltaPDevice = -kFilter * humidifier.getLevel() * room.pm25();
+            pmNoise = randomSource.nextDouble(-0.5, 0.5);
         }
-
-        double tempNoise = randomSource.nextDouble(-0.05, 0.05);
-        double humNoise = randomSource.nextDouble(-0.2, 0.2);
-        double co2Noise = randomSource.nextDouble(-1.0, 1.0);
-        double pmNoise = randomSource.nextDouble(-0.5, 0.5);
-
-        room.temperature(DomainValidators.clamp(room.temperature() + deltaTEnv + deltaTAc + tempNoise, DomainConstants.TEMP_MIN, DomainConstants.TEMP_MAX));
-        room.humidity(DomainValidators.clamp(room.humidity() + deltaHEnv + deltaHDevice + humNoise, DomainConstants.HUMIDITY_MIN, DomainConstants.HUMIDITY_MAX));
-        room.co2(Math.max(DomainConstants.CO2_MIN, room.co2() + deltaCEnv + deltaCExtractor + occupancyC + co2Noise));
-        room.pm25(Math.max(DomainConstants.PM25_MIN, room.pm25() + deltaPEnv + deltaPDevice + pmNoise));
+        room.pm25(Math.max(DomainConstants.PM25_MIN,
+                room.pm25() + deltaPEnv + deltaPDevice + pmNoise));
     }
 }

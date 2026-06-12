@@ -9,6 +9,7 @@ import { InstanceRepository } from "../infrastructure/repositories/instance.repo
 import { RoomRepository } from "../infrastructure/repositories/room.repository";
 import { UserRepository } from "../infrastructure/repositories/user.repository";
 import { AlarmService } from "./services/alarm.service";
+import { ActuatorCommandService } from "./services/actuator-command.service";
 import { AuthService } from "./services/auth.service";
 import { EmailService } from "./services/email.service";
 import { ConfigurationService } from "./services/configuration.service";
@@ -16,6 +17,7 @@ import { CycleService } from "./services/cycle.service";
 import { DeviceActionService } from "./services/device-action.service";
 import { ActuatorStateIngestionService } from "./services/actuator-state-ingestion.service";
 import { EmulatorResolutionService } from "./services/emulator-resolution.service";
+import { EmulatorProvisioningService } from "./services/emulator-provisioning.service";
 import { InstanceService } from "./services/instance.service";
 import { MetricsQueryService } from "./services/metrics-query.service";
 import { RoomService } from "./services/room.service";
@@ -38,13 +40,23 @@ const emailService = new EmailService();
 const instanceService = new InstanceService(instanceRepository);
 const emulatorResolutionService = new EmulatorResolutionService(emulatorRepository);
 const configurationService = new ConfigurationService(configurationRepository, emulatorRepository, roomRepository);
+const emulatorProvisioningService = new EmulatorProvisioningService();
 const userProvisioningService = new UserProvisioningService(userRepository, instanceRepository);
 const authService = new AuthService(userRepository, emailService, userProvisioningService);
-const roomService = new RoomService(instanceRepository, roomRepository, emulatorRepository, roomSetupDomainService, configurationService);
+const roomService = new RoomService(
+  instanceRepository,
+  roomRepository,
+  emulatorRepository,
+  userRepository,
+  roomSetupDomainService,
+  configurationService,
+  emulatorProvisioningService
+);
 const cycleService = new CycleService(cycleRepository);
 const metricsQueryService = new MetricsQueryService(cycleRepository, deviceActionRepository, deviceStateRepository, roomRepository);
 const ruleEvaluationService = new RuleEvaluationService();
 const deviceActionService = new DeviceActionService(deviceActionRepository);
+const actuatorCommandService = new ActuatorCommandService(roomRepository, emulatorRepository, deviceActionRepository, cycleRepository);
 const actuatorStateIngestionService = new ActuatorStateIngestionService(emulatorResolutionService, deviceStateRepository);
 const alarmService = new AlarmService(alarmRepository);
 const telemetryIngestionService = new TelemetryIngestionService(
@@ -62,8 +74,10 @@ export const container = {
   cycleService,
   metricsQueryService,
   deviceActionService,
+  actuatorCommandService,
   actuatorStateIngestionService,
   alarmService,
   configurationService,
+  emulatorProvisioningService,
   telemetryIngestionService
 };

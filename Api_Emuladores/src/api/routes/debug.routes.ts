@@ -1,6 +1,13 @@
-import type { Request } from "express";
+import type { Request, Response } from "express";
 import { Router } from "express";
-import { DebugController, getEmulatorStates } from "../../application/services/debug-logs.service";
+import {
+  DebugController,
+  addLog,
+  getEmulatorStates,
+  getLogSnapshot,
+  getLogsAfterId,
+  subscribeDebugEvents
+} from "../../application/services/debug-logs.service";
 import { container } from "../../application/container";
 import { EmulatorRepository } from "../../infrastructure/repositories/emulator.repository";
 import { verifyToken } from "../../shared/security/jwt";
@@ -23,6 +30,14 @@ function toLocalTime(isoString: string | undefined): string {
 
 function localNow(): string {
   return new Date().toLocaleString("es-MX", { timeZone: "America/Mexico_City" });
+}
+
+function setNoStoreHeaders(res: Response): void {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  res.removeHeader("ETag");
 }
 
 /** Round number to fixed decimals for display only */
@@ -100,22 +115,89 @@ function deviceDisplay(isOn: boolean | null | undefined, targetTemp: number | nu
 
 // Get logs as JSON
 debugRouter.get("/logs", (req, res, next) => {
+  setNoStoreHeaders(res);
   debugController.getLogs(req, res).catch(next);
 });
 
 // Get logs as HTML
 debugRouter.get("/logs/html", (req, res, next) => {
-  // Disable caching to ensure fresh data on refresh
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-  res.setHeader("Pragma", "no-cache");
-  res.setHeader("Expires", "0");
+  setNoStoreHeaders(res);
   debugController.getLogsHtml(req, res).catch(next);
+});
+
+debugRouter.get("/events/logs", (req, res) => {
+  openSseStream(req, res, "logs");
 });
 
 // Get system status
 debugRouter.get("/status", (req, res, next) => {
+  setNoStoreHeaders(res);
   debugController.getStatus(req, res).catch(next);
 });
+
+debugRouter.get("/events/emulators", (req, res) => {
+  openSseStream(req, res, "emulators");
+});
+
+function openSseStream(req: Request, res: Response, eventType: "logs" | "emulators"): void {
+  setNoStoreHeaders(res);
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+
+  const send = (event: string, data: unknown, id?: number): void => {
+    if (id !== undefined) {
+      res.write(`id: ${id}\n`);
+    }
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  send("connected", { stream: eventType, timestamp: new Date().toISOString() });
+  if (eventType === "logs") {
+    const lastEventId = Number(req.header("last-event-id") ?? req.header("Last-Event-ID"));
+    const logs = Number.isFinite(lastEventId) && lastEventId >= 0
+      ? getLogsAfterId(lastEventId)
+      : getLogSnapshot();
+    send("snapshot", { stream: eventType, logs, timestamp: new Date().toISOString() });
+  } else {
+    send("snapshot", { stream: eventType, emulators: getEmulatorStates(), timestamp: new Date().toISOString() });
+  }
+
+  const unsubscribe = subscribeDebugEvents((event) => {
+    if (event.stream === eventType) {
+      send(event.event, { stream: event.stream, timestamp: new Date().toISOString(), payload: event.payload }, event.id);
+    }
+  });
+
+  addLog({
+    timestamp: new Date().toISOString(),
+    level: "info",
+    source: "api",
+    event: "debug.client.connected",
+    message: `Debug ${eventType} SSE client connected`,
+    details: { stream: eventType, ip: req.ip, userAgent: req.get("user-agent") ?? null }
+  });
+
+  const heartbeat = setInterval(() => {
+    send("heartbeat", { stream: eventType, ts: new Date().toISOString() });
+  }, 10000);
+
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+    addLog({
+      timestamp: new Date().toISOString(),
+      level: "info",
+      source: "api",
+      event: "debug.client.disconnected",
+      message: `Debug ${eventType} SSE client disconnected`,
+      details: { stream: eventType, ip: req.ip }
+    });
+    res.end();
+  });
+}
 
 function buildDebugEmulatorView(req: Request) {
   const auth = getDebugAuth(req);
@@ -137,8 +219,122 @@ async function getDebugEmulatorsForRequest(req: Request) {
   return { userId, role, global, emulatorsFromDb };
 }
 
+type DebugLatestMeasurement = {
+  temperature: number;
+  humidity: number;
+  co2: number;
+  pm25: number;
+  measuredAt: string | null;
+  receivedAt?: string | null;
+  source?: string | null;
+};
+
+function toIsoString(value: unknown): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  const parsed = new Date(String(value));
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
+}
+
+function normalizeLatestMeasurement(value: unknown): DebugLatestMeasurement | null {
+  const raw = value && typeof value === "object" && "get" in value && typeof (value as { get?: unknown }).get === "function"
+    ? ((value as { get(options?: unknown): unknown }).get({ plain: true }) as Record<string, unknown>)
+    : value as Record<string, unknown> | null;
+
+  if (!raw) {
+    return null;
+  }
+
+  const metrics = (raw.metrics && typeof raw.metrics === "object"
+    ? raw.metrics
+    : raw) as Record<string, unknown>;
+
+  const temperature = Number(metrics.temperature);
+  const humidity = Number(metrics.humidity);
+  const co2 = Number(metrics.co2);
+  const pm25 = Number(metrics.pm25);
+
+  if (![temperature, humidity, co2, pm25].every(Number.isFinite)) {
+    return null;
+  }
+
+  return {
+    temperature,
+    humidity,
+    co2,
+    pm25,
+    measuredAt: toIsoString(raw.measuredAt),
+    receivedAt: toIsoString(raw.receivedAt),
+    source: typeof raw.source === "string" ? raw.source : null
+  };
+}
+
+function normalizeMemoryMetrics(memoryState: ReturnType<typeof getEmulatorStates>[number] | undefined): DebugLatestMeasurement | null {
+  if (!memoryState) {
+    return null;
+  }
+
+  const latest = normalizeLatestMeasurement({
+    ...memoryState.metrics,
+    measuredAt: memoryState.lastSeen
+  });
+
+  return latest;
+}
+
+async function buildDebugEmulatorPayload(
+  emuDb: NonNullable<Awaited<ReturnType<typeof getDebugEmulatorsForRequest>>["emulatorsFromDb"]>[number],
+  memoryMap: Map<string, ReturnType<typeof getEmulatorStates>[number]>
+) {
+  const memoryState = emuDb.emulatorExternalId ? memoryMap.get(emuDb.emulatorExternalId) : undefined;
+  const actuatorState = emuDb.assignmentStatus === "assigned" && emuDb.roomId
+    ? await container.metricsQueryService.actuatorState(emuDb.roomId) as { actuators?: unknown; metrics?: unknown; measuredAt?: unknown; receivedAt?: unknown }
+    : null;
+  const dbMeasurement = normalizeLatestMeasurement(actuatorState);
+  const memoryMeasurement = normalizeMemoryMetrics(memoryState);
+  const latestMeasurement = dbMeasurement ?? memoryMeasurement;
+
+  return {
+    emulatorId: emuDb.emulatorExternalId,
+    roomId: emuDb.roomId,
+    roomName: emuDb.roomName,
+    status: emuDb.status,
+    roomArea: emuDb.roomArea,
+    windowCount: emuDb.windowCount,
+    minisplitCount: emuDb.minisplitCount,
+    purifierCount: emuDb.purifierCount,
+    extractorCount: emuDb.extractorCount,
+    minisplitSize: emuDb.minisplitSize,
+    purifierSize: emuDb.purifierSize,
+    extractorSize: emuDb.extractorSize,
+    hasEmulator: emuDb.hasEmulator,
+    ownedByUser: emuDb.ownedByUser,
+    assignmentStatus: emuDb.assignmentStatus,
+    assignable: emuDb.assignmentStatus === "free" && emuDb.status === "online",
+    connected: emuDb.assignmentStatus === "assigned" ? (memoryState?.connected ?? (emuDb.status === "online")) : false,
+    lastSeen: latestMeasurement?.measuredAt ?? memoryState?.lastSeen ?? null,
+    latestMeasurement: emuDb.assignmentStatus === "assigned" ? latestMeasurement : null,
+    metrics: emuDb.assignmentStatus === "assigned" && latestMeasurement
+      ? {
+          temperature: latestMeasurement.temperature,
+          humidity: latestMeasurement.humidity,
+          co2: latestMeasurement.co2,
+          pm25: latestMeasurement.pm25
+        }
+      : null,
+    devices: emuDb.assignmentStatus === "assigned" ? (actuatorState?.actuators ?? memoryState?.devices ?? null) : null
+  };
+}
+
 // Get emulators dashboard as JSON
 debugRouter.get("/emulators", async (req, res) => {
+  setNoStoreHeaders(res);
   const { userId, role, global, emulatorsFromDb } = await getDebugEmulatorsForRequest(req);
   if (!userId) {
     res.status(401).json({
@@ -152,24 +348,7 @@ debugRouter.get("/emulators", async (req, res) => {
   const emulatorsFromMemory = getEmulatorStates();
   const memoryMap = new Map(emulatorsFromMemory.map(e => [e.emulatorId, e]));
   const emulators = await Promise.all((emulatorsFromDb ?? []).map(async (emuDb) => {
-    const memoryState = emuDb.emulatorExternalId ? memoryMap.get(emuDb.emulatorExternalId) : undefined;
-    const actuatorState = emuDb.assignmentStatus === "assigned" && emuDb.roomId
-      ? await container.metricsQueryService.actuatorState(emuDb.roomId) as { actuators?: unknown }
-      : null;
-    return {
-      emulatorId: emuDb.emulatorExternalId,
-      roomId: emuDb.roomId,
-      roomName: emuDb.roomName,
-      status: emuDb.status,
-      hasEmulator: emuDb.hasEmulator,
-      ownedByUser: emuDb.ownedByUser,
-      assignmentStatus: emuDb.assignmentStatus,
-      assignable: emuDb.assignmentStatus === "free" && emuDb.status === "online",
-      connected: emuDb.assignmentStatus === "assigned" ? (memoryState?.connected ?? (emuDb.status === "online")) : false,
-      lastSeen: memoryState?.lastSeen,
-      metrics: emuDb.assignmentStatus === "assigned" ? (memoryState?.metrics ?? null) : null,
-      devices: emuDb.assignmentStatus === "assigned" ? (actuatorState?.actuators ?? memoryState?.devices ?? null) : null
-    };
+    return buildDebugEmulatorPayload(emuDb, memoryMap);
   }));
 
   res.status(200).json({ count: emulators.length, mode: global ? "global-admin" : "user", role, emulators });
@@ -178,6 +357,7 @@ debugRouter.get("/emulators", async (req, res) => {
 // Get emulators dashboard as HTML - combines PostgreSQL config + memory telemetry
 debugRouter.get("/emulators/html", async (req, res) => {
   try {
+    setNoStoreHeaders(res);
     const { userId, global, emulatorsFromDb } = await getDebugEmulatorsForRequest(req);
 
     // Get real-time state from memory (telemetry)
@@ -189,29 +369,7 @@ debugRouter.get("/emulators/html", async (req, res) => {
 
     // Combine both sources
     const combinedEmulators = await Promise.all(dbRows.map(async (emuDb) => {
-      const memoryState = emuDb.emulatorExternalId ? memoryMap.get(emuDb.emulatorExternalId) : undefined;
-      const actuatorState = emuDb.assignmentStatus === "assigned" && emuDb.roomId
-        ? await container.metricsQueryService.actuatorState(emuDb.roomId) as { actuators?: unknown }
-        : null;
-      return {
-        emulatorId: emuDb.emulatorExternalId,
-        roomId: emuDb.roomId,
-        roomName: emuDb.roomName,
-        status: emuDb.status,
-        roomArea: emuDb.roomArea,
-        windowCount: emuDb.windowCount,
-        minisplitCount: emuDb.minisplitCount,
-        purifierCount: emuDb.purifierCount,
-        extractorCount: emuDb.extractorCount,
-        hasEmulator: emuDb.hasEmulator,
-        ownedByUser: emuDb.ownedByUser,
-        assignmentStatus: emuDb.assignmentStatus,
-        assignable: emuDb.assignmentStatus === "free" && emuDb.status === "online",
-        connected: emuDb.assignmentStatus === "assigned" ? (memoryState?.connected ?? (emuDb.status === "online")) : false,
-        lastSeen: memoryState?.lastSeen,
-        metrics: emuDb.assignmentStatus === "assigned" ? (memoryState?.metrics || null) : null,
-        devices: emuDb.assignmentStatus === "assigned" ? (actuatorState?.actuators || memoryState?.devices || null) : null
-      };
+      return buildDebugEmulatorPayload(emuDb, memoryMap);
     }));
 
     const html = generateEmulatorsHtml(combinedEmulators, { authRequired: !userId, global });
@@ -413,6 +571,10 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     .token-section label { font-size: 13px; color: #8b949e; display: block; margin-bottom: 6px; }
     .token-section input { width: 100%; padding: 6px 10px; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; font-size: 13px; max-width: 600px; }
     .token-hint { font-size: 11px; color: #6e7681; margin-top: 4px; }
+    .debug-status { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 8px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 13px; }
+    .debug-status.error { display: block; border-color: #da3633; background: rgba(218, 54, 51, 0.12); color: #ffb4ad; }
+    .debug-status.success { display: block; border-color: #238636; background: rgba(35, 134, 54, 0.12); color: #b4f1b4; }
+    .debug-status.info { display: block; border-color: #1f6feb; background: rgba(31, 111, 235, 0.12); color: #b9d8ff; }
     .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr)); gap: 16px; }
     .emulator-card { background: #161b22; border-radius: 12px; border: 1px solid #30363d; padding: 16px; }
     .emulator-card:hover { border-color: #58a6ff; }
@@ -478,7 +640,7 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     </div>
     <div class="header-right">
       <label class="auto-refresh">
-        <input type="checkbox" id="autoRefresh" checked> Auto-refresh cada 5s
+        <input type="checkbox" id="autoRefresh"> Auto-refresh cada 5s
       </label>
       <button class="refrescar" id="refreshBtn">Refresh</button>
     </div>
@@ -490,7 +652,9 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     <div class="token-hint">El token se guarda en localStorage y en una cookie local de debug para que esta página renderice solo tus rooms. Al pegar uno nuevo, la página se recarga.</div>
   </div>
 
-  <div class="cards-grid">
+  <div class="debug-status" id="debugStatus" role="status" aria-live="polite"></div>
+
+  <div class="cards-grid" id="emulatorCardsGrid">
     ${emulatorCards || emptyState}
   </div>
 

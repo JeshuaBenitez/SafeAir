@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import com.safeair.emulator.emulation.core.DomainConstants;
+import com.safeair.emulator.emulation.impl.MiniSplit;
 import com.safeair.emulator.emulation.simulation.ConvergenceEvaluator;
 import com.safeair.emulator.emulation.simulation.EmulatorSeedStrategy;
 import com.safeair.emulator.emulation.simulation.Room;
@@ -21,20 +22,28 @@ class DeterministicReplayTest {
     private static final String ID_A = "EMU-0001";
     private static final String ID_B = "EMU-0002";
 
+    /**
+     * Runs simulation with an active (ON) MiniSplit so temperature noise is
+     * applied each tick, causing divergence between different seeds.
+     * Without an active actuator, temperature freezes (new behavior).
+     */
     private double[] runSimulation(String id, int ticks) {
         long seed = EmulatorSeedStrategy.seedFrom(id);
         SeededRandomSource rng = new SeededRandomSource(seed);
         Room room = new Room(25, 2, 5, rng);
         RoomEnvironmentHelper helper = new RoomEnvironmentHelper();
-        // Fix external values
         room.externalTemperature(28.0);
         room.externalHumidity(55.0);
         room.externalCo2(420.0);
         room.externalPm25(12.0);
 
+        MiniSplit ac = new MiniSplit();
+        ac.toggle(); // turn ON so temperature noise is applied
+        ac.setState(24);
+
         double[] tempHistory = new double[ticks];
         for (int i = 0; i < ticks; i++) {
-            helper.simulateEnvironment(room, null, null, null, rng);
+            helper.simulateEnvironment(room, ac, null, null, rng);
             tempHistory[i] = room.temperature();
         }
         return tempHistory;

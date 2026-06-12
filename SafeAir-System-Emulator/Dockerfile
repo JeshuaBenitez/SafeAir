@@ -1,5 +1,5 @@
 # Multi-stage build optimizado para caché Maven
-FROM maven:3.9-eclipse-temurin-17 AS build
+FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /app
 
 # Copiar primero pom.xml para caché de dependencias
@@ -19,7 +19,7 @@ RUN mvn clean package \
     -Dmaven.source.skip=true
 
 # Stage final: imagen mínima
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 
 # Crear usuário no-root para seguridad

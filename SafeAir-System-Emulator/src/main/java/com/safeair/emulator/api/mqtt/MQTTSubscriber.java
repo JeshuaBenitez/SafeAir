@@ -53,7 +53,8 @@ public class MQTTSubscriber {
             }
             dispatcher.enqueue(command);
         } catch (RuntimeException ex) {
-            LOGGER.warn("Rejected invalid MQTT config payload for topic {}", topic, ex);
+            LOGGER.warn("Rejected invalid MQTT config payload for topic {}: {}", topic, ex.getMessage());
+            LOGGER.debug("Rejected invalid MQTT config payload", ex);
         }
     }
 

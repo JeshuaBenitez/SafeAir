@@ -24,7 +24,7 @@ public class ActuatorCommandHandler {
     private final EmulatorCommandCallback callback;
     
     public interface EmulatorCommandCallback {
-        void onCommand(String emulatorId, String deviceType, int deviceIndex, String action, Object value);
+        void onCommand(String emulatorId, String deviceType, int deviceIndex, String action, Object value, String correlationId);
     }
     
     public ActuatorCommandHandler(EmulatorCommandCallback callback) {
@@ -53,7 +53,11 @@ public class ActuatorCommandHandler {
             String emulatorId = parts[1];
             
             // Parse JSON (simple parsing without external library)
+            String correlationId = extractJsonField(json, "correlationId");
             String deviceType = extractJsonField(json, "deviceType");
+            if (deviceType == null) {
+                deviceType = extractJsonField(json, "device");
+            }
             int deviceIndex = parseDeviceIndex(extractJsonField(json, "deviceIndex"));
             String action = extractJsonField(json, "action");
             String valueStr = extractJsonField(json, "value");
@@ -73,34 +77,46 @@ public class ActuatorCommandHandler {
                 value = Boolean.parseBoolean(valueStr);
             } else if (valueStr != null && valueStr.matches("\\d+")) {
                 value = Integer.parseInt(valueStr);
+            } else if (valueStr != null) {
+                value = valueStr;
             }
             
             // Process action
-            processAction(emulatorId, deviceType, deviceIndex, action, value);
+            processAction(emulatorId, deviceType, deviceIndex, action, value, correlationId);
             
         } catch (Exception ex) {
             LOGGER.error("Failed to process actuator command", ex);
         }
     }
     
-    private void processAction(String emulatorId, String deviceType, int deviceIndex, String action, Object value) {
+    private void processAction(String emulatorId, String deviceType, int deviceIndex, String action, Object value, String correlationId) {
         // Map action string to command
         if ("turn_on".equals(action) || action.endsWith("_on")) {
             // Turn on command
             LOGGER.info("Command: Turn ON {} unit {} for emulator {}", deviceType, deviceIndex, emulatorId);
             if (callback != null) {
-                callback.onCommand(emulatorId, deviceType, deviceIndex, "turn_on", true);
+                callback.onCommand(emulatorId, deviceType, deviceIndex, "turn_on", true, correlationId);
             }
         } else if ("turn_off".equals(action) || action.endsWith("_off")) {
             // Turn off command
             LOGGER.info("Command: Turn OFF {} unit {} for emulator {}", deviceType, deviceIndex, emulatorId);
             if (callback != null) {
-                callback.onCommand(emulatorId, deviceType, deviceIndex, "turn_off", false);
+                callback.onCommand(emulatorId, deviceType, deviceIndex, "turn_off", false, correlationId);
             }
         } else if ("set_temperature".equals(action) && value instanceof Integer) {
             LOGGER.info("Command: Set {} unit {} temperature to {} for emulator {}", deviceType, deviceIndex, value, emulatorId);
             if (callback != null) {
-                callback.onCommand(emulatorId, deviceType, deviceIndex, "set_temperature", value);
+                callback.onCommand(emulatorId, deviceType, deviceIndex, "set_temperature", value, correlationId);
+            }
+        } else if ("set_speed".equals(action) && value instanceof Integer) {
+            LOGGER.info("Command: Set {} unit {} speed to {} for emulator {}", deviceType, deviceIndex, value, emulatorId);
+            if (callback != null) {
+                callback.onCommand(emulatorId, deviceType, deviceIndex, "set_speed", value, correlationId);
+            }
+        } else if ("set_mode".equals(action) && value instanceof String) {
+            LOGGER.info("Command: Set {} unit {} mode to {} for emulator {}", deviceType, deviceIndex, value, emulatorId);
+            if (callback != null) {
+                callback.onCommand(emulatorId, deviceType, deviceIndex, "set_mode", value, correlationId);
             }
         } else if (action.contains("_set_")) {
             // Set temperature command
@@ -109,7 +125,7 @@ public class ActuatorCommandHandler {
                 int temp = Integer.parseInt(parts[1]);
                 LOGGER.info("Command: Set {} unit {} temperature to {} for emulator {}", deviceType, deviceIndex, temp, emulatorId);
                 if (callback != null) {
-                    callback.onCommand(emulatorId, deviceType, deviceIndex, "set_temperature", temp);
+                    callback.onCommand(emulatorId, deviceType, deviceIndex, "set_temperature", temp, correlationId);
                 }
             }
         } else {

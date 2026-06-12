@@ -1,5 +1,7 @@
 package com.safeair.emulator.integration.mqtt;
 
+import java.time.Instant;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -9,7 +11,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import com.safeair.emulator.api.adapter.TelemetryAdapter;
+import com.safeair.emulator.api.mqtt.MQTTConnector;
 import com.safeair.emulator.api.mqtt.MqttPublisher;
+import com.safeair.emulator.api.mqtt.MqttTopics;
+import com.safeair.emulator.config.MqttProperties;
+import com.safeair.emulator.emulation.core.RoomStateSnapshot;
+import com.safeair.emulator.emulation.core.TelemetryPayload;
 
 /**
  * Integration tests for MQTT publisher adapter with mocked broker.
@@ -122,6 +130,28 @@ class MqttPublisherIntegrationTest {
         assertThatCode(() -> mqttPublisher.send(telemetryPayload))
             .doesNotThrowAnyException();
     }
+
+    @Test
+    void send_telemetryPayloadPublishesToEmulatorTelemetryTopic() {
+        RecordingConnector connector = new RecordingConnector();
+        MqttPublisher publisher = new MqttPublisher(connector, new TelemetryAdapter());
+        TelemetryPayload payload = new TelemetryPayload(
+                Instant.parse("2026-06-11T00:00:00Z"),
+                "EMU-U001-R001",
+                12,
+                0,
+                3,
+                0,
+                new RoomStateSnapshot(24.5, 45.0, 510.0, 12.0, 0.2, 35, 1),
+                Map.of("TemperatureSensor", 24.5),
+                Map.of());
+
+        publisher.send(payload);
+
+        assertThat(connector.lastTopic()).isEqualTo(MqttTopics.telemetryTopic("EMU-U001-R001"));
+        assertThat(connector.lastQos()).isEqualTo(MqttTopics.TELEMETRY_QOS);
+        assertThat(connector.lastPayload()).isNotEmpty();
+    }
     
     /**
      * Test MQTT publisher contract compliance
@@ -148,6 +178,42 @@ class MqttPublisherIntegrationTest {
         @Override
         public String toString() {
             return "TestTelemetryPayload{deviceId='" + deviceId + "', value=" + value + "}";
+        }
+    }
+
+    private static final class RecordingConnector extends MQTTConnector {
+        private String lastTopic;
+        private byte[] lastPayload;
+        private int lastQos;
+
+        RecordingConnector() {
+            super(enabledProps());
+        }
+
+        @Override
+        public boolean publish(String topic, byte[] payload, int qos) {
+            lastTopic = topic;
+            lastPayload = payload;
+            lastQos = qos;
+            return true;
+        }
+
+        String lastTopic() {
+            return lastTopic;
+        }
+
+        byte[] lastPayload() {
+            return lastPayload;
+        }
+
+        int lastQos() {
+            return lastQos;
+        }
+
+        private static MqttProperties enabledProps() {
+            MqttProperties props = new MqttProperties();
+            props.setEnabled(true);
+            return props;
         }
     }
 }

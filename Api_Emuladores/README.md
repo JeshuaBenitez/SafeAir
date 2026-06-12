@@ -138,14 +138,14 @@ JWT_SECRET=tu-secret-aqui-mínimo-32-caracteres
 NODE_ENV=production
 PORT=3000
 API_HOST=0.0.0.0
-DB_HOST=192.168.1.100
+DB_HOST=IP_PC_DB_MQTT
 DB_PORT=5432
 DB_NAME=safeair
 DB_USER=postgres
 DB_PASSWORD=postgres
-MQTT_URL=mqtt://192.168.1.102:1883
+MQTT_URL=mqtt://IP_PC_DB_MQTT:1883
 AUTH_SKIP_OTP=true
-CORS_ORIGINS=http://192.168.1.104:8080,http://localhost:8080
+CORS_ORIGINS=http://IP_PC_FRONTEND:4200,http://localhost:4200,http://127.0.0.1:4200
 JWT_SECRET=tu-secret-aqui
 ```
 
@@ -171,7 +171,26 @@ JWT_SECRET=tu-secret-aqui
 | GET | `/api/v1/rooms/:id` | Obtener habitación por ID |
 | POST | `/api/v1/rooms` | Crear habitación |
 | PUT | `/api/v1/rooms/:id` | Actualizar habitación |
+| PUT | `/api/v1/rooms/:id/setup` | Configurar dimensiones, cantidades y tamaños de actuadores |
 | DELETE | `/api/v1/rooms/:id` | Eliminar habitación |
+
+El `setup` de una habitación conserva el tamaño seleccionado para cada tipo de actuador con los valores permitidos `small`, `medium` y `large`:
+
+```json
+{
+  "roomWidth": 10,
+  "roomLength": 10,
+  "roomHeight": 2.7,
+  "windowCount": 2,
+  "windowAreaTotal": 3,
+  "minisplitCount": 1,
+  "purifierCount": 1,
+  "extractorCount": 1,
+  "minisplitSize": "small",
+  "purifierSize": "medium",
+  "extractorSize": "large"
+}
+```
 
 ### Métricas
 
@@ -187,6 +206,8 @@ JWT_SECRET=tu-secret-aqui
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
 | POST | `/api/v1/rooms/:roomId/actuators/:deviceType/command` | Enviar comando a dispositivo |
+| POST | `/api/v1/edit/emulador/:emulatorId` | Controlar actuador por emulador asignado |
+| POST | `/api/v1/emulators/:emulatorId/actuators` | Alias REST para controlar actuador |
 
 **Comando**: Control bidireccional
 ```bash
@@ -194,6 +215,57 @@ curl -X POST "http://localhost:3000/api/v1/rooms/{ROOM_ID}/actuators/minisplit/c
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer {TOKEN}" \
   -d '{"action":"turn_on","value":true,"source":"frontend"}'
+```
+
+**Control por emulador con Bearer token**
+
+Publica al topic MQTT existente `safeair/{emulatorExternalId}/actuator-state`, valida que el emulador pertenezca a una room del usuario autenticado y no modifica datos estructurales de room, usuario, area, ventanas, sensores, dispositivos ni IDs.
+
+Formato recomendado:
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/edit/emulador/EMU-U001-R001" \
+  -H "Authorization: Bearer {TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"actuator":"MiniSplit#1","action":"turn_off"}'
+
+curl -X POST "http://localhost:3000/api/v1/edit/emulador/EMU-U001-R001" \
+  -H "Authorization: Bearer {TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"actuator":"MiniSplit#1","action":"set_state","value":24}'
+```
+
+Formato legacy compatible:
+
+```bash
+curl -X POST "http://localhost:3000/api/v1/edit/emulador/EMU-U001-R001" \
+  -H "Authorization: Bearer {TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"extractor1":"on"}'
+```
+
+Mapeos soportados:
+
+```txt
+extractor1: "on" | "off"
+minisplit1: "on" | "off"
+minisplit1Setpoint: 19..30
+purifier1: "on" | "off"
+purifier1Level: 1..5
+```
+
+Respuesta exitosa:
+
+```json
+{
+  "ok": true,
+  "emulatorExternalId": "EMU-U001-R001",
+  "command": {
+    "actuator": "AirExtractor#1",
+    "action": "turn_on"
+  },
+  "correlationId": "uuid"
+}
 ```
 
 ### Telemetry (para emuladores)
@@ -310,12 +382,12 @@ docker build -t safeair-api .
 
 ```bash
 docker run -d -p 3000:3000 \
-  -e DB_HOST=192.168.1.100 \
+  -e DB_HOST=IP_PC_DB_MQTT \
   -e DB_PORT=5432 \
   -e DB_NAME=safeair \
   -e DB_USER=postgres \
   -e DB_PASSWORD=postgres \
-  -e MQTT_URL=mqtt://192.168.1.102:1883 \
+  -e MQTT_URL=mqtt://IP_PC_DB_MQTT:1883 \
   -e AUTH_SKIP_OTP=true \
   safeair-api
 ```

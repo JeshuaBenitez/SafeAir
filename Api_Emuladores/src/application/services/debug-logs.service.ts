@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { eventBus, EVENTS } from "../events/event-bus";
 
 type ActuatorType = "minisplit" | "purifier" | "extractor";
 interface ActuatorUnitState {
@@ -32,6 +33,23 @@ interface EmulatorState {
 }
 
 const emulatorStates = new Map<string, EmulatorState>();
+type DebugStream = "logs" | "emulators";
+type DebugEvent = { stream: DebugStream; event: string; payload?: unknown; id?: number };
+type DebugEventListener = (event: DebugEvent) => void;
+const debugEventListeners = new Set<DebugEventListener>();
+
+export function subscribeDebugEvents(listener: DebugEventListener): () => void {
+  debugEventListeners.add(listener);
+  return () => {
+    debugEventListeners.delete(listener);
+  };
+}
+
+function emitDebugEvent(event: DebugEvent): void {
+  for (const listener of debugEventListeners) {
+    listener(event);
+  }
+}
 
 /**
  * Update emulator state when telemetry is received
@@ -71,6 +89,9 @@ export function updateEmulatorState(
   }
 
   emulatorStates.set(emulatorId, existing);
+  const payload = { emulatorId, roomId: existing.roomId, state: existing };
+  eventBus.emit(EVENTS.EMULATOR_UPDATED, payload);
+  emitDebugEvent({ stream: "emulators", event: "emulator", payload });
 }
 
 function mergeDeviceUpdates(
@@ -134,7 +155,7 @@ export interface LogEntry {
   id: number;
   timestamp: string;
   level: "info" | "warn" | "error" | "debug";
-  source: "api" | "mqtt-received" | "mqtt-published" | "frontend" | "emulator" | "postgres" | "system";
+  source: "api" | "mqtt" | "mqtt-received" | "mqtt-published" | "frontend" | "emulator" | "postgres" | "system";
   event: string;
   message: string;
   details?: Record<string, unknown>;
@@ -160,6 +181,17 @@ export function addLog(entry: Omit<LogEntry, "id">): void {
   }
 
   logIndex = (logIndex + 1) % LOG_BUFFER_SIZE;
+  eventBus.emit(EVENTS.DEBUG_LOG_CREATED, fullEntry);
+  emitDebugEvent({ stream: "logs", event: "log", payload: fullEntry, id: fullEntry.id });
+  if (
+    fullEntry.source === "frontend" ||
+    fullEntry.source === "mqtt" ||
+    fullEntry.source === "mqtt-published" ||
+    fullEntry.source === "mqtt-received" ||
+    fullEntry.source === "emulator"
+  ) {
+    emitDebugEvent({ stream: "emulators", event: "log", payload: fullEntry, id: fullEntry.id });
+  }
 }
 
 /**
@@ -290,6 +322,17 @@ export function getLogs(options?: {
   return filtered;
 }
 
+export function getLogSnapshot(limit = 200): LogEntry[] {
+  return getLogs({ limit }).sort((a, b) => a.id - b.id);
+}
+
+export function getLogsAfterId(lastEventId: number, limit = 500): LogEntry[] {
+  return [...logBuffer]
+    .filter((log) => log.id > lastEventId)
+    .sort((a, b) => a.id - b.id)
+    .slice(-limit);
+}
+
 /**
  * Debug Controller - Serves log view page and log API
  */
@@ -390,6 +433,10 @@ function generateLogsHtml(logs: LogEntry[]): string {
     .auto-refresh input { accent-color: #238636; }
     .summary { display: flex; gap: 20px; margin-bottom: 20px; font-size: 13px; color: #8b949e; flex-wrap: wrap; }
     .global-notice { margin: -6px 0 18px; padding: 12px 14px; border: 1px solid #9e6a03; border-radius: 8px; background: rgba(158, 106, 3, 0.16); color: #f0d08a; font-size: 13px; line-height: 1.45; }
+    .debug-status { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 8px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 13px; }
+    .debug-status.error { display: block; border-color: #da3633; background: rgba(218, 54, 51, 0.12); color: #ffb4ad; }
+    .debug-status.success { display: block; border-color: #238636; background: rgba(35, 134, 54, 0.12); color: #b4f1b4; }
+    .debug-status.info { display: block; border-color: #1f6feb; background: rgba(31, 111, 235, 0.12); color: #b9d8ff; }
     .table-wrap { background: #161b22; border-radius: 8px; overflow: hidden; border: 1px solid #30363d; }
     table { width: 100%; border-collapse: collapse; }
     th { background: #21262d; padding: 12px; text-align: left; font-weight: 600; color: #8b949e; }
@@ -418,14 +465,14 @@ function generateLogsHtml(logs: LogEntry[]): string {
     <div class="header-left">
       <h1>SafeAir Debug Logs Globales</h1>
       <div class="summary">
-        <span>Total: ${logs.length} logs</span>
+        <span>Total: <span id="logCount">${logs.length}</span> logs</span>
         <span>Actualizado: <span id="clock">${localNow()}</span></span>
         <span>Zona: América/México (CDMX)</span>
       </div>
     </div>
     <div class="header-right">
       <label class="auto-refresh">
-        <input type="checkbox" id="autoRefresh" checked> Auto-refresh cada 5s
+        <input type="checkbox" id="autoRefresh"> Auto-refresh cada 5s
       </label>
       <button class="refrescar" id="refreshBtn">Refresh</button>
     </div>
@@ -433,6 +480,7 @@ function generateLogsHtml(logs: LogEntry[]): string {
   <div class="global-notice">
     Esta vista muestra logs globales del sistema, incluyendo telemetría de emuladores como EMU-0001 y EMU-0002. No implica que esos eventos pertenezcan al usuario o room autenticado en el frontend.
   </div>
+  <div class="debug-status" id="debugStatus" role="status" aria-live="polite"></div>
   <div class="table-wrap">
     <table>
       <thead>
@@ -445,7 +493,7 @@ function generateLogsHtml(logs: LogEntry[]): string {
           <th>Emulator</th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="logsTableBody">
         ${logs.length > 0 ? logRows : '<tr><td colspan="6" class="empty">Sin logs disponibles. Los eventos aparecerán aquí en tiempo real.</td></tr>'}
       </tbody>
     </table>

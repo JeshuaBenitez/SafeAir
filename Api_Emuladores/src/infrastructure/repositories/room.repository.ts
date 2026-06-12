@@ -6,6 +6,30 @@ export class RoomRepository {
     return RoomModel.create({ instanceId: data.instanceId, name: data.name });
   }
 
+  async findAll(options?: { userId?: string }): Promise<RoomModel[]> {
+    const includes: any[] = [
+      { model: RoomSetupModel, as: "setup", required: false },
+      { model: RoomSetupDerivedModel, as: "derivedSetup", required: false },
+      { model: DeviceModel, as: "devices", required: false }
+    ];
+
+    includes.push({
+      model: InstanceModel,
+      as: "instance",
+      where: options?.userId ? { userId: options.userId } : undefined,
+      attributes: ["id", "userId", "name"],
+      required: Boolean(options?.userId)
+    });
+
+    const { EmulatorModel } = await import("../database/models");
+    includes.push({ model: EmulatorModel, as: "emulator", required: false });
+
+    return RoomModel.findAll({
+      include: includes,
+      order: [["createdAt", "ASC"]]
+    });
+  }
+
   async findById(roomId: string, userId?: string): Promise<RoomModel | null> {
     const includes: any[] = [
       { model: RoomSetupModel, as: "setup" },

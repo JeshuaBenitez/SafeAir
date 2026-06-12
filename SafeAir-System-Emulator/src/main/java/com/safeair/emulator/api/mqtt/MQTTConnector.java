@@ -2,13 +2,16 @@ package com.safeair.emulator.api.mqtt;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiConsumer;
 
 import javax.net.ssl.SSLSocketFactory;
 
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
-import org.eclipse.paho.client.mqttv3.MqttCallback;
+import org.eclipse.paho.client.mqttv3.MqttCallbackExtended;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
@@ -18,30 +21,44 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.safeair.emulator.config.MqttProperties;
+import com.safeair.emulator.manager.EmulatorLogStore;
 
 public class MQTTConnector {
     private static final Logger LOGGER = LoggerFactory.getLogger(MQTTConnector.class);
+    private static final long CONNECT_RETRY_INTERVAL_MS = TimeUnit.SECONDS.toMillis(10);
 
     private final MqttProperties properties;
+    private final EmulatorLogStore logStore;
     private final List<Subscription> subscriptions = new CopyOnWriteArrayList<>();
     private final List<BiConsumer<String, byte[]>> handlers = new CopyOnWriteArrayList<>();
     private final Object lock = new Object();
+    private final AtomicLong lastPublishWarningAt = new AtomicLong(0);
+    private final AtomicLong lastConnectAttemptAt = new AtomicLong(0);
 
     private MqttClient client;
+    private volatile boolean stopping = false;
+    private volatile String clientId;
 
     public MQTTConnector(MqttProperties properties) {
+        this(properties, null);
+    }
+
+    public MQTTConnector(MqttProperties properties, EmulatorLogStore logStore) {
         this.properties = properties;
+        this.logStore = logStore;
     }
 
     public void start() {
         if (!properties.isEnabled()) {
-            LOGGER.info("MQTT disabled by configuration");
+            LOGGER.debug("MQTT disabled by configuration");
             return;
         }
+        stopping = false;
         connectIfNeeded();
     }
 
     public void stop() {
+        stopping = true;
         synchronized (lock) {
             if (client == null) {
                 return;
@@ -77,23 +94,40 @@ public class MQTTConnector {
         }
     }
 
-    public void publish(String topic, byte[] payload, int qos) {
+    public boolean publish(String topic, byte[] payload, int qos) {
         if (!properties.isEnabled()) {
-            return;
+            warnPublishSkipped("MQTT publish skipped because MQTT is disabled topic=" + topic);
+            return false;
         }
-        connectIfNeeded();
         synchronized (lock) {
+            if (client == null) {
+                connectIfNeeded();
+            }
             if (client == null || !client.isConnected()) {
-                return;
+                warnPublishSkipped("MQTT publish skipped because client is not connected topic="
+                        + topic + " broker=" + brokerUrl());
+                return false;
             }
             try {
                 MqttMessage message = new MqttMessage(payload);
                 message.setQos(qos);
                 client.publish(topic, message);
+                return true;
             } catch (MqttException e) {
-                LOGGER.warn("Failed to publish to topic {}", topic, e);
+                warnWithOptionalStacktrace(
+                        "Failed to publish MQTT message topic=" + topic
+                                + " broker=" + brokerUrl()
+                                + " cause=" + e.getMessage(),
+                        e);
+                recordEvent("mqtt.publish.failed", topic + " cause=" + e.getMessage());
+                return false;
             }
         }
+    }
+
+    public String brokerUrl() {
+        String scheme = properties.getTls().isEnabled() ? "ssl" : "tcp";
+        return scheme + "://" + properties.getHost() + ":" + properties.getPort();
     }
 
     private boolean isConnected() {
@@ -108,19 +142,27 @@ public class MQTTConnector {
                 return;
             }
             if (client != null) {
-                closeQuietly(client);
-                client = null;
+                return;
             }
+
+            long now = System.currentTimeMillis();
+            long lastAttempt = lastConnectAttemptAt.get();
+            if (lastAttempt > 0 && now - lastAttempt < CONNECT_RETRY_INTERVAL_MS) {
+                return;
+            }
+            lastConnectAttemptAt.set(now);
+
             try {
-                String scheme = properties.getTls().isEnabled() ? "ssl" : "tcp";
-                String brokerUrl = scheme + "://" + properties.getHost() + ":" + properties.getPort();
-                client = new MqttClient(brokerUrl, MqttClient.generateClientId(), new MemoryPersistence());
+                clientId = createClientId();
+                client = new MqttClient(brokerUrl(), clientId, new MemoryPersistence());
+                client.setTimeToWait(TimeUnit.SECONDS.toMillis(Math.max(1, properties.getConnectionTimeoutSeconds())));
 
                 MqttConnectOptions options = new MqttConnectOptions();
-                options.setAutomaticReconnect(false);
+                options.setAutomaticReconnect(true);
                 options.setCleanSession(true);
-                options.setConnectionTimeout(5);
-                options.setKeepAliveInterval(30);
+                options.setConnectionTimeout(Math.max(1, properties.getConnectionTimeoutSeconds()));
+                options.setKeepAliveInterval(Math.max(10, properties.getKeepAliveSeconds()));
+                options.setMaxInflight(Math.max(10, properties.getMaxInflight()));
                 if (properties.getTls().isEnabled()) {
                     options.setSocketFactory((SSLSocketFactory) SSLSocketFactory.getDefault());
                 }
@@ -134,17 +176,28 @@ public class MQTTConnector {
 
                 client.setCallback(new ConnectorCallback());
                 client.connect(options);
-                LOGGER.info(
-                        "Connected to MQTT broker {}:{} as user {}",
-                        properties.getHost(),
-                        properties.getPort(),
-                        properties.getUsername());
+                LOGGER.debug(
+                        "Connected to MQTT broker {} clientId={} user={} TLS={} keepAlive={}s timeout={}s maxInflight={}",
+                        brokerUrl(),
+                        clientId,
+                        properties.getUsername(),
+                        properties.getTls().isEnabled(),
+                        options.getKeepAliveInterval(),
+                        options.getConnectionTimeout(),
+                        options.getMaxInflight());
 
                 for (Subscription subscription : new ArrayList<>(subscriptions)) {
                     subscribeInternal(subscription);
                 }
             } catch (MqttException e) {
-                LOGGER.warn("Failed to connect MQTT client", e);
+                warnWithOptionalStacktrace(
+                        "Failed to connect MQTT client broker=" + brokerUrl()
+                                + " TLS=" + properties.getTls().isEnabled()
+                                + " cause=" + e.getMessage(),
+                        e);
+                recordEvent("mqtt.connect.failed", "broker=" + brokerUrl() + " cause=" + e.getMessage());
+                closeQuietly(client);
+                client = null;
             }
         }
     }
@@ -153,20 +206,35 @@ public class MQTTConnector {
         try {
             if (client != null && client.isConnected()) {
                 client.subscribe(subscription.topic, subscription.qos);
-                LOGGER.info("Subscribed to topic {} with QoS {}", subscription.topic, subscription.qos);
+                LOGGER.debug("Subscribed to topic {} with QoS {}", subscription.topic, subscription.qos);
+                recordEvent("mqtt.subscribed", subscription.topic + " qos=" + subscription.qos);
             }
         } catch (MqttException e) {
-            LOGGER.warn("Failed to subscribe topic {}", subscription.topic, e);
+            warnWithOptionalStacktrace("Failed to subscribe topic " + subscription.topic + " cause=" + e.getMessage(), e);
+            recordEvent("mqtt.subscribe.failed", subscription.topic + " cause=" + e.getMessage());
         }
     }
 
-    private class ConnectorCallback implements MqttCallback {
+    private class ConnectorCallback implements MqttCallbackExtended {
         @Override
         public void connectionLost(Throwable cause) {
-            LOGGER.warn("MQTT connection lost", cause);
-            synchronized (lock) {
-                closeQuietly(client);
-                client = null;
+            String reason = cause == null ? "unknown" : cause.getMessage();
+            warnWithOptionalStacktrace("MQTT connection lost broker=" + brokerUrl() + " cause=" + reason, cause);
+            recordEvent("mqtt.connection.lost", "broker=" + brokerUrl() + " cause=" + reason);
+        }
+
+        @Override
+        public void connectComplete(boolean reconnect, String serverURI) {
+            if (stopping) {
+                return;
+            }
+
+            String event = reconnect ? "mqtt.reconnected" : "mqtt.connected";
+            LOGGER.debug("{} broker={} clientId={}", event, serverURI, clientId);
+            recordEvent(event, "broker=" + serverURI + " clientId=" + clientId);
+
+            for (Subscription subscription : new ArrayList<>(subscriptions)) {
+                subscribeInternal(subscription);
             }
         }
 
@@ -174,7 +242,14 @@ public class MQTTConnector {
         public void messageArrived(String topic, MqttMessage message) {
             byte[] payload = message.getPayload();
             for (BiConsumer<String, byte[]> handler : handlers) {
-                handler.accept(topic, payload);
+                try {
+                    handler.accept(topic, payload);
+                } catch (RuntimeException ex) {
+                    warnWithOptionalStacktrace(
+                            "MQTT handler failed topic=" + topic + " cause=" + ex.getMessage(),
+                            ex);
+                    recordEvent("mqtt.handler.failed", topic + " cause=" + ex.getMessage());
+                }
             }
         }
 
@@ -195,6 +270,49 @@ public class MQTTConnector {
             mqttClient.close();
         } catch (MqttException e) {
             LOGGER.debug("Ignoring MQTT client close error", e);
+        }
+    }
+
+    private String createClientId() {
+        String prefix = properties.getClientIdPrefix();
+        if (prefix == null || prefix.isBlank()) {
+            prefix = "safeair-emulator";
+        }
+
+        String sanitizedPrefix = prefix.replaceAll("[^A-Za-z0-9_-]", "-");
+        long pid = ProcessHandle.current().pid();
+        String random = UUID.randomUUID().toString().substring(0, 8);
+        return sanitizedPrefix + "-" + pid + "-" + random;
+    }
+
+    private void warnPublishSkipped(String message) {
+        long now = System.currentTimeMillis();
+        long intervalMs = TimeUnit.SECONDS.toMillis(Math.max(1, properties.getPublishWarningIntervalSeconds()));
+        long previous = lastPublishWarningAt.get();
+        if (now - previous < intervalMs || !lastPublishWarningAt.compareAndSet(previous, now)) {
+            LOGGER.debug(message);
+            return;
+        }
+
+        LOGGER.warn(message);
+        recordEvent("mqtt.publish.skipped", message);
+    }
+
+    private void warnWithOptionalStacktrace(String message, Throwable cause) {
+        if (properties.isLogStacktrace()) {
+            LOGGER.warn(message, cause);
+            return;
+        }
+
+        LOGGER.warn(message);
+        if (cause != null) {
+            LOGGER.debug(message, cause);
+        }
+    }
+
+    private void recordEvent(String category, String message) {
+        if (logStore != null) {
+            logStore.onEvent("mqtt", category, message);
         }
     }
 
