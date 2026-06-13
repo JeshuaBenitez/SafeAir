@@ -1,4 +1,4 @@
-import { Op, UniqueConstraintError } from "sequelize";
+import { Op, Transaction, UniqueConstraintError } from "sequelize";
 import { EmulatorModel } from "../database/models";
 import { InstanceModel } from "../database/models";
 import { RoomModel } from "../database/models";
@@ -185,6 +185,41 @@ export class EmulatorRepository {
     });
 
     return emulators.map((emulator) => emulator.emulatorExternalId);
+  }
+
+  async createOrAssignToRoomTransaction(data: { roomId: string; emulatorExternalId: string; transaction: Transaction }): Promise<EmulatorModel> {
+    const { transaction: tx } = data;
+    const existingForRoom = await EmulatorModel.findOne({
+      where: { roomId: data.roomId },
+      transaction: tx,
+      lock: tx.LOCK.UPDATE
+    });
+    if (existingForRoom) {
+      return existingForRoom;
+    }
+
+    const existingForExternalId = await EmulatorModel.findOne({
+      where: { emulatorExternalId: data.emulatorExternalId },
+      transaction: tx,
+      lock: tx.LOCK.UPDATE
+    });
+
+    if (existingForExternalId) {
+      if (existingForExternalId.roomId && existingForExternalId.roomId !== data.roomId) {
+        throw new Error(`Emulator ${data.emulatorExternalId} is already assigned to room ${existingForExternalId.roomId}`);
+      }
+
+      existingForExternalId.roomId = data.roomId;
+      existingForExternalId.status = "online";
+      await existingForExternalId.save({ transaction: tx });
+      return existingForExternalId;
+    }
+
+    return EmulatorModel.create({
+      roomId: data.roomId,
+      emulatorExternalId: data.emulatorExternalId,
+      status: "online"
+    }, { transaction: tx });
   }
 
   async releaseRoom(roomId: string): Promise<void> {

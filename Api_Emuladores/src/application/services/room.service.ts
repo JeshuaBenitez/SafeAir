@@ -8,6 +8,9 @@ import { ConfigurationService } from "./configuration.service";
 import { EmulatorProvisioningService } from "./emulator-provisioning.service";
 import { addLog } from "./debug-logs.service";
 import type { RoomSetupInput } from "../../domain/types/room.types";
+import type { RoomModel } from "../../infrastructure/database/models/room.model";
+import type { EmulatorModel } from "../../infrastructure/database/models/emulator.model";
+import { Op } from "sequelize";
 
 const MAX_SUPPORTED_OPERATORS = 10;
 const MAX_ROOMS_PER_USER = 3;
@@ -41,24 +44,14 @@ export class RoomService {
       throw new AppError("Instance not found", 404, "INSTANCE_NOT_FOUND");
     }
 
-    const userRoomCount = await this.instanceRepository.countRoomsByUser(userId);
-    addLog({
-      timestamp: new Date().toISOString(),
-      level: "info",
-      source: "api",
-      event: "room.create.limit-checked",
-      message: `User has ${userRoomCount}/${MAX_ROOMS_PER_USER} rooms before creation`,
-      details: { userId, userRoomCount, maxRoomsPerUser: MAX_ROOMS_PER_USER }
+    // ── Atomic limit check + room creation inside a transaction ─────────────────
+    // This prevents the double-click / race condition where two concurrent requests
+    // both pass the count check before either commits, causing MAX_ROOMS to be exceeded.
+    const { room, emulator } = await this.createRoomAtomic({
+      instanceId: instance.id,
+      name: input.name,
+      userId
     });
-
-    if (userRoomCount >= MAX_ROOMS_PER_USER) {
-      throw new AppError("Maximum 3 rooms per user", 422, "MAX_ROOMS_REACHED");
-    }
-
-    const emulatorExternalId = await this.nextEmulatorExternalId(userId);
-    const room = await this.roomRepository.create({ instanceId: instance.id, name: input.name });
-    const emulator = await this.emulatorRepository.createOrAssignToRoom({ roomId: room.id, emulatorExternalId });
-
     addLog({
       timestamp: new Date().toISOString(),
       level: "info",
@@ -107,6 +100,123 @@ export class RoomService {
       });
       throw new AppError("Room created but emulator provision request failed", 503, "EMULATOR_PROVISION_FAILED");
     }
+  }
+
+  private async createRoomAtomic(
+    input: { instanceId: string; name: string; userId: string }
+  ): Promise<{ room: RoomModel; emulator: EmulatorModel }> {
+    const { InstanceModel, RoomModel, EmulatorModel } = await import("../../infrastructure/database/models");
+
+    return EmulatorModel.sequelize!.transaction(async (transaction) => {
+      // ── Step 1: Lock the instance row to serialize room creation for this user ─
+      // This is the key serialization point: PostgreSQL's SELECT ... FOR UPDATE
+      // ensures only one transaction at a time can proceed past this point for
+      // the same user/instance, preventing the double-click race condition.
+      const lockedInstance = await InstanceModel.findByPk(input.instanceId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE
+      });
+
+      if (!lockedInstance) {
+        throw new AppError("Instance not found", 404, "INSTANCE_NOT_FOUND");
+      }
+
+      // ── Step 2: Re-count rooms (now safe because we hold the lock) ──────────
+      const userRoomCount = await RoomModel.count({
+        include: [
+          {
+            model: InstanceModel,
+            as: "instance",
+            where: { userId: input.userId },
+            required: true
+          }
+        ],
+        transaction
+      });
+
+      addLog({
+        timestamp: new Date().toISOString(),
+        level: "info",
+        source: "api",
+        event: "room.create.limit-checked",
+        message: `User has ${userRoomCount}/${MAX_ROOMS_PER_USER} rooms before creation (atomic check)`,
+        details: { userId: input.userId, userRoomCount, maxRoomsPerUser: MAX_ROOMS_PER_USER }
+      });
+
+      if (userRoomCount >= MAX_ROOMS_PER_USER) {
+        throw new AppError("Maximum 3 rooms per user", 422, "MAX_ROOMS_REACHED");
+      }
+
+      // ── Step 3: Reserve the emulatorExternalId under lock to prevent duplicate IDs ─
+      const emulatorExternalId = await this.nextEmulatorExternalIdAtomic(input.userId, transaction);
+
+      // ── Step 4: Create the room ────────────────────────────────────────────────
+      const room = await RoomModel.create(
+        { instanceId: input.instanceId, name: input.name },
+        { transaction }
+      );
+
+      // ── Step 5: Assign/create the emulator record ─────────────────────────────
+      const { EmulatorRepository } = await import("../../infrastructure/repositories/emulator.repository");
+      const emulatorRepo = new EmulatorRepository();
+      const emulator = await emulatorRepo.createOrAssignToRoomTransaction({
+        roomId: room.id,
+        emulatorExternalId,
+        transaction
+      });
+
+      return { room, emulator };
+    });
+  }
+
+  private async nextEmulatorExternalIdAtomic(
+    userId: string,
+    transaction: import("sequelize").Transaction
+  ): Promise<string> {
+    const { InstanceModel, RoomModel, EmulatorModel } = await import("../../infrastructure/database/models");
+
+    const operatorIndex = await this.userRepository.getOperatorProvisioningIndex(userId);
+    if (!operatorIndex || operatorIndex > MAX_SUPPORTED_OPERATORS) {
+      throw new AppError("User is outside the supported provisioning range", 422, "USER_LIMIT_REACHED");
+    }
+
+    const userCode = String(operatorIndex).padStart(3, "0");
+
+    // Find already-assigned IDs for this user within the transaction lock
+    const assignedRows = await EmulatorModel.findAll({
+      where: { roomId: { [Op.ne]: null } },
+      attributes: ["emulatorExternalId"],
+      include: [
+        {
+          model: RoomModel,
+          as: "room",
+          required: true,
+          include: [
+            {
+              model: InstanceModel,
+              as: "instance",
+              where: { userId },
+              required: true,
+              attributes: []
+            }
+          ],
+          attributes: []
+        }
+      ],
+      transaction,
+      lock: transaction.LOCK.UPDATE
+    });
+
+    const assignedIds = new Set(assignedRows.map((row) => row.emulatorExternalId));
+
+    for (let roomIndex = 1; roomIndex <= MAX_ROOMS_PER_USER; roomIndex += 1) {
+      const candidate = `EMU-U${userCode}-R${String(roomIndex).padStart(3, "0")}`;
+      if (!assignedIds.has(candidate)) {
+        return candidate;
+      }
+    }
+
+    throw new AppError("Maximum 3 rooms per user", 422, "MAX_ROOMS_REACHED");
   }
 
   async list(userId?: string): Promise<unknown[]> {
@@ -275,24 +385,5 @@ export class RoomService {
       name: "Default Instance",
       description: "Created automatically for CLI room management"
     });
-  }
-
-  private async nextEmulatorExternalId(userId: string): Promise<string> {
-    const operatorIndex = await this.userRepository.getOperatorProvisioningIndex(userId);
-    if (!operatorIndex || operatorIndex > MAX_SUPPORTED_OPERATORS) {
-      throw new AppError("User is outside the supported provisioning range", 422, "USER_LIMIT_REACHED");
-    }
-
-    const userCode = String(operatorIndex).padStart(3, "0");
-    const assignedIds = new Set(await this.emulatorRepository.findAssignedExternalIdsByUser(userId));
-
-    for (let roomIndex = 1; roomIndex <= MAX_ROOMS_PER_USER; roomIndex += 1) {
-      const candidate = `EMU-U${userCode}-R${String(roomIndex).padStart(3, "0")}`;
-      if (!assignedIds.has(candidate)) {
-        return candidate;
-      }
-    }
-
-    throw new AppError("Maximum 3 rooms per user", 422, "MAX_ROOMS_REACHED");
   }
 }

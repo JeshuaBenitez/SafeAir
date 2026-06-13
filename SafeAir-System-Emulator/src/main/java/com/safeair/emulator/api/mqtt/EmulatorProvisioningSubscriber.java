@@ -88,9 +88,15 @@ public class EmulatorProvisioningSubscriber {
 
         Emulator existing = emulatorManager.getEmulator(command.emulatorExternalId());
         if (existing != null) {
+            // Apply the new setup (which sets state to CONFIGURED)
             existing.applySetup(command.setup());
+            // Ensure the emulator is RUNNING after applying setup.
+            // This handles the case where replay() finds an existing emulator that
+            // was left in CONFIGURED state (e.g., after a restart without replay,
+            // or a config-only message that never called start()).
+            existing.start();
             logStore.onEvent(command.emulatorExternalId(), "emulator.provision.already-exists",
-                    "Provision command reapplied to existing emulator");
+                    "Provision command reapplied to existing emulator, ensured RUNNING");
             LOGGER.info("emulator.provision.reapplied emulatorExternalId={} roomId={}",
                     command.emulatorExternalId(),
                     command.roomId());

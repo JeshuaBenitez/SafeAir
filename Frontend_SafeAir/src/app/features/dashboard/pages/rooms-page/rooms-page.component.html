@@ -199,7 +199,7 @@
           <div class="rooms-config__actions">
             <p class="rooms-config__error" *ngIf="saveError">{{ saveError }}</p>
 
-            <button class="rooms-config__save" type="submit" [disabled]="!hasRoomCapacity()">
+            <button class="rooms-config__save" type="submit" [disabled]="!hasRoomCapacity() || isSavingRoom">
               <span aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
                   <path d="M5 4h12l2 2v14H5z"></path>
@@ -207,7 +207,7 @@
                   <path d="M8 20v-6h8v6"></path>
                 </svg>
               </span>
-              Guardar cuarto
+              {{ isSavingRoom ? 'Guardando...' : 'Guardar cuarto' }}
             </button>
           </div>
         </article>

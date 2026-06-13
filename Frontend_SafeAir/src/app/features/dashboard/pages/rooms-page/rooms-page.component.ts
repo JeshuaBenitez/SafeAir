@@ -137,6 +137,7 @@ export class RoomsPageComponent {
 
   saveError: string | null = null;
   saveAttempted = false;
+  isSavingRoom = false;
 
   constructor(
     private readonly dashboardFacade: DashboardFacade,
@@ -218,11 +219,17 @@ export class RoomsPageComponent {
   }
 
   async onSaveRoom(): Promise<void> {
+    if (this.isSavingRoom) {
+      return;
+    }
+
     this.saveAttempted = true;
     this.saveError = null;
+    this.isSavingRoom = true;
 
     if (!this.hasRoomCapacity()) {
       this.saveError = 'Ya alcanzaste el máximo de 3 habitaciones.';
+      this.isSavingRoom = false;
       return;
     }
 
@@ -232,25 +239,33 @@ export class RoomsPageComponent {
       }
 
       this.form.markAllAsTouched();
+      this.isSavingRoom = false;
       return;
     }
 
-    const draft = this.toCreateRoomDraft();
-    const result = await this.dashboardFacade.addRoom(draft);
+    try {
+      const draft = this.toCreateRoomDraft();
+      const result = await this.dashboardFacade.addRoom(draft);
 
-    if (!result.ok) {
-      if (result.reason === 'max-rooms-reached') {
-        this.saveError = 'No fue posible guardar: máximo de 3 habitaciones por dashboard.';
-      } else if (result.reason === 'invalid-actuator-range') {
-        this.saveError = 'No fue posible guardar: cada actuador debe tener entre 1 y 3 unidades.';
-      } else {
-        this.saveError = 'No fue posible guardar: valida los datos de la habitación.';
+      if (!result.ok) {
+        if (result.reason === 'max-rooms-reached') {
+          this.saveError = 'No fue posible guardar: máximo de 3 habitaciones por dashboard.';
+        } else if (result.reason === 'invalid-actuator-range') {
+          this.saveError = 'No fue posible guardar: cada actuador debe tener entre 1 y 3 unidades.';
+        } else {
+          this.saveError = 'No fue posible guardar: valida los datos de la habitación.';
+        }
+
+        this.isSavingRoom = false;
+        return;
       }
 
-      return;
+      void this.router.navigateByUrl('/dashboard');
+    } catch (error) {
+      this.saveError = 'Error inesperado al crear la habitación.';
+      console.error('Error creating room:', error);
+      this.isSavingRoom = false;
     }
-
-    void this.router.navigateByUrl('/dashboard');
   }
 
   actuatorLabel(type: ActuatorType): string {
