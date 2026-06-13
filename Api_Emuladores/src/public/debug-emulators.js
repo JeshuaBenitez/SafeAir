@@ -1,12 +1,12 @@
 /**
  * Debug Dashboard - Emulators Page JavaScript
  *
- * Handles SSE live updates, manual refresh, JWT persistence and control buttons.
+ * Handles SSE live updates, automatic fallback refresh, JWT persistence and control buttons.
  */
 document.addEventListener('DOMContentLoaded', () => {
   const LOG_PREFIX = '[DEBUG-EMULATORS]';
   const JWT_STORAGE_KEY = 'safeair.debug.jwt';
-  let autoInterval = null;
+  let fallbackInterval = null;
   let refreshing = false;
   let sseAbortController = null;
   let reconnectTimer = null;
@@ -16,11 +16,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let refreshSequence = 0;
   const pendingControls = new Set();
   const STALE_AFTER_MS = 30000;
+  const FALLBACK_REFRESH_MS = 5000;
 
   console.log(LOG_PREFIX + ' initializing');
 
-  const refreshBtn = document.getElementById('refreshBtn');
-  const autoCheck = document.getElementById('autoRefresh');
   const jwtInput = document.getElementById('jwtToken');
   const statusEl = document.getElementById('debugStatus');
   const cardsGrid = document.getElementById('emulatorCardsGrid');
@@ -476,6 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!response.ok) {
         throw new Error(await readErrorBody(response));
       }
+      stopFallbackRefresh();
       setStatus('Conexion SSE abierta.', 'info');
       await consumeSse(response, (eventName, data) => {
         if (data) parseEvent({ data });
@@ -490,7 +490,8 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       if (controller.signal.aborted) return;
       console.error(LOG_PREFIX + ' SSE error', error);
-      setStatus('Conexion en tiempo real interrumpida; reintentando...', 'error');
+      setStatus('Conexion en tiempo real interrumpida; usando actualizacion automatica.', 'error');
+      startFallbackRefresh();
       scheduleReconnect();
     }
   }
@@ -510,31 +511,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function stopAutoRefresh() {
-    if (autoInterval) {
-      clearInterval(autoInterval);
-      autoInterval = null;
+  function stopFallbackRefresh() {
+    if (fallbackInterval) {
+      clearInterval(fallbackInterval);
+      fallbackInterval = null;
     }
   }
 
-  function startAutoRefresh() {
-    stopAutoRefresh();
-    if (!autoCheck || !autoCheck.checked) return;
-
-    console.log(LOG_PREFIX + ' auto-refresh enabled');
-    autoInterval = setInterval(() => {
-      refreshView('auto');
-    }, 5000);
-  }
-
-  if (refreshBtn) {
-    refreshBtn.addEventListener('click', () => {
-      refreshView('manual');
-    });
-  }
-
-  if (autoCheck) {
-    autoCheck.addEventListener('change', startAutoRefresh);
+  function startFallbackRefresh() {
+    if (fallbackInterval) return;
+    fallbackInterval = setInterval(() => {
+      refreshView('fallback');
+    }, FALLBACK_REFRESH_MS);
   }
 
   document.addEventListener('visibilitychange', () => {
@@ -547,7 +535,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   window.addEventListener('pagehide', () => {
-    stopAutoRefresh();
+    stopFallbackRefresh();
     stopSse();
   });
 
@@ -609,7 +597,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  startAutoRefresh();
   initializeJwt();
 
   if (cardsGrid) {

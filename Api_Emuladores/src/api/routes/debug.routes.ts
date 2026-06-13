@@ -93,10 +93,6 @@ function deviceDisplay(isOn: boolean | null | undefined, targetTemp: number | nu
 // Get logs as JSON
 debugRouter.get("/logs", (req, res, next) => {
   setNoStoreHeaders(res);
-  if (!getDebugAuth(req)) {
-    res.status(401).json({ message: "JWT válido requerido." });
-    return;
-  }
   debugController.getLogs(req, res).catch(next);
 });
 
@@ -138,7 +134,7 @@ debugRouter.post("/provisioning/replay", async (req, res) => {
 
 function openSseStream(req: Request, res: Response, eventType: "logs" | "emulators"): void {
   setNoStoreHeaders(res);
-  if (!getDebugAuth(req)) {
+  if (eventType === "emulators" && !getDebugAuth(req)) {
     res.status(401).json({ message: "JWT válido requerido." });
     return;
   }
@@ -558,15 +554,10 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 20px; background: #0d1117; color: #c9d1d9; }
     h1 { color: #58a6ff; margin-bottom: 4px; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-    .header-left { flex: 1; }
-    .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .header { margin-bottom: 20px; }
     .nav { margin-bottom: 20px; }
     .nav a { color: #58a6ff; margin-right: 20px; text-decoration: none; font-size: 14px; }
     .nav a:hover { text-decoration: underline; }
-    .refrescar { padding: 8px 16px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
-    .auto-refresh { font-size: 13px; color: #8b949e; }
-    .auto-refresh input { accent-color: #238636; }
     .summary { display: flex; gap: 20px; margin-bottom: 20px; font-size: 13px; color: #8b949e; flex-wrap: wrap; }
     .token-section { margin-bottom: 20px; padding: 12px; background: #161b22; border-radius: 8px; border: 1px solid #30363d; }
     .token-section label { font-size: 13px; color: #8b949e; display: block; margin-bottom: 6px; }
@@ -633,21 +624,13 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     <a href="/debug/status">Estado Sistema</a>
   </div>
   <div class="header">
-    <div class="header-left">
-      <h1>SafeAir Emulators Dashboard</h1>
-      <div class="summary">
-        <span>${options.global ? "Modo admin global" : "Modo operador"}</span>
-        <span>Rooms visibles: ${emulators.filter((emu) => emu.roomId).length}</span>
-        ${options.global ? `<span>Emuladores libres: ${emulators.filter((emu) => emu.assignmentStatus === "free").length}</span>` : ""}
-        <span>Actualizado: <span id="clock">${localNow()}</span></span>
-        <span>Zona: América/México (CDMX)</span>
-      </div>
-    </div>
-    <div class="header-right">
-      <label class="auto-refresh">
-        <input type="checkbox" id="autoRefresh"> Auto-refresh cada 5s
-      </label>
-      <button class="refrescar" id="refreshBtn">Refresh</button>
+    <h1>SafeAir Emulators Dashboard</h1>
+    <div class="summary">
+      <span>${options.global ? "Modo admin global" : "Modo operador"}</span>
+      <span>Rooms visibles: ${emulators.filter((emu) => emu.roomId).length}</span>
+      ${options.global ? `<span>Emuladores libres: ${emulators.filter((emu) => emu.assignmentStatus === "free").length}</span>` : ""}
+      <span>Actualizado: <span id="clock">${localNow()}</span></span>
+      <span>Zona: América/México (CDMX)</span>
     </div>
   </div>
 

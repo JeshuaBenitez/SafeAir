@@ -40,7 +40,13 @@ export function createApp(): Express {
   const app = express();
   app.disable("etag");
 
-  app.use(helmet());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        upgradeInsecureRequests: null
+      }
+    }
+  }));
   app.use(cors({
     origin: env.corsOrigins,
     credentials: true

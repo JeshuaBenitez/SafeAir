@@ -422,25 +422,12 @@ function generateLogsHtml(logs: LogEntry[]): string {
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; margin: 0; padding: 20px; background: #0d1117; color: #c9d1d9; }
     h1 { color: #58a6ff; margin-bottom: 4px; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-    .header-left { flex: 1; }
-    .header-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .header { margin-bottom: 20px; }
     .nav { margin-bottom: 20px; }
     .nav a { color: #58a6ff; margin-right: 20px; text-decoration: none; font-size: 14px; }
     .nav a:hover { text-decoration: underline; }
-    .refrescar { padding: 8px 16px; background: #238636; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
-    .auto-refresh { font-size: 13px; color: #8b949e; }
-    .auto-refresh input { accent-color: #238636; }
     .summary { display: flex; gap: 20px; margin-bottom: 20px; font-size: 13px; color: #8b949e; flex-wrap: wrap; }
     .global-notice { margin: -6px 0 18px; padding: 12px 14px; border: 1px solid #9e6a03; border-radius: 8px; background: rgba(158, 106, 3, 0.16); color: #f0d08a; font-size: 13px; line-height: 1.45; }
-    .token-section { margin-bottom: 16px; padding: 12px; background: #161b22; border-radius: 8px; border: 1px solid #30363d; }
-    .token-section label { display: block; margin-bottom: 6px; color: #8b949e; font-size: 13px; }
-    .token-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .token-row input { flex: 1; min-width: 280px; padding: 8px 10px; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; }
-    .token-row button { padding: 8px 12px; color: white; border: 0; border-radius: 6px; cursor: pointer; }
-    .token-apply { background: #1f6feb; }
-    .token-clear { background: #6e3333; }
-    .token-hint { margin-top: 6px; color: #6e7681; font-size: 11px; }
     .debug-status { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 8px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 13px; }
     .debug-status.error { display: block; border-color: #da3633; background: rgba(218, 54, 51, 0.12); color: #ffb4ad; }
     .debug-status.success { display: block; border-color: #238636; background: rgba(35, 134, 54, 0.12); color: #b4f1b4; }
@@ -470,32 +457,15 @@ function generateLogsHtml(logs: LogEntry[]): string {
     <a href="/debug/status">Estado Sistema</a>
   </div>
   <div class="header">
-    <div class="header-left">
-      <h1>SafeAir Debug Logs Globales</h1>
-      <div class="summary">
-        <span>Total: <span id="logCount">${logs.length}</span> logs</span>
-        <span>Actualizado: <span id="clock">${localNow()}</span></span>
-        <span>Zona: América/México (CDMX)</span>
-      </div>
-    </div>
-    <div class="header-right">
-      <label class="auto-refresh">
-        <input type="checkbox" id="autoRefresh"> Auto-refresh cada 5s
-      </label>
-      <button class="refrescar" id="refreshBtn">Refresh</button>
+    <h1>SafeAir Debug Logs Globales</h1>
+    <div class="summary">
+      <span>Total: <span id="logCount">${logs.length}</span> logs</span>
+      <span>Actualizado: <span id="clock">${localNow()}</span></span>
+      <span>Zona: América/México (CDMX)</span>
     </div>
   </div>
   <div class="global-notice">
     Esta vista muestra logs globales del sistema, incluyendo telemetría de emuladores como EMU-0001 y EMU-0002. No implica que esos eventos pertenezcan al usuario o room autenticado en el frontend.
-  </div>
-  <div class="token-section">
-    <label for="jwtToken">JWT/Bearer token para requests de debug:</label>
-    <div class="token-row">
-      <input type="text" id="jwtToken" autocomplete="off" spellcheck="false" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
-      <button type="button" class="token-apply" id="applyJwtBtn">Aplicar JWT</button>
-      <button type="button" class="token-clear" id="clearJwtBtn">Limpiar</button>
-    </div>
-    <div class="token-hint">Se guarda solo en localStorage de este navegador y se envía como Authorization: Bearer en cada actualización.</div>
   </div>
   <div class="debug-status" id="debugStatus" role="status" aria-live="polite"></div>
   <div class="table-wrap">

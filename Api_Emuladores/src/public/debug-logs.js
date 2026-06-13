@@ -1,14 +1,14 @@
 /**
  * Debug Dashboard - Logs Page JavaScript
  *
- * Handles SSE live updates, manual refresh, auto-refresh fallback and diagnostics.
+ * Handles SSE live updates and an automatic polling fallback.
  */
 document.addEventListener('DOMContentLoaded', () => {
   const LOG_PREFIX = '[DEBUG-LOGS]';
-  const JWT_STORAGE_KEY = 'safeair.debug.jwt';
   const MAX_ROWS = 200;
   const STALE_AFTER_MS = 30000;
-  let autoInterval = null;
+  const FALLBACK_REFRESH_MS = 5000;
+  let fallbackInterval = null;
   let refreshing = false;
   let sseAbortController = null;
   let reconnectTimer = null;
@@ -18,14 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   console.log(LOG_PREFIX + ' initializing');
 
-  const refreshBtn = document.getElementById('refreshBtn');
-  const autoCheck = document.getElementById('autoRefresh');
   const statusEl = document.getElementById('debugStatus');
   const tbody = document.getElementById('logsTableBody');
   const logCount = document.getElementById('logCount');
-  const jwtInput = document.getElementById('jwtToken');
-  const applyJwtBtn = document.getElementById('applyJwtBtn');
-  const clearJwtBtn = document.getElementById('clearJwtBtn');
 
   function setStatus(message, type) {
     if (!statusEl) return;
@@ -41,51 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function safeLocalStorageGet(key) {
-    try {
-      return localStorage.getItem(key) || '';
-    } catch (error) {
-      console.warn(LOG_PREFIX + ' localStorage read error', error);
-      return '';
-    }
-  }
-
-  function getCurrentJwt() {
-    return safeLocalStorageGet(JWT_STORAGE_KEY);
-  }
-
-  function safeLocalStorageSet(key, value) {
-    try {
-      localStorage.setItem(key, value);
-      return true;
-    } catch (error) {
-      console.warn(LOG_PREFIX + ' localStorage write error', error);
-      return false;
-    }
-  }
-
-  function safeLocalStorageRemove(key) {
-    try {
-      localStorage.removeItem(key);
-    } catch (error) {
-      console.warn(LOG_PREFIX + ' localStorage remove error', error);
-    }
-  }
-
-  function applyJwt() {
-    const jwt = jwtInput ? jwtInput.value.trim() : '';
-    if (!jwt) {
-      safeLocalStorageRemove(JWT_STORAGE_KEY);
-      setStatus('JWT vacío. Las actualizaciones continuarán sin Authorization.', 'info');
-      refreshView('jwt-cleared');
-      return;
-    }
-
-    safeLocalStorageSet(JWT_STORAGE_KEY, jwt);
-    setStatus('JWT guardado para las actualizaciones de debug.', 'success');
-    refreshView('jwt-applied');
-  }
-
   async function readErrorBody(response) {
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
@@ -96,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return response.text().catch(() => '');
   }
 
-  async function validateLogsEndpoint(jwt) {
+  async function validateLogsEndpoint() {
     const url = new URL('/debug/logs', window.location.origin);
     url.searchParams.set('limit', String(MAX_ROWS));
     url.searchParams.set('t', Date.now().toString());
@@ -106,10 +56,6 @@ document.addEventListener('DOMContentLoaded', () => {
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       'Pragma': 'no-cache'
     };
-    if (jwt) {
-      headers.Authorization = 'Bearer ' + jwt;
-    }
-
     const response = await fetch(url.toString(), {
       cache: 'no-store',
       credentials: 'same-origin',
@@ -217,12 +163,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (refreshing) return;
     refreshing = true;
 
-    const jwt = getCurrentJwt();
-    console.log(LOG_PREFIX + ' refresh start', { reason: reason || 'manual', hasToken: Boolean(jwt) });
+    console.log(LOG_PREFIX + ' refresh start', { reason: reason || 'automatic' });
     setStatus('Actualizando logs...', 'info');
 
     try {
-      const data = await validateLogsEndpoint(jwt);
+      const data = await validateLogsEndpoint();
       console.log(LOG_PREFIX + ' refresh success', { count: data.count });
       replaceLogs(data);
       setStatus('Logs actualizados. Tiempo real activo.', 'success');
@@ -288,12 +233,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   async function startSse() {
-    const jwt = getCurrentJwt();
-    if (!jwt) {
-      setStatus('Sin JWT: tiempo real detenido. Pega un token y presiona Aplicar JWT.', 'info');
-      return;
-    }
-
     stopSse();
     const controller = new AbortController();
     sseAbortController = controller;
@@ -302,8 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const response = await fetch('/debug/events/logs', {
         headers: {
-          Accept: 'text/event-stream',
-          Authorization: 'Bearer ' + jwt
+          Accept: 'text/event-stream'
         },
         cache: 'no-store',
         signal: controller.signal
@@ -311,6 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!response.ok) {
         throw new Error(await readErrorBody(response));
       }
+      stopFallbackRefresh();
       setStatus('Conexion SSE abierta.', 'info');
       await consumeSse(response, (eventName, data) => {
         const payload = parseEventData(data);
@@ -331,7 +270,8 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       if (controller.signal.aborted) return;
       console.error(LOG_PREFIX + ' SSE error', error);
-      setStatus('Conexion en tiempo real interrumpida; reintentando...', 'error');
+      setStatus('Conexion en tiempo real interrumpida; usando actualizacion automatica.', 'error');
+      startFallbackRefresh();
       scheduleReconnect();
     }
   }
@@ -347,54 +287,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function stopAutoRefresh() {
-    if (autoInterval) {
-      clearInterval(autoInterval);
-      autoInterval = null;
+  function stopFallbackRefresh() {
+    if (fallbackInterval) {
+      clearInterval(fallbackInterval);
+      fallbackInterval = null;
     }
   }
 
-  function startAutoRefresh() {
-    stopAutoRefresh();
-    if (!autoCheck || !autoCheck.checked) return;
-
-    console.log(LOG_PREFIX + ' auto-refresh enabled');
-    autoInterval = setInterval(() => {
-      refreshView('auto');
-    }, 5000);
-  }
-
-  if (refreshBtn) {
-    refreshBtn.addEventListener('click', () => {
-      refreshView('manual');
-    });
-  }
-
-  if (autoCheck) {
-    autoCheck.addEventListener('change', startAutoRefresh);
-  }
-
-  if (applyJwtBtn) {
-    applyJwtBtn.addEventListener('click', applyJwt);
-  }
-
-  if (clearJwtBtn) {
-    clearJwtBtn.addEventListener('click', () => {
-      safeLocalStorageRemove(JWT_STORAGE_KEY);
-      if (jwtInput) jwtInput.value = '';
-      setStatus('JWT eliminado de este navegador.', 'info');
-      refreshView('jwt-cleared');
-    });
-  }
-
-  if (jwtInput) {
-    jwtInput.value = getCurrentJwt();
-    jwtInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        applyJwt();
-      }
-    });
+  function startFallbackRefresh() {
+    if (fallbackInterval) return;
+    fallbackInterval = setInterval(() => {
+      refreshView('fallback');
+    }, FALLBACK_REFRESH_MS);
   }
 
   document.addEventListener('visibilitychange', () => {
@@ -407,11 +311,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   window.addEventListener('pagehide', () => {
-    stopAutoRefresh();
+    stopFallbackRefresh();
     stopSse();
   });
 
-  startAutoRefresh();
   startSse();
   refreshView('initial');
 
@@ -421,7 +324,4 @@ document.addEventListener('DOMContentLoaded', () => {
       el.textContent = new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' });
     }
   }, 1000);
-
-  const jwt = getCurrentJwt();
-  console.log(LOG_PREFIX + ' token loaded', { hasToken: Boolean(jwt), source: jwt ? 'localStorage' : 'none' });
 });
