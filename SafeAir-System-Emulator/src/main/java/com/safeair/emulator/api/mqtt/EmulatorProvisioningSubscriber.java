@@ -49,7 +49,10 @@ public class EmulatorProvisioningSubscriber {
 
         connector.registerHandler(this::onMessage);
         connector.subscribe(MqttTopics.EMULATOR_PROVISION_TOPIC, MqttTopics.COMMAND_QOS);
-        LOGGER.info("Subscribed to emulator provisioning commands: {}", MqttTopics.EMULATOR_PROVISION_TOPIC);
+        connector.subscribe(MqttTopics.EMULATOR_PROVISION_WILDCARD, MqttTopics.COMMAND_QOS);
+        LOGGER.info("Subscribed to emulator provisioning commands: {}, {}",
+                MqttTopics.EMULATOR_PROVISION_TOPIC,
+                MqttTopics.EMULATOR_PROVISION_WILDCARD);
     }
 
     public void stop() {
@@ -64,7 +67,14 @@ public class EmulatorProvisioningSubscriber {
         String raw = new String(payload, StandardCharsets.UTF_8);
         try {
             ProvisionCommand command = parse(raw);
-            provision(command);
+            if (!matchesTopicTarget(topic, command.emulatorExternalId())) {
+                throw new IllegalArgumentException("Provision topic target does not match emulatorExternalId");
+            }
+            if ("DEPROVISION_EMULATOR".equals(command.type())) {
+                deprovision(command);
+            } else {
+                provision(command);
+            }
         } catch (RuntimeException | IOException ex) {
             LOGGER.warn("emulator.provision.failed topic={} cause={}", topic, ex.getMessage());
             LOGGER.debug("emulator.provision.failed payload={}", raw, ex);
@@ -78,9 +88,10 @@ public class EmulatorProvisioningSubscriber {
 
         Emulator existing = emulatorManager.getEmulator(command.emulatorExternalId());
         if (existing != null) {
+            existing.applySetup(command.setup());
             logStore.onEvent(command.emulatorExternalId(), "emulator.provision.already-exists",
-                    "Provision command ignored because emulator already exists");
-            LOGGER.info("emulator.provision.already-exists emulatorExternalId={} roomId={}",
+                    "Provision command reapplied to existing emulator");
+            LOGGER.info("emulator.provision.reapplied emulatorExternalId={} roomId={}",
                     command.emulatorExternalId(),
                     command.roomId());
             existing.emitTelemetryNow();
@@ -100,10 +111,19 @@ public class EmulatorProvisioningSubscriber {
                 command.roomId());
     }
 
+    private void deprovision(ProvisionCommand command) {
+        emulatorManager.removeEmulator(command.emulatorExternalId());
+        logStore.onEvent(command.emulatorExternalId(), "emulator.deprovision.completed",
+                "Deprovisioned emulator for room " + command.roomId());
+        LOGGER.info("emulator.deprovision.completed emulatorExternalId={} roomId={}",
+                command.emulatorExternalId(),
+                command.roomId());
+    }
+
     private ProvisionCommand parse(String raw) throws IOException {
         JsonNode root = JSON.readTree(raw);
         String type = text(root, "type");
-        if (!"PROVISION_EMULATOR".equals(type)) {
+        if (!"PROVISION_EMULATOR".equals(type) && !"DEPROVISION_EMULATOR".equals(type)) {
             throw new IllegalArgumentException("Unsupported provision command type: " + type);
         }
 
@@ -113,6 +133,10 @@ public class EmulatorProvisioningSubscriber {
         }
 
         String roomId = text(root, "roomId");
+        if ("DEPROVISION_EMULATOR".equals(type)) {
+            return new ProvisionCommand(type, emulatorExternalId, roomId, null);
+        }
+
         JsonNode config = root.path("config");
         DtoSetup setup = new DtoSetup(
                 emulatorExternalId,
@@ -122,12 +146,20 @@ public class EmulatorProvisioningSubscriber {
                 intArray(config, "sensorTypes", DEFAULT_SENSOR_TYPES),
                 intArray(config, "deviceTypes", DEFAULT_DEVICE_TYPES));
 
-        return new ProvisionCommand(emulatorExternalId, roomId, setup);
+        return new ProvisionCommand(type, emulatorExternalId, roomId, setup);
     }
 
     private String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
         return value == null || value.isNull() ? null : value.asText();
+    }
+
+    private boolean matchesTopicTarget(String topic, String emulatorExternalId) {
+        if (MqttTopics.EMULATOR_PROVISION_TOPIC.equals(topic)) {
+            return true;
+        }
+        String[] parts = topic.split("/");
+        return parts.length == 3 && emulatorExternalId.equals(parts[1]);
     }
 
     private int intValue(JsonNode node, String field, int fallback) {
@@ -158,5 +190,5 @@ public class EmulatorProvisioningSubscriber {
         return result;
     }
 
-    private record ProvisionCommand(String emulatorExternalId, String roomId, DtoSetup setup) {}
+    private record ProvisionCommand(String type, String emulatorExternalId, String roomId, DtoSetup setup) {}
 }

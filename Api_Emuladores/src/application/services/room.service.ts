@@ -180,6 +180,26 @@ export class RoomService {
     });
 
     try {
+      const emulator = await this.emulatorRepository.findByRoomId(roomId);
+      if (emulator && userId) {
+        const deviceTypes = [
+          ...Array.from({ length: setup.minisplitCount }, () => 1),
+          ...Array.from({ length: setup.purifierCount }, () => 2),
+          ...Array.from({ length: setup.extractorCount }, () => 3)
+        ];
+        await this.emulatorProvisioningService.requestProvision({
+          emulatorExternalId: emulator.emulatorExternalId,
+          roomId,
+          userId,
+          config: {
+            roomSquareMeters: Math.round(derived.roomArea),
+            windowCount: setup.windowCount,
+            sensorTypes: [1, 2, 3, 4],
+            deviceTypes,
+            updateIntervalSec: 5
+          }
+        });
+      }
       await this.configurationService.publishRoomConfig(roomId);
     } catch (error) {
       if (error instanceof AppError && error.code === "NO_EMULATOR_AVAILABLE") {
@@ -234,6 +254,13 @@ export class RoomService {
       throw new AppError("Room not found", 404, "ROOM_NOT_FOUND");
     }
 
+    const emulator = await this.emulatorRepository.findByRoomId(roomId);
+    if (emulator) {
+      await this.emulatorProvisioningService.requestDeprovision({
+        emulatorExternalId: emulator.emulatorExternalId,
+        roomId
+      });
+    }
     await this.roomRepository.delete(roomId);
   }
 

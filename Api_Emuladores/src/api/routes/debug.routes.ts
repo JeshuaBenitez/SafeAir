@@ -55,33 +55,10 @@ function escapeHtml(value: string | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
-function readCookie(req: Request, name: string): string | null {
-  const cookies = req.headers.cookie;
-  if (!cookies) {
-    return null;
-  }
-
-  const match = cookies
-    .split(";")
-    .map(cookie => cookie.trim())
-    .find(cookie => cookie.startsWith(`${name}=`));
-
-  if (!match) {
-    return null;
-  }
-
-  return decodeURIComponent(match.slice(name.length + 1));
-}
-
 function extractDebugToken(req: Request): string | null {
   const header = req.header("Authorization");
   if (header?.startsWith("Bearer ")) {
     return header.replace("Bearer ", "").trim();
-  }
-
-  const cookieToken = readCookie(req, "safeair_debug_jwt");
-  if (cookieToken) {
-    return cookieToken;
   }
 
   return null;
@@ -116,6 +93,10 @@ function deviceDisplay(isOn: boolean | null | undefined, targetTemp: number | nu
 // Get logs as JSON
 debugRouter.get("/logs", (req, res, next) => {
   setNoStoreHeaders(res);
+  if (!getDebugAuth(req)) {
+    res.status(401).json({ message: "JWT válido requerido." });
+    return;
+  }
   debugController.getLogs(req, res).catch(next);
 });
 
@@ -139,8 +120,28 @@ debugRouter.get("/events/emulators", (req, res) => {
   openSseStream(req, res, "emulators");
 });
 
+debugRouter.post("/provisioning/replay", async (req, res) => {
+  setNoStoreHeaders(res);
+  const auth = getDebugAuth(req);
+  if (!auth) {
+    res.status(401).json({ message: "JWT válido requerido." });
+    return;
+  }
+  if (auth.role !== "admin") {
+    res.status(403).json({ message: "Solo un administrador puede republicar provisionamiento." });
+    return;
+  }
+
+  const summary = await container.emulatorProvisioningService.replayRegistered();
+  res.status(summary.failed > 0 ? 207 : 200).json(summary);
+});
+
 function openSseStream(req: Request, res: Response, eventType: "logs" | "emulators"): void {
   setNoStoreHeaders(res);
+  if (!getDebugAuth(req)) {
+    res.status(401).json({ message: "JWT válido requerido." });
+    return;
+  }
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
@@ -569,7 +570,11 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
     .summary { display: flex; gap: 20px; margin-bottom: 20px; font-size: 13px; color: #8b949e; flex-wrap: wrap; }
     .token-section { margin-bottom: 20px; padding: 12px; background: #161b22; border-radius: 8px; border: 1px solid #30363d; }
     .token-section label { font-size: 13px; color: #8b949e; display: block; margin-bottom: 6px; }
-    .token-section input { width: 100%; padding: 6px 10px; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; font-size: 13px; max-width: 600px; }
+    .token-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .token-section input { flex: 1; min-width: 280px; padding: 8px 10px; background: #0d1117; color: #c9d1d9; border: 1px solid #30363d; border-radius: 6px; font-size: 13px; }
+    .token-section button { padding: 8px 12px; color: white; border: 0; border-radius: 6px; cursor: pointer; }
+    .token-apply { background: #1f6feb; }
+    .token-clear { background: #6e3333; }
     .token-hint { font-size: 11px; color: #6e7681; margin-top: 4px; }
     .debug-status { display: none; margin-bottom: 16px; padding: 10px 12px; border-radius: 8px; border: 1px solid #30363d; background: #161b22; color: #c9d1d9; font-size: 13px; }
     .debug-status.error { display: block; border-color: #da3633; background: rgba(218, 54, 51, 0.12); color: #ffb4ad; }
@@ -648,8 +653,12 @@ function generateEmulatorsHtml(emulators: any[], options: { authRequired: boolea
 
   <div class="token-section">
     <label for="jwtToken">JWT Token (pegar desde Configuración del frontend local para filtrar y habilitar control):</label>
-    <input type="text" id="jwtToken" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
-    <div class="token-hint">El token se guarda en localStorage y en una cookie local de debug para que esta página renderice solo tus rooms. Al pegar uno nuevo, la página se recarga.</div>
+    <div class="token-row">
+      <input type="text" id="jwtToken" autocomplete="off" spellcheck="false" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." />
+      <button type="button" class="token-apply" id="applyJwtBtn">Aplicar JWT</button>
+      <button type="button" class="token-clear" id="clearJwtBtn">Limpiar</button>
+    </div>
+    <div class="token-hint">El token se guarda en localStorage y se envía como Authorization: Bearer en cada request. No depende de cookies.</div>
   </div>
 
   <div class="debug-status" id="debugStatus" role="status" aria-live="polite"></div>

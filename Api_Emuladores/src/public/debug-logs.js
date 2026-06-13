@@ -6,12 +6,11 @@
 document.addEventListener('DOMContentLoaded', () => {
   const LOG_PREFIX = '[DEBUG-LOGS]';
   const JWT_STORAGE_KEY = 'safeair.debug.jwt';
-  const JWT_COOKIE_NAME = 'safeair_debug_jwt';
   const MAX_ROWS = 200;
   const STALE_AFTER_MS = 30000;
   let autoInterval = null;
   let refreshing = false;
-  let eventSource = null;
+  let sseAbortController = null;
   let reconnectTimer = null;
   let lastEventAt = 0;
   let logs = [];
@@ -24,6 +23,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusEl = document.getElementById('debugStatus');
   const tbody = document.getElementById('logsTableBody');
   const logCount = document.getElementById('logCount');
+  const jwtInput = document.getElementById('jwtToken');
+  const applyJwtBtn = document.getElementById('applyJwtBtn');
+  const clearJwtBtn = document.getElementById('clearJwtBtn');
 
   function setStatus(message, type) {
     if (!statusEl) return;
@@ -39,16 +41,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function readCookie(name) {
-    const prefix = name + '=';
-    const match = document.cookie
-      .split(';')
-      .map(cookie => cookie.trim())
-      .find(cookie => cookie.startsWith(prefix));
-
-    return match ? decodeURIComponent(match.slice(prefix.length)) : '';
-  }
-
   function safeLocalStorageGet(key) {
     try {
       return localStorage.getItem(key) || '';
@@ -59,7 +51,39 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function getCurrentJwt() {
-    return safeLocalStorageGet(JWT_STORAGE_KEY) || readCookie(JWT_COOKIE_NAME);
+    return safeLocalStorageGet(JWT_STORAGE_KEY);
+  }
+
+  function safeLocalStorageSet(key, value) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (error) {
+      console.warn(LOG_PREFIX + ' localStorage write error', error);
+      return false;
+    }
+  }
+
+  function safeLocalStorageRemove(key) {
+    try {
+      localStorage.removeItem(key);
+    } catch (error) {
+      console.warn(LOG_PREFIX + ' localStorage remove error', error);
+    }
+  }
+
+  function applyJwt() {
+    const jwt = jwtInput ? jwtInput.value.trim() : '';
+    if (!jwt) {
+      safeLocalStorageRemove(JWT_STORAGE_KEY);
+      setStatus('JWT vacío. Las actualizaciones continuarán sin Authorization.', 'info');
+      refreshView('jwt-cleared');
+      return;
+    }
+
+    safeLocalStorageSet(JWT_STORAGE_KEY, jwt);
+    setStatus('JWT guardado para las actualizaciones de debug.', 'success');
+    refreshView('jwt-applied');
   }
 
   async function readErrorBody(response) {
@@ -210,9 +234,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function parseEvent(event) {
+  function parseEventData(data) {
     try {
-      return event && event.data ? JSON.parse(event.data) : null;
+      return data ? JSON.parse(data) : null;
     } catch (error) {
       console.warn(LOG_PREFIX + ' invalid SSE payload', error);
       return null;
@@ -232,78 +256,84 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2500);
   }
 
-  function startSse() {
-    if (!window.EventSource) {
-      setStatus('SSE no disponible en este navegador. Usa Refresh o Auto-refresh.', 'error');
+  async function consumeSse(response, onEvent) {
+    if (!response.body) {
+      throw new Error('El navegador no expuso el stream SSE.');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      buffer += decoder.decode(result.value, { stream: true }).replace(/\r\n/g, '\n');
+
+      let separatorIndex;
+      while ((separatorIndex = buffer.indexOf('\n\n')) >= 0) {
+        const block = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        let eventName = 'message';
+        const dataLines = [];
+
+        block.split('\n').forEach((line) => {
+          if (line.startsWith('event:')) eventName = line.slice(6).trim();
+          if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+        });
+
+        onEvent(eventName, dataLines.join('\n'));
+      }
+    }
+  }
+
+  async function startSse() {
+    const jwt = getCurrentJwt();
+    if (!jwt) {
+      setStatus('Sin JWT: tiempo real detenido. Pega un token y presiona Aplicar JWT.', 'info');
       return;
     }
 
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
+    stopSse();
+    const controller = new AbortController();
+    sseAbortController = controller;
 
     setStatus('Conectando a tiempo real...', 'info');
-    eventSource = new EventSource('/debug/events/logs');
-
-    eventSource.addEventListener('open', () => {
+    try {
+      const response = await fetch('/debug/events/logs', {
+        headers: {
+          Accept: 'text/event-stream',
+          Authorization: 'Bearer ' + jwt
+        },
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        throw new Error(await readErrorBody(response));
+      }
       setStatus('Conexion SSE abierta.', 'info');
-    });
-
-    eventSource.addEventListener('connected', () => {
-      markEvent('Conectado a tiempo real.');
-    });
-
-    eventSource.addEventListener('snapshot', (event) => {
-      const payload = parseEvent(event);
-      if (Array.isArray(payload)) {
-        replaceLogs(payload);
-      }
-      markEvent('Snapshot de logs recibido.');
-    });
-
-    eventSource.addEventListener('log', (event) => {
-      const payload = parseEvent(event);
-      appendLog(payload && payload.payload ? payload.payload : payload);
-      markEvent('Log recibido por SSE.');
-    });
-
-    eventSource.addEventListener('message', (event) => {
-      const payload = parseEvent(event);
-      if (payload && payload.payload) {
-        appendLog(payload.payload);
-      }
-      markEvent('Mensaje SSE recibido.');
-    });
-
-    eventSource.addEventListener('telemetry', (event) => {
-      const payload = parseEvent(event);
-      if (payload && payload.payload) {
-        appendLog(payload.payload);
-      }
-      markEvent('Telemetria recibida por SSE.');
-    });
-
-    eventSource.addEventListener('actuator', (event) => {
-      const payload = parseEvent(event);
-      if (payload && payload.payload) {
-        appendLog(payload.payload);
-      }
-      markEvent('Actuador recibido por SSE.');
-    });
-
-    eventSource.addEventListener('update', () => {
-      refreshView('sse-update');
-    });
-
-    eventSource.addEventListener('heartbeat', () => {
-      markEvent('Tiempo real activo.');
-    });
-
-    eventSource.onerror = () => {
+      await consumeSse(response, (eventName, data) => {
+        const payload = parseEventData(data);
+        if (eventName === 'connected' || eventName === 'heartbeat') {
+          markEvent('Tiempo real activo.');
+        } else if (eventName === 'snapshot') {
+          const snapshotLogs = Array.isArray(payload) ? payload : payload && payload.logs;
+          if (Array.isArray(snapshotLogs)) replaceLogs(snapshotLogs);
+          markEvent('Snapshot de logs recibido.');
+        } else if (eventName === 'update') {
+          refreshView('sse-update');
+        } else if (eventName === 'log' || eventName === 'message' || eventName === 'telemetry' || eventName === 'actuator') {
+          appendLog(payload && payload.payload ? payload.payload : payload);
+          markEvent('Evento recibido por SSE.');
+        }
+      });
+      if (!controller.signal.aborted) scheduleReconnect();
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error(LOG_PREFIX + ' SSE error', error);
       setStatus('Conexion en tiempo real interrumpida; reintentando...', 'error');
       scheduleReconnect();
-    };
+    }
   }
 
   function stopSse() {
@@ -311,9 +341,9 @@ document.addEventListener('DOMContentLoaded', () => {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
     }
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
+    if (sseAbortController) {
+      sseAbortController.abort();
+      sseAbortController = null;
     }
   }
 
@@ -344,6 +374,29 @@ document.addEventListener('DOMContentLoaded', () => {
     autoCheck.addEventListener('change', startAutoRefresh);
   }
 
+  if (applyJwtBtn) {
+    applyJwtBtn.addEventListener('click', applyJwt);
+  }
+
+  if (clearJwtBtn) {
+    clearJwtBtn.addEventListener('click', () => {
+      safeLocalStorageRemove(JWT_STORAGE_KEY);
+      if (jwtInput) jwtInput.value = '';
+      setStatus('JWT eliminado de este navegador.', 'info');
+      refreshView('jwt-cleared');
+    });
+  }
+
+  if (jwtInput) {
+    jwtInput.value = getCurrentJwt();
+    jwtInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        applyJwt();
+      }
+    });
+  }
+
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     const stale = !lastEventAt || Date.now() - lastEventAt > STALE_AFTER_MS;
@@ -370,5 +423,5 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 1000);
 
   const jwt = getCurrentJwt();
-  console.log(LOG_PREFIX + ' token loaded', { hasToken: Boolean(jwt), source: jwt ? 'localStorage-or-cookie' : 'none' });
+  console.log(LOG_PREFIX + ' token loaded', { hasToken: Boolean(jwt), source: jwt ? 'localStorage' : 'none' });
 });

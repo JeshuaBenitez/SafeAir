@@ -155,7 +155,7 @@
           </button>
         </div>
 
-        <textarea readonly [value]="devJwtToken" aria-label="JWT actual"></textarea>
+        <textarea #jwtTextarea readonly [value]="devJwtToken" aria-label="JWT actual"></textarea>
 
         <p class="settings-dev-token__message" *ngIf="devJwtCopyMessage">
           {{ devJwtCopyMessage }}

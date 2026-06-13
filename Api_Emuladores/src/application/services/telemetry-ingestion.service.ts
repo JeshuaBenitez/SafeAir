@@ -51,13 +51,14 @@ export class TelemetryIngestionService {
     try {
       emulator = await this.emulatorResolutionService.resolveOrProvision(telemetry.emulatorId);
     } catch (error: unknown) {
-      if (source === "mqtt") {
-        const appError = error instanceof AppError ? error : null;
+      const appError = error instanceof AppError ? error : null;
+      const centrallyRateLimited = appError?.code === "EMULATOR_NOT_FOUND" || appError?.code === "EMULATOR_UNASSIGNED";
+      if (source === "mqtt" && !centrallyRateLimited) {
         addLog({
           timestamp: new Date().toISOString(),
           level: "error",
           source: "mqtt",
-          event: appError?.code === "EMULATOR_NOT_FOUND" ? "mqtt-telemetry-emulator-not-found" : "mqtt-telemetry-room-not-found",
+          event: "mqtt-telemetry-room-not-found",
           message: appError?.message ?? (error instanceof Error ? error.message : String(error)),
           details: { emulatorId: telemetry.emulatorId, code: appError?.code ?? "UNKNOWN_ERROR" },
           emulatorId: telemetry.emulatorId

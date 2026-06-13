@@ -7,6 +7,8 @@ public final class MqttTopics {
     public static final String EMULATOR_COMMANDS_TEMPLATE = "safeair/%s/commands";
     public static final String EMULATOR_SCENARIO_TEMPLATE = "safeair/%s/scenario";
     public static final String EMULATOR_PROVISION_TOPIC = "safeair/emulator-control/provision";
+    public static final String EMULATOR_PROVISION_TEMPLATE = "safeair/%s/provision";
+    public static final String EMULATOR_PROVISION_WILDCARD = "safeair/+/provision";
     public static final String GLOBAL_CONFIG_TOPIC = "safeair/config";
     public static final String EMULATOR_CONFIG_WILDCARD = "safeair/+/config";
     public static final String ACTUATOR_STATE_WILDCARD = "safeair/+/actuator-state";
@@ -45,6 +47,10 @@ public final class MqttTopics {
     }
 
     public static boolean isEmulatorProvisionTopic(String topic) {
-        return EMULATOR_PROVISION_TOPIC.equals(topic);
+        if (EMULATOR_PROVISION_TOPIC.equals(topic)) {
+            return true;
+        }
+        String[] parts = topic.split("/");
+        return parts.length == 3 && "safeair".equals(parts[0]) && "provision".equals(parts[2]);
     }
 }

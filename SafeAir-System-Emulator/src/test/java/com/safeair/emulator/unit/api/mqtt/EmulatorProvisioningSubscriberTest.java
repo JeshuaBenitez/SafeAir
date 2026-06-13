@@ -31,7 +31,9 @@ class EmulatorProvisioningSubscriberTest {
 
         subscriber.start();
 
-        assertEquals(List.of(MqttTopics.EMULATOR_PROVISION_TOPIC), connector.subscriptions());
+        assertEquals(
+                List.of(MqttTopics.EMULATOR_PROVISION_TOPIC, MqttTopics.EMULATOR_PROVISION_WILDCARD),
+                connector.subscriptions());
     }
 
     @Test
@@ -68,6 +70,36 @@ class EmulatorProvisioningSubscriberTest {
         assertEquals(1, manager.getEmulatorCount());
     }
 
+    @Test
+    void onMessage_retainedPerEmulatorProvision_createsEmulator() {
+        EmulatorManager manager = new EmulatorManager(new StaticRequest());
+        EmulatorProvisioningSubscriber subscriber = new EmulatorProvisioningSubscriber(
+                new RecordingConnector(),
+                manager,
+                new TelemetryQueue(16),
+                new EmulatorLogStore());
+
+        subscriber.onMessage("safeair/EMU-U004-R003/provision", provisionPayload("EMU-U004-R003"));
+
+        assertEquals(1, manager.getEmulatorCount());
+    }
+
+    @Test
+    void onMessage_deprovision_removesRunningEmulatorIdempotently() {
+        EmulatorManager manager = new EmulatorManager(new StaticRequest());
+        EmulatorProvisioningSubscriber subscriber = new EmulatorProvisioningSubscriber(
+                new RecordingConnector(),
+                manager,
+                new TelemetryQueue(16),
+                new EmulatorLogStore());
+
+        subscriber.onMessage("safeair/EMU-U004-R004/provision", provisionPayload("EMU-U004-R004"));
+        subscriber.onMessage("safeair/EMU-U004-R004/provision", deprovisionPayload("EMU-U004-R004"));
+        subscriber.onMessage("safeair/EMU-U004-R004/provision", deprovisionPayload("EMU-U004-R004"));
+
+        assertEquals(0, manager.getEmulatorCount());
+    }
+
     private byte[] provisionPayload(String emulatorExternalId) {
         return ("""
                 {
@@ -81,6 +113,16 @@ class EmulatorProvisioningSubscriberTest {
                     "deviceTypes": [1, 2, 3],
                     "updateIntervalSec": 1
                   }
+                }
+                """.formatted(emulatorExternalId)).getBytes(StandardCharsets.UTF_8);
+    }
+
+    private byte[] deprovisionPayload(String emulatorExternalId) {
+        return ("""
+                {
+                  "type": "DEPROVISION_EMULATOR",
+                  "emulatorExternalId": "%s",
+                  "roomId": "room-1"
                 }
                 """.formatted(emulatorExternalId)).getBytes(StandardCharsets.UTF_8);
     }

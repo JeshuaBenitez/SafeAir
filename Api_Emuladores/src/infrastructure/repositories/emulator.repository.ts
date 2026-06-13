@@ -219,13 +219,19 @@ export class EmulatorRepository {
         {
           model: RoomModel,
           as: "room",
-          required: false,
+          required: true,
           include: [
             {
               model: InstanceModel,
               as: "instance",
-              required: false,
+              where: { userId: { [Op.ne]: null } },
+              required: true,
               attributes: ["id", "userId", "name"]
+            },
+            {
+              model: RoomSetupModel,
+              as: "setup",
+              required: false
             }
           ]
         }

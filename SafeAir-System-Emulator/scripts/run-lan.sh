@@ -16,7 +16,7 @@ require_java_21() {
 require_java_21
 
 load_env_file() {
-  local env_file=".env.local"
+  local env_file=".env.lan"
   local line key value
 
   [ -f "${env_file}" ] || return 0
@@ -38,21 +38,16 @@ load_env_file() {
 load_env_file
 
 export SPRING_PROFILES_ACTIVE="${SPRING_PROFILES_ACTIVE:-production,profile1}"
-export MQTT_HOST="${MQTT_HOST:-IP_PC_DB_MQTT}"
+export MQTT_HOST="${MQTT_HOST:-100.79.106.54}"
 export MQTT_PORT="${MQTT_PORT:-1883}"
 export MQTT_TLS_ENABLED="${MQTT_TLS_ENABLED:-false}"
 export MQTT_CONSOLE_LOG_ENABLED="${MQTT_CONSOLE_LOG_ENABLED:-false}"
 export SAFEAIR_CLI_SUPPRESS_TELEMETRY_OUTPUT="${SAFEAIR_CLI_SUPPRESS_TELEMETRY_OUTPUT:-true}"
 export SAFEAIR_MQTT_LOG_LEVEL="${SAFEAIR_MQTT_LOG_LEVEL:-WARN}"
 export SPRING_DEBUG="${SPRING_DEBUG:-false}"
-export SAFEAIR_EMULATOR_IDS="${SAFEAIR_EMULATOR_IDS:-EMU-U001-R001,EMU-U001-R002,EMU-U001-R003}"
+export SAFEAIR_EMULATOR_IDS="${SAFEAIR_EMULATOR_IDS:-}"
+export SAFEAIR_DYNAMIC_PROVISIONING_ONLY="${SAFEAIR_DYNAMIC_PROVISIONING_ONLY:-true}"
 export SERVER_PORT="${SERVER_PORT:-8081}"
-
-if [ "${MQTT_HOST}" = "IP_PC_DB_MQTT" ]; then
-  echo "[SafeAir Emulator] MQTT_HOST still uses placeholder IP_PC_DB_MQTT." >&2
-  echo "Set it first, for example: MQTT_HOST=192.0.2.10 ./scripts/run-lan.sh" >&2
-  exit 1
-fi
 
 echo "[SafeAir Emulator] LAN"
 echo "  SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE}"
@@ -64,7 +59,14 @@ echo "  SAFEAIR_CLI_SUPPRESS_TELEMETRY_OUTPUT=${SAFEAIR_CLI_SUPPRESS_TELEMETRY_O
 echo "  SAFEAIR_MQTT_LOG_LEVEL=${SAFEAIR_MQTT_LOG_LEVEL}"
 echo "  SPRING_DEBUG=${SPRING_DEBUG}"
 echo "  SAFEAIR_EMULATOR_IDS=${SAFEAIR_EMULATOR_IDS}"
+echo "  SAFEAIR_DYNAMIC_PROVISIONING_ONLY=${SAFEAIR_DYNAMIC_PROVISIONING_ONLY}"
 echo "  SERVER_PORT=${SERVER_PORT}"
+if [ -z "${SAFEAIR_EMULATOR_IDS}" ]; then
+  echo "  Modo: provisionamiento dinamico"
+  echo "  Esperando configuracion desde API..."
+else
+  echo "  Modo: IDs manuales desde SAFEAIR_EMULATOR_IDS"
+fi
 
 mvn spring-boot:run \
   -Dspring-boot.run.arguments="--server.port=${SERVER_PORT} --debug=${SPRING_DEBUG}"

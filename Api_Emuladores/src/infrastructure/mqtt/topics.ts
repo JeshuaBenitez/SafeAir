@@ -29,3 +29,7 @@ export function emulatorCommandTopic(emulatorId: string): string {
 export function emulatorProvisionTopic(): string {
   return "safeair/emulator-control/provision";
 }
+
+export function emulatorProvisionStateTopic(emulatorId: string): string {
+  return `safeair/${emulatorId}/provision`;
+}

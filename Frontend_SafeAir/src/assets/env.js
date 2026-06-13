@@ -1,4 +1,3 @@
 window.__env = {
-  API_BASE_URL: "http://localhost:3000",
-  MQTT_BROKER_URL: "ws://localhost:8084/mqtt"
+  API_BASE_URL: "http://100.66.40.85:3000"
 };

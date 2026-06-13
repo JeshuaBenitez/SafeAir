@@ -20,6 +20,11 @@ type ActuatorStateMessage = {
 type TelemetryHandler = (message: TelemetryMessage) => Promise<void>;
 type ActuatorStateHandler = (message: ActuatorStateMessage) => Promise<void>;
 
+type MqttPublishOptions = {
+  qos?: 0 | 1 | 2;
+  retain?: boolean;
+};
+
 class MqttGateway {
   private client: MqttClient | null = null;
   private connectPromise: Promise<void> | null = null;
@@ -109,13 +114,16 @@ class MqttGateway {
     this.actuatorStateHandler = handler;
   }
 
-  publish(topic: string, payload: unknown): Promise<void> {
+  publish(topic: string, payload: unknown, options: MqttPublishOptions = {}): Promise<void> {
     if (!this.client) {
       return Promise.reject(new Error("MQTT is not connected"));
     }
 
     return new Promise((resolve, reject) => {
-      this.client?.publish(topic, JSON.stringify(payload), { qos: env.mqttQos as 0 | 1 | 2 }, (error) => {
+      this.client?.publish(topic, JSON.stringify(payload), {
+        qos: options.qos ?? env.mqttQos as 0 | 1 | 2,
+        retain: options.retain ?? false
+      }, (error) => {
         if (error) {
           reject(error);
           return;

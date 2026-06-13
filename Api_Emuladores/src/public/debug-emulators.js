@@ -6,10 +6,9 @@
 document.addEventListener('DOMContentLoaded', () => {
   const LOG_PREFIX = '[DEBUG-EMULATORS]';
   const JWT_STORAGE_KEY = 'safeair.debug.jwt';
-  const JWT_COOKIE_NAME = 'safeair_debug_jwt';
   let autoInterval = null;
   let refreshing = false;
-  let eventSource = null;
+  let sseAbortController = null;
   let reconnectTimer = null;
   let refreshTimer = null;
   let lastEventAt = 0;
@@ -25,6 +24,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const jwtInput = document.getElementById('jwtToken');
   const statusEl = document.getElementById('debugStatus');
   const cardsGrid = document.getElementById('emulatorCardsGrid');
+  const applyJwtBtn = document.getElementById('applyJwtBtn');
+  const clearJwtBtn = document.getElementById('clearJwtBtn');
 
   function setStatus(message, type) {
     if (!statusEl) return;
@@ -38,24 +39,6 @@ document.addEventListener('DOMContentLoaded', () => {
       timeZone: 'America/Mexico_City',
       hour12: false
     });
-  }
-
-  function readCookie(name) {
-    const prefix = name + '=';
-    const match = document.cookie
-      .split(';')
-      .map(cookie => cookie.trim())
-      .find(cookie => cookie.startsWith(prefix));
-
-    return match ? decodeURIComponent(match.slice(prefix.length)) : '';
-  }
-
-  function writeJwtCookie(jwt) {
-    document.cookie = JWT_COOKIE_NAME + '=' + encodeURIComponent(jwt) + '; path=/debug; SameSite=Lax';
-  }
-
-  function clearJwtCookie() {
-    document.cookie = JWT_COOKIE_NAME + '=; path=/debug; Max-Age=0; SameSite=Lax';
   }
 
   function safeLocalStorageGet(key) {
@@ -91,14 +74,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const jwt = jwtInput ? jwtInput.value.trim() : '';
     if (!jwt) {
       safeLocalStorageRemove(JWT_STORAGE_KEY);
-      clearJwtCookie();
       activeJwt = '';
       return '';
     }
 
     activeJwt = jwt;
     safeLocalStorageSet(JWT_STORAGE_KEY, jwt);
-    writeJwtCookie(jwt);
     return jwt;
   }
 
@@ -336,7 +317,6 @@ document.addEventListener('DOMContentLoaded', () => {
   function clearStoredJwt() {
     activeJwt = '';
     safeLocalStorageRemove(JWT_STORAGE_KEY);
-    clearJwtCookie();
     if (jwtInput) {
       jwtInput.value = '';
     }
@@ -366,7 +346,6 @@ document.addEventListener('DOMContentLoaded', () => {
       jwtInput.value = nextJwt;
     }
     safeLocalStorageSet(JWT_STORAGE_KEY, nextJwt);
-    writeJwtCookie(nextJwt);
     renderEmptyState('Cargando rooms autorizadas...');
     setStatus('Cargando snapshot fresco...', 'info');
     startSse();
@@ -401,7 +380,9 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (error) {
       console.error(LOG_PREFIX + ' refresh error', error);
       if (error && (error.status === 401 || error.status === 403)) {
-        clearAuthState('JWT inválido o expirado: pega un token válido para cargar rooms autorizadas.', 'error');
+        stopSse();
+        renderEmptyState('JWT inválido o expirado. El token se conserva para que puedas corregirlo.');
+        setStatus('JWT inválido o expirado: corrige el token y presiona Aplicar JWT.', 'error');
         return;
       }
       renderEmptyState('No se pudo cargar el snapshot de emuladores.');
@@ -441,77 +422,77 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2500);
   }
 
-  function startSse() {
+  async function consumeSse(response, onEvent) {
+    if (!response.body) {
+      throw new Error('El navegador no expuso el stream SSE.');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const result = await reader.read();
+      if (result.done) break;
+      buffer += decoder.decode(result.value, { stream: true }).replace(/\r\n/g, '\n');
+
+      let separatorIndex;
+      while ((separatorIndex = buffer.indexOf('\n\n')) >= 0) {
+        const block = buffer.slice(0, separatorIndex);
+        buffer = buffer.slice(separatorIndex + 2);
+        let eventName = 'message';
+        const dataLines = [];
+
+        block.split('\n').forEach((line) => {
+          if (line.startsWith('event:')) eventName = line.slice(6).trim();
+          if (line.startsWith('data:')) dataLines.push(line.slice(5).trimStart());
+        });
+
+        onEvent(eventName, dataLines.join('\n'));
+      }
+    }
+  }
+
+  async function startSse() {
     if (!activeJwt) {
       setStatus('Sin JWT: tiempo real detenido.', 'info');
       return;
     }
 
-    if (!window.EventSource) {
-      setStatus('SSE no disponible en este navegador. Usa Refresh o Auto-refresh.', 'error');
-      return;
-    }
-
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
+    stopSse();
+    const controller = new AbortController();
+    sseAbortController = controller;
 
     setStatus('Conectando a tiempo real...', 'info');
-    eventSource = new EventSource('/debug/events/emulators');
-
-    eventSource.addEventListener('open', () => {
+    try {
+      const response = await fetch('/debug/events/emulators', {
+        headers: {
+          Accept: 'text/event-stream',
+          Authorization: 'Bearer ' + activeJwt
+        },
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      if (!response.ok) {
+        throw new Error(await readErrorBody(response));
+      }
       setStatus('Conexion SSE abierta.', 'info');
-    });
-
-    eventSource.addEventListener('connected', () => {
-      markEvent('Conectado a tiempo real.');
-    });
-
-    eventSource.addEventListener('snapshot', (event) => {
-      parseEvent(event);
-      markEvent('Snapshot de emuladores recibido.');
-      scheduleRefresh('sse-snapshot');
-    });
-
-    eventSource.addEventListener('emulator', (event) => {
-      parseEvent(event);
-      markEvent('Actualizacion de emulador recibida.');
-      scheduleRefresh('sse-emulator');
-    });
-
-    eventSource.addEventListener('log', () => {
-      markEvent('Evento relacionado recibido.');
-      scheduleRefresh('sse-log');
-    });
-
-    eventSource.addEventListener('message', () => {
-      markEvent('Mensaje SSE recibido.');
-      scheduleRefresh('sse-message');
-    });
-
-    eventSource.addEventListener('telemetry', () => {
-      markEvent('Telemetria recibida.');
-      scheduleRefresh('sse-telemetry');
-    });
-
-    eventSource.addEventListener('actuator', () => {
-      markEvent('Actuador actualizado.');
-      scheduleRefresh('sse-actuator');
-    });
-
-    eventSource.addEventListener('update', () => {
-      scheduleRefresh('sse-update');
-    });
-
-    eventSource.addEventListener('heartbeat', () => {
-      markEvent('Tiempo real activo.');
-    });
-
-    eventSource.onerror = () => {
+      await consumeSse(response, (eventName, data) => {
+        if (data) parseEvent({ data });
+        if (eventName === 'connected' || eventName === 'heartbeat') {
+          markEvent('Tiempo real activo.');
+          return;
+        }
+        markEvent('Actualizacion recibida por SSE.');
+        scheduleRefresh('sse-' + eventName);
+      });
+      if (!controller.signal.aborted) scheduleReconnect();
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      console.error(LOG_PREFIX + ' SSE error', error);
       setStatus('Conexion en tiempo real interrumpida; reintentando...', 'error');
       scheduleReconnect();
-    };
+    }
   }
 
   function stopSse() {
@@ -523,9 +504,9 @@ document.addEventListener('DOMContentLoaded', () => {
       clearTimeout(refreshTimer);
       refreshTimer = null;
     }
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
+    if (sseAbortController) {
+      sseAbortController.abort();
+      sseAbortController = null;
     }
   }
 
@@ -579,21 +560,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function initializeJwt() {
     const saved = safeLocalStorageGet(JWT_STORAGE_KEY);
-    const cookieJwt = readCookie(JWT_COOKIE_NAME);
-    const loadedJwt = saved || cookieJwt;
+    const loadedJwt = saved;
 
     if (jwtInput && loadedJwt) {
       jwtInput.value = loadedJwt;
     }
 
-    console.log(LOG_PREFIX + ' token loaded', { hasToken: Boolean(loadedJwt), source: saved ? 'localStorage' : (cookieJwt ? 'cookie' : 'none') });
+    console.log(LOG_PREFIX + ' token loaded', { hasToken: Boolean(loadedJwt), source: saved ? 'localStorage' : 'none' });
 
     if (!loadedJwt) {
       clearAuthState('Sin JWT: pega un token válido para cargar rooms autorizadas.', 'info');
       return;
     }
 
-    applyJwt(loadedJwt, saved && cookieJwt !== loadedJwt ? 'token-cookie-sync' : 'initial');
+    applyJwt(loadedJwt, 'initial');
   }
 
   if (jwtInput) {
@@ -609,22 +589,24 @@ document.addEventListener('DOMContentLoaded', () => {
         clearVisibleState('JWT cambiado: presiona Enter o sal del campo para cargar snapshot fresco.', 'info');
       }
     });
-    jwtInput.addEventListener('paste', () => {
-      setTimeout(() => {
-        applyJwt(jwtInput.value, 'token-paste');
-      }, 0);
-    });
     jwtInput.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') {
         event.preventDefault();
         applyJwt(jwtInput.value, 'token-enter');
       }
     });
-    jwtInput.addEventListener('change', () => {
-      applyJwt(jwtInput.value, 'token-change');
-    });
   } else {
     console.log(LOG_PREFIX + ' token input missing');
+  }
+
+  if (applyJwtBtn) {
+    applyJwtBtn.addEventListener('click', () => applyJwt(jwtInput ? jwtInput.value : '', 'token-button'));
+  }
+
+  if (clearJwtBtn) {
+    clearJwtBtn.addEventListener('click', () => {
+      clearAuthState('JWT eliminado de este navegador.', 'info');
+    });
   }
 
   startAutoRefresh();

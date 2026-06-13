@@ -86,6 +86,11 @@ public class Profile1YamlDemoConfig {
         public void start() {
             List<Profile1EmulatorProperties.EmulatorDefinition> emulators = resolveEmulatorDefinitions();
             if (emulators == null || emulators.isEmpty()) {
+                if (runtimeProperties.isDynamicProvisioningOnly()) {
+                    LOGGER.info("Dynamic provisioning mode active; starting with 0 emulators and waiting for MQTT provisioning");
+                    logStartupSummary(List.of());
+                    return;
+                }
                 throw new IllegalStateException("profile1 requires at least one emulator in safeair.profile1.emulators");
             }
 
@@ -138,6 +143,10 @@ public class Profile1YamlDemoConfig {
             if (!explicitIds.isEmpty()) {
                 LOGGER.info("Using SAFEAIR_EMULATOR_IDS with {} configured emulator(s)", explicitIds.size());
                 return definitionsForIds(explicitIds);
+            }
+
+            if (runtimeProperties.isDynamicProvisioningOnly()) {
+                return List.of();
             }
 
             if (hasLegacyEmulatorIdEnv()) {

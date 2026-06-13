@@ -1,5 +1,5 @@
 import { AsyncPipe, NgIf } from '@angular/common';
-import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnDestroy, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
@@ -25,6 +25,7 @@ import { environment } from '../../../../../environments/environment';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SettingsPageComponent implements OnInit, OnDestroy {
+  @ViewChild('jwtTextarea') private jwtTextarea?: ElementRef<HTMLTextAreaElement>;
   readonly defaultProfileImage = 'assets/images/userprofile.png';
   readonly viewModel$ = this.dashboardFacade.viewModel$;
 
@@ -201,13 +202,33 @@ export class SettingsPageComponent implements OnInit, OnDestroy {
       return;
     }
 
-    try {
-      await navigator.clipboard.writeText(this.devJwtToken);
-      this.devJwtCopyMessage = 'JWT copiado al portapapeles.';
-    } catch {
-      this.devJwtCopyMessage = 'No se pudo copiar automáticamente. Selecciona el token y cópialo manualmente.';
+    let copied = false;
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(this.devJwtToken);
+        copied = true;
+      } catch {
+        copied = false;
+      }
     }
 
+    if (!copied) {
+      const textarea = this.jwtTextarea?.nativeElement;
+      if (textarea) {
+        textarea.focus();
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        try {
+          copied = document.execCommand('copy');
+        } catch {
+          copied = false;
+        }
+      }
+    }
+
+    this.devJwtCopyMessage = copied
+      ? 'JWT copiado al portapapeles.'
+      : 'No se pudo copiar automáticamente. El token quedó seleccionado; cópialo manualmente.';
     this.changeDetectorRef.markForCheck();
 
     window.setTimeout(() => {

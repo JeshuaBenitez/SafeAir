@@ -15,6 +15,7 @@ import { eventBus, EVENTS } from "./application/events/event-bus";
 
 const UNASSIGNED_EMULATOR_LOG_INTERVAL_MS = 30_000;
 const unassignedEmulatorWarnings = new Map<string, { lastLoggedAt: number; suppressed: number }>();
+const unknownEmulatorWarnings = new Map<string, { lastLoggedAt: number; suppressed: number }>();
 
 function logUnassignedEmulatorTelemetry(emulatorId: string): void {
   const now = Date.now();
@@ -35,6 +36,37 @@ function logUnassignedEmulatorTelemetry(emulatorId: string): void {
   });
 
   unassignedEmulatorWarnings.set(emulatorId, { lastLoggedAt: now, suppressed: 0 });
+}
+
+function logUnknownEmulatorTelemetry(emulatorId: string): void {
+  const now = Date.now();
+  const current = unknownEmulatorWarnings.get(emulatorId) ?? { lastLoggedAt: 0, suppressed: 0 };
+
+  if (now - current.lastLoggedAt < UNASSIGNED_EMULATOR_LOG_INTERVAL_MS) {
+    unknownEmulatorWarnings.set(emulatorId, {
+      lastLoggedAt: current.lastLoggedAt,
+      suppressed: current.suppressed + 1
+    });
+    return;
+  }
+
+  const details = {
+    emulatorExternalId: emulatorId,
+    suppressedSinceLastLog: current.suppressed,
+    reason: "EMULATOR_NOT_FOUND",
+    hint: "Remove static LAN IDs or replay provisioning for registered rooms."
+  };
+  logger.warn(`Unknown emulator telemetry skipped emulatorExternalId=${emulatorId}`, details);
+  addLog({
+    timestamp: new Date().toISOString(),
+    level: "warn",
+    source: "mqtt",
+    event: "mqtt.telemetry.unknown-emulator-skipped",
+    message: `Unknown emulator telemetry skipped emulatorExternalId=${emulatorId}`,
+    details,
+    emulatorId
+  });
+  unknownEmulatorWarnings.set(emulatorId, { lastLoggedAt: now, suppressed: 0 });
 }
 
 export async function startServer(): Promise<void> {
@@ -239,6 +271,11 @@ export async function startServer(): Promise<void> {
           });
         }
       } catch (error: unknown) {
+        if (error instanceof AppError && error.code === "EMULATOR_NOT_FOUND") {
+          logUnknownEmulatorTelemetry(message.emulatorId);
+          return;
+        }
+
         if (error instanceof AppError && error.code === "EMULATOR_UNASSIGNED") {
           logUnassignedEmulatorTelemetry(message.emulatorId);
           return;
@@ -323,6 +360,8 @@ export async function startServer(): Promise<void> {
     });
 
     await mqttGateway.connect();
+    const provisioningReplay = await container.emulatorProvisioningService.replayRegistered();
+    logger.info("Startup provisioning replay finished", provisioningReplay);
 
     const app = createApp();
 
