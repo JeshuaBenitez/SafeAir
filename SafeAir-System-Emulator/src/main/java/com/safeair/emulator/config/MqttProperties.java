@@ -16,6 +16,8 @@ public class MqttProperties {
     private int connectionTimeoutSeconds = 10;
     private int maxInflight = 100;
     private int publishWarningIntervalSeconds = 30;
+    private int telemetryPendingCapacity = 100;
+    private int telemetryRetryDelayMillis = 1_000;
     private boolean logStacktrace = false;
 
     public boolean isEnabled() {
@@ -108,6 +110,22 @@ public class MqttProperties {
 
     public void setPublishWarningIntervalSeconds(int publishWarningIntervalSeconds) {
         this.publishWarningIntervalSeconds = publishWarningIntervalSeconds;
+    }
+
+    public int getTelemetryPendingCapacity() {
+        return telemetryPendingCapacity;
+    }
+
+    public void setTelemetryPendingCapacity(int telemetryPendingCapacity) {
+        this.telemetryPendingCapacity = telemetryPendingCapacity;
+    }
+
+    public int getTelemetryRetryDelayMillis() {
+        return telemetryRetryDelayMillis;
+    }
+
+    public void setTelemetryRetryDelayMillis(int telemetryRetryDelayMillis) {
+        this.telemetryRetryDelayMillis = telemetryRetryDelayMillis;
     }
 
     public boolean isLogStacktrace() {

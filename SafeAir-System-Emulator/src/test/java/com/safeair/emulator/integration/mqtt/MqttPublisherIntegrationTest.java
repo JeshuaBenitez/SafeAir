@@ -3,7 +3,9 @@ package com.safeair.emulator.integration.mqtt;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
@@ -18,6 +20,7 @@ import com.safeair.emulator.api.mqtt.MqttTopics;
 import com.safeair.emulator.config.MqttProperties;
 import com.safeair.emulator.emulation.core.RoomStateSnapshot;
 import com.safeair.emulator.emulation.core.TelemetryPayload;
+import com.safeair.emulator.manager.EmulatorLogStore;
 
 /**
  * Integration tests for MQTT publisher adapter with mocked broker.
@@ -148,9 +151,76 @@ class MqttPublisherIntegrationTest {
 
         publisher.send(payload);
 
+        assertThat(connector.awaitPublish()).isTrue();
         assertThat(connector.lastTopic()).isEqualTo(MqttTopics.telemetryTopic("EMU-U001-R001"));
         assertThat(connector.lastQos()).isEqualTo(MqttTopics.TELEMETRY_QOS);
         assertThat(connector.lastPayload()).isNotEmpty();
+        publisher.stop();
+    }
+
+    @Test
+    void publish_actuatorStateKeepsReliableQos() {
+        RecordingConnector connector = new RecordingConnector();
+        MqttPublisher publisher = new MqttPublisher(connector, new TelemetryAdapter());
+
+        publisher.publish(MqttTopics.actuatorStateTopic("EMU-U001-R001"), "state");
+
+        assertThat(connector.lastTopic())
+                .isEqualTo(MqttTopics.actuatorStateTopic("EMU-U001-R001"));
+        assertThat(connector.lastQos()).isEqualTo(MqttTopics.CONFIG_QOS);
+        publisher.stop();
+    }
+
+    @Test
+    void send_whenBrokerPublishBlocks_keepsProducerNonBlockingAndCoalescesLatest() throws Exception {
+        BlockingConnector connector = new BlockingConnector();
+        MqttProperties properties = enabledProps();
+        properties.setTelemetryPendingCapacity(2);
+        MqttPublisher publisher = new MqttPublisher(
+                connector,
+                new TelemetryAdapter(),
+                properties,
+                new EmulatorLogStore());
+
+        publisher.send(telemetry("EMU-U001-R009", 1));
+        assertThat(connector.awaitFirstPublish()).isTrue();
+
+        long startedAt = System.nanoTime();
+        for (int index = 2; index <= 101; index++) {
+            publisher.send(telemetry("EMU-U001-R009", index));
+        }
+        long elapsedMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+
+        assertThat(elapsedMillis).isLessThan(500);
+        assertThat(publisher.telemetryMetrics().pending()).isEqualTo(1);
+        assertThat(publisher.telemetryMetrics().mqttQueueDropped()).isGreaterThanOrEqualTo(99);
+
+        connector.releasePublish();
+        assertThat(connector.awaitPublishCount(2)).isTrue();
+        publisher.stop();
+    }
+
+    @Test
+    void send_whenBrokerKeepsFailing_rateLimitsTelemetrySummaries() {
+        FailingConnector connector = new FailingConnector();
+        MqttProperties properties = enabledProps();
+        properties.setPublishWarningIntervalSeconds(60);
+        EmulatorLogStore logStore = new EmulatorLogStore();
+        MqttPublisher publisher = new MqttPublisher(
+                connector,
+                new TelemetryAdapter(),
+                properties,
+                logStore);
+
+        publisher.send(telemetry("EMU-U001-R010", 1));
+
+        assertThat(connector.awaitPublishCount(3)).isTrue();
+        long summaries = logStore.findAllOrdered(100).stream()
+                .filter(entry -> entry.category().equals("mqtt.telemetry.publish.summary"))
+                .count();
+        assertThat(summaries).isEqualTo(1);
+        assertThat(publisher.telemetryMetrics().mqttPublishFailed()).isGreaterThanOrEqualTo(3);
+        publisher.stop();
     }
     
     /**
@@ -181,13 +251,43 @@ class MqttPublisherIntegrationTest {
         }
     }
 
+    private TelemetryPayload telemetry(String emulatorId, long sequence) {
+        return new TelemetryPayload(
+                Instant.now(),
+                emulatorId,
+                sequence,
+                0,
+                3,
+                0,
+                new RoomStateSnapshot(24.5, 45.0, 510.0, 12.0, 0.2, 35, 1),
+                Map.of("TemperatureSensor", 24.5),
+                Map.of());
+    }
+
+    private static MqttProperties enabledProps() {
+        MqttProperties props = new MqttProperties();
+        props.setEnabled(true);
+        props.setTelemetryRetryDelayMillis(100);
+        return props;
+    }
+
     private static final class RecordingConnector extends MQTTConnector {
         private String lastTopic;
         private byte[] lastPayload;
         private int lastQos;
+        private final CountDownLatch published = new CountDownLatch(1);
 
         RecordingConnector() {
             super(enabledProps());
+        }
+
+        @Override
+        public PublishResult publishTelemetry(String topic, byte[] payload) {
+            lastTopic = topic;
+            lastPayload = payload;
+            lastQos = MqttTopics.TELEMETRY_QOS;
+            published.countDown();
+            return PublishResult.SUCCESS;
         }
 
         @Override
@@ -195,7 +295,17 @@ class MqttPublisherIntegrationTest {
             lastTopic = topic;
             lastPayload = payload;
             lastQos = qos;
+            published.countDown();
             return true;
+        }
+
+        boolean awaitPublish() {
+            try {
+                return published.await(2, TimeUnit.SECONDS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
         }
 
         String lastTopic() {
@@ -210,10 +320,73 @@ class MqttPublisherIntegrationTest {
             return lastQos;
         }
 
-        private static MqttProperties enabledProps() {
-            MqttProperties props = new MqttProperties();
-            props.setEnabled(true);
-            return props;
+    }
+
+    private static final class BlockingConnector extends MQTTConnector {
+        private final CountDownLatch firstPublish = new CountDownLatch(1);
+        private final CountDownLatch releasePublish = new CountDownLatch(1);
+        private final AtomicInteger publishCount = new AtomicInteger();
+
+        BlockingConnector() {
+            super(enabledProps());
+        }
+
+        @Override
+        public PublishResult publishTelemetry(String topic, byte[] payload) {
+            int current = publishCount.incrementAndGet();
+            if (current == 1) {
+                firstPublish.countDown();
+                try {
+                    releasePublish.await(2, TimeUnit.SECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return PublishResult.FAILED;
+                }
+            }
+            return PublishResult.SUCCESS;
+        }
+
+        boolean awaitFirstPublish() throws InterruptedException {
+            return firstPublish.await(2, TimeUnit.SECONDS);
+        }
+
+        void releasePublish() {
+            releasePublish.countDown();
+        }
+
+        boolean awaitPublishCount(int expected) throws InterruptedException {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (publishCount.get() < expected && System.nanoTime() < deadline) {
+                Thread.sleep(10);
+            }
+            return publishCount.get() >= expected;
+        }
+    }
+
+    private static final class FailingConnector extends MQTTConnector {
+        private final AtomicInteger publishCount = new AtomicInteger();
+
+        FailingConnector() {
+            super(enabledProps());
+        }
+
+        @Override
+        public PublishResult publishTelemetry(String topic, byte[] payload) {
+            publishCount.incrementAndGet();
+            return PublishResult.FAILED;
+        }
+
+        boolean awaitPublishCount(int expected) {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2);
+            while (publishCount.get() < expected && System.nanoTime() < deadline) {
+                try {
+                    Thread.sleep(10);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+            }
+            return publishCount.get() >= expected;
         }
     }
 }

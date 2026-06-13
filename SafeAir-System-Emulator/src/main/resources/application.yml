@@ -21,6 +21,8 @@ mqtt:
   connection-timeout-seconds: ${MQTT_CONNECTION_TIMEOUT_SECONDS:10}
   max-inflight: ${MQTT_MAX_INFLIGHT:100}
   publish-warning-interval-seconds: ${MQTT_PUBLISH_WARNING_INTERVAL_SECONDS:30}
+  telemetry-pending-capacity: ${MQTT_TELEMETRY_PENDING_CAPACITY:100}
+  telemetry-retry-delay-millis: ${MQTT_TELEMETRY_RETRY_DELAY_MILLIS:1000}
   log-stacktrace: ${SAFEAIR_MQTT_LOG_STACKTRACE:false}
   validation:
     availability-target: ${MQTT_VALIDATION_AVAILABILITY:0.995}

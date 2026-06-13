@@ -62,9 +62,13 @@ public class LocalModeConfig {
         return new MQTTConnector(properties, logStore);
     }
 
-    @Bean
-    public MqttPublisher mqttPublisher(MQTTConnector connector, TelemetryAdapter telemetryAdapter) {
-        return new MqttPublisher(connector, telemetryAdapter);
+    @Bean(initMethod = "start", destroyMethod = "stop")
+    public MqttPublisher mqttPublisher(
+            MQTTConnector connector,
+            TelemetryAdapter telemetryAdapter,
+            MqttProperties properties,
+            EmulatorLogStore logStore) {
+        return new MqttPublisher(connector, telemetryAdapter, properties, logStore);
     }
 
     @Bean

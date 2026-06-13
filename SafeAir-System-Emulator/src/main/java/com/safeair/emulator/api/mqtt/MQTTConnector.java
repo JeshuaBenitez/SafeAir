@@ -95,33 +95,51 @@ public class MQTTConnector {
     }
 
     public boolean publish(String topic, byte[] payload, int qos) {
+        return publishInternal(topic, payload, qos, true) == PublishResult.SUCCESS;
+    }
+
+    public PublishResult publishTelemetry(String topic, byte[] payload) {
+        return publishInternal(topic, payload, MqttTopics.TELEMETRY_QOS, false);
+    }
+
+    private PublishResult publishInternal(String topic, byte[] payload, int qos, boolean reportFailure) {
         if (!properties.isEnabled()) {
-            warnPublishSkipped("MQTT publish skipped because MQTT is disabled topic=" + topic);
-            return false;
+            if (reportFailure) {
+                warnPublishSkipped("MQTT publish skipped because MQTT is disabled topic=" + topic);
+            }
+            return PublishResult.DISCONNECTED;
         }
+
+        MqttClient activeClient;
         synchronized (lock) {
             if (client == null) {
                 connectIfNeeded();
             }
             if (client == null || !client.isConnected()) {
-                warnPublishSkipped("MQTT publish skipped because client is not connected topic="
-                        + topic + " broker=" + brokerUrl());
-                return false;
+                if (reportFailure) {
+                    warnPublishSkipped("MQTT publish skipped because client is not connected topic="
+                            + topic + " broker=" + brokerUrl());
+                }
+                return PublishResult.DISCONNECTED;
             }
-            try {
-                MqttMessage message = new MqttMessage(payload);
-                message.setQos(qos);
-                client.publish(topic, message);
-                return true;
-            } catch (MqttException e) {
+            activeClient = client;
+        }
+
+        try {
+            MqttMessage message = new MqttMessage(payload);
+            message.setQos(qos);
+            activeClient.publish(topic, message);
+            return PublishResult.SUCCESS;
+        } catch (MqttException e) {
+            if (reportFailure) {
                 warnWithOptionalStacktrace(
                         "Failed to publish MQTT message topic=" + topic
                                 + " broker=" + brokerUrl()
                                 + " cause=" + e.getMessage(),
                         e);
                 recordEvent("mqtt.publish.failed", topic + " cause=" + e.getMessage());
-                return false;
             }
+            return PublishResult.FAILED;
         }
     }
 
@@ -317,4 +335,10 @@ public class MQTTConnector {
     }
 
     private record Subscription(String topic, int qos) {}
+
+    public enum PublishResult {
+        SUCCESS,
+        DISCONNECTED,
+        FAILED
+    }
 }
