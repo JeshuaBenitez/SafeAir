@@ -19,6 +19,7 @@ import { ActuatorStateIngestionService } from "./services/actuator-state-ingesti
 import { EmulatorResolutionService } from "./services/emulator-resolution.service";
 import { EmulatorProvisioningService } from "./services/emulator-provisioning.service";
 import { InstanceService } from "./services/instance.service";
+import { ManualOverridePolicy } from "./services/manual-override.policy";
 import { MetricsQueryService } from "./services/metrics-query.service";
 import { RoomService } from "./services/room.service";
 import { RuleEvaluationService } from "./services/rule-evaluation.service";
@@ -56,6 +57,7 @@ const cycleService = new CycleService(cycleRepository);
 const metricsQueryService = new MetricsQueryService(cycleRepository, deviceActionRepository, deviceStateRepository, roomRepository);
 const ruleEvaluationService = new RuleEvaluationService();
 const deviceActionService = new DeviceActionService(deviceActionRepository);
+const manualOverridePolicy = new ManualOverridePolicy(deviceActionRepository);
 const actuatorCommandService = new ActuatorCommandService(roomRepository, emulatorRepository, deviceActionRepository, cycleRepository);
 const actuatorStateIngestionService = new ActuatorStateIngestionService(emulatorResolutionService, deviceStateRepository);
 const alarmService = new AlarmService(alarmRepository);
@@ -64,7 +66,8 @@ const telemetryIngestionService = new TelemetryIngestionService(
   cycleRepository,
   ruleEvaluationService,
   deviceActionService,
-  alarmService
+  alarmService,
+  manualOverridePolicy
 );
 
 export const container = {

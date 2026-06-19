@@ -4,6 +4,7 @@ import { logger } from "../../shared/config/logger";
 import { decodeMqttPayload } from "./payload-codec";
 import { addLog } from "../../application/services/debug-logs.service";
 import { eventBus, EVENTS } from "../../application/events/event-bus";
+import { MQTT_RECONNECT_PERIOD_MS } from "./config";
 
 type TelemetryMessage = {
   topic: string;
@@ -45,7 +46,7 @@ class MqttGateway {
       logger.info("Creating MQTT client", {
         clientId: env.mqttClientId,
         url: env.mqttUrl,
-        reconnectPeriodMs: 3000,
+        reconnectPeriodMs: MQTT_RECONNECT_PERIOD_MS,
         telemetryTopic: env.mqttTelemetryTopic,
         actuatorStateTopic: env.mqttActuatorStateTopic
       });
@@ -54,7 +55,7 @@ class MqttGateway {
         username: env.mqttUsername,
         password: env.mqttPassword,
         clientId: env.mqttClientId,
-        reconnectPeriod: 3000
+        reconnectPeriod: MQTT_RECONNECT_PERIOD_MS
       });
 
       this.registerClientListeners(this.client);

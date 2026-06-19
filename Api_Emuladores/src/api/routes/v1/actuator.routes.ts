@@ -7,9 +7,9 @@ export const actuatorRouter = Router();
 /**
  * Send command to actuator device
  * Flow: Frontend -> API -> EMQX -> Emulator
- * 
+ *
  * POST /api/v1/rooms/:roomId/actuators/:deviceType/command
- * 
+ *
  * Body:
  * {
  *   "action": "turn_on" | "turn_off" | "set_temperature",
@@ -17,12 +17,14 @@ export const actuatorRouter = Router();
  *   "deviceIndex": 1,
  *   "source": "frontend" (optional)
  * }
- * 
+ *
  * Example:
- * curl -X POST http://localhost:3000/api/v1/rooms/{roomId}/actuators/minisplit/command \
+ * curl -X POST ${API_BASE_URL}/api/v1/rooms/{roomId}/actuators/minisplit/command \
  *   -H "Content-Type: application/json" \
  *   -H "Authorization: Bearer <TOKEN>" \
  *   -d '{"action":"turn_on","value":true,"source":"frontend"}'
+ *
+ * Note: Replace ${API_BASE_URL} with your API base URL (e.g., http://localhost:3000 or from environment)
  */
 actuatorRouter.post(
   "/rooms/:roomId/actuators/:deviceType/command",

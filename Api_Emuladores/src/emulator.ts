@@ -2,19 +2,51 @@ import mqtt from "mqtt";
 import dotenv from "dotenv";
 import path from "path";
 import http from "http";
+import {
+  getMqttUrl,
+  getApiUrl,
+  getDummyPort,
+  getEmulatorId,
+  MQTT_RECONNECT_PERIOD_MS,
+  DEVICE_TYPES,
+  DEFAULT_DEVICE_STATE,
+  INITIAL_STATE,
+  getDefaultCredentials,
+  DEFAULT_DEVICE_INDEX,
+  MAX_DEVICE_INDEX,
+  TEMPERATURE_BOUNDS,
+  HUMIDITY_BOUNDS,
+  CO2_BOUNDS,
+  PM25_BOUNDS,
+  TEMPERATURE_COOLING_RATE,
+  TEMPERATURE_DRIFT_RATE,
+  TEMPERATURE_NOISE_AMPLITUDE,
+  HUMIDITY_EXTRACTOR_RATE,
+  HUMIDITY_NATURAL_RATE,
+  HUMIDITY_NOISE_AMPLITUDE,
+  CO2_EXTRACTOR_RATE,
+  CO2_NATURAL_RATE,
+  PM25_PURIFIER_RATE,
+  PM25_NATURAL_RATE,
+  SIMULATION_INTERVAL_MS,
+  MQTT_QOS,
+  getMqttClientId,
+  TOPIC_ACTIONS,
+  TOPIC_ACTUATOR_STATE,
+  TOPIC_TELEMETRY,
+  API_LOGIN_ENDPOINT,
+  API_INSTANCES_ENDPOINT,
+  API_INSTANCE_DETAILS_ENDPOINT
+} from "./emulator/config";
 
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
-const MQTT_URL = process.env.MQTT_URL || "mqtt://localhost:1883";
-const API_URL = process.env.BACKEND_API_URL || "http://localhost:3000";
-const EMULATOR_ID = "emu-room-a";
-
 // Servidor HTTP mínimo para el Health Check de Render (Web Service gratuito)
-const DUMMY_PORT = process.env.PORT || 10000;
+const DUMMY_PORT = getDummyPort();
 http.createServer((_req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("SafeAir Emulator Alive\n");
-}).listen(Number(DUMMY_PORT), "0.0.0.0", () => {
+}).listen(DUMMY_PORT, "0.0.0.0", () => {
   console.log(`[Emulator] Servidor de diagnóstico en puerto ${DUMMY_PORT}`);
 });
 
@@ -37,16 +69,19 @@ interface EmulatorState {
   };
 }
 
+const EMULATOR_ID = getEmulatorId();
+const API_URL = getApiUrl();
+
 const state: EmulatorState = {
-  temperature: 24.2,
-  humidity: 50.0,
-  co2: 650.0,
-  pm25: 18.0,
+  temperature: INITIAL_STATE.temperature,
+  humidity: INITIAL_STATE.humidity,
+  co2: INITIAL_STATE.co2,
+  pm25: INITIAL_STATE.pm25,
   roomId: null,
   devices: {
-    minisplit: { isOn: false, mode: "cooling", targetTemperature: 22.0 },
-    purifier: { isOn: false, mode: "auto", targetTemperature: 0 },
-    extractor: { isOn: false, mode: "exhaust", targetTemperature: 0 }
+    minisplit: { ...DEFAULT_DEVICE_STATE.minisplit },
+    purifier: { ...DEFAULT_DEVICE_STATE.purifier },
+    extractor: { ...DEFAULT_DEVICE_STATE.extractor }
   }
 };
 
@@ -66,12 +101,13 @@ function logHeader(msg: string): void {
 // Intenta obtener el roomId via API. No bloquea si falla o si hay 2FA activo.
 // Con EMULATOR_MISSING_STRATEGY=auto-provision la API asigna sala por emulatorId.
 async function loginAndGetRoomId(): Promise<string | null> {
+  const credentials = getDefaultCredentials();
   try {
     console.log(`${yellow}[API] Conectando a la API en ${API_URL}...${reset}`);
-    const loginRes = await fetch(`${API_URL}/api/v1/auth/login`, {
+    const loginRes = await fetch(`${API_URL}${API_LOGIN_ENDPOINT}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "admin@safeair.local", password: "admin123" })
+      body: JSON.stringify({ email: credentials.email, password: credentials.password })
     });
 
     if (!loginRes.ok) {
@@ -89,7 +125,7 @@ async function loginAndGetRoomId(): Promise<string | null> {
 
     const token = loginData.accessToken;
 
-    const instancesRes = await fetch(`${API_URL}/api/v1/instances`, {
+    const instancesRes = await fetch(`${API_URL}${API_INSTANCES_ENDPOINT}`, {
       headers: { "Authorization": `Bearer ${token}` }
     });
 
@@ -104,7 +140,7 @@ async function loginAndGetRoomId(): Promise<string | null> {
     }
 
     const instanceId = instances[0].id;
-    const detailsRes = await fetch(`${API_URL}/api/v1/instances/${instanceId}`, {
+    const detailsRes = await fetch(`${API_URL}${API_INSTANCE_DETAILS_ENDPOINT(instanceId)}`, {
       headers: { "Authorization": `Bearer ${token}` }
     });
 
@@ -139,20 +175,19 @@ async function run(): Promise<void> {
     console.log(`${yellow}[Emulador] Modo auto-provision activo. La API asignará sala al recibir emulatorId="${EMULATOR_ID}".${reset}`);
   }
 
+  const MQTT_URL = getMqttUrl();
   console.log(`${yellow}[MQTT] Conectando al broker en ${MQTT_URL}...${reset}`);
   const client = mqtt.connect(MQTT_URL, {
-    clientId: `emulator-${EMULATOR_ID}`,
-    reconnectPeriod: 3000
+    clientId: getMqttClientId(),
+    reconnectPeriod: MQTT_RECONNECT_PERIOD_MS
   });
 
   client.on("connect", () => {
     console.log(`${green}[MQTT] Conectado exitosamente!${reset}`);
 
-    const actionsTopic = state.roomId
-      ? `safeair/${state.roomId}/actions`
-      : "safeair/+/actions";
+    const actionsTopic = TOPIC_ACTIONS(state.roomId);
 
-    client.subscribe(actionsTopic, { qos: 1 }, (err) => {
+    client.subscribe(actionsTopic, { qos: MQTT_QOS }, (err) => {
       if (err) {
         console.error(`${red}[MQTT] Error suscripción: ${err}${reset}`);
       } else {
@@ -160,9 +195,7 @@ async function run(): Promise<void> {
       }
     });
 
-    publishActuatorState("minisplit");
-    publishActuatorState("purifier");
-    publishActuatorState("extractor");
+    DEVICE_TYPES.forEach((deviceType) => publishActuatorState(deviceType));
 
     startSimulationLoop(client);
   });
@@ -212,10 +245,10 @@ async function run(): Promise<void> {
     console.log(`${yellow}[MQTT] Conexión cerrada${reset}`);
   });
 
-  function publishActuatorState(deviceType: "minisplit" | "purifier" | "extractor", deviceIndex = 1): void {
+  function publishActuatorState(deviceType: "minisplit" | "purifier" | "extractor", deviceIndex = DEFAULT_DEVICE_INDEX): void {
     if (!client.connected) return;
 
-    const topic = `safeair/${EMULATOR_ID}/actuator-state`;
+    const topic = TOPIC_ACTUATOR_STATE(EMULATOR_ID);
     const device = state.devices[deviceType];
     const payload = {
       emulatorId: EMULATOR_ID,
@@ -230,7 +263,7 @@ async function run(): Promise<void> {
       timestamp: new Date().toISOString()
     };
 
-    client.publish(topic, JSON.stringify(payload), { qos: 1 }, (err) => {
+    client.publish(topic, JSON.stringify(payload), { qos: MQTT_QOS }, (err) => {
       if (!err) {
         console.log(`${blue}[MQTT] Estado ${deviceType}: ${device.isOn ? green + "ON" : red + "OFF"}${reset}`);
       }
@@ -238,8 +271,8 @@ async function run(): Promise<void> {
   }
 
   function normalizeDeviceIndex(value: unknown): number {
-    const parsed = Number(value ?? 1);
-    return Number.isInteger(parsed) && parsed >= 1 && parsed <= 3 ? parsed : 1;
+    const parsed = Number(value ?? DEFAULT_DEVICE_INDEX);
+    return Number.isInteger(parsed) && parsed >= 1 && parsed <= MAX_DEVICE_INDEX ? parsed : DEFAULT_DEVICE_INDEX;
   }
 
   function startSimulationLoop(mqttClient: mqtt.MqttClient): void {
@@ -247,37 +280,37 @@ async function run(): Promise<void> {
       // Simular temperatura
       if (state.devices.minisplit.isOn) {
         const diff = state.temperature - state.devices.minisplit.targetTemperature;
-        state.temperature -= diff * 0.05 + (Math.random() - 0.5) * 0.05;
+        state.temperature -= diff * TEMPERATURE_COOLING_RATE + (Math.random() - 0.5) * TEMPERATURE_NOISE_AMPLITUDE;
       } else {
-        state.temperature += 0.02 + (Math.random() - 0.5) * 0.03;
+        state.temperature += TEMPERATURE_DRIFT_RATE + (Math.random() - 0.5) * TEMPERATURE_NOISE_AMPLITUDE;
       }
-      state.temperature = Math.max(16, Math.min(35, state.temperature));
+      state.temperature = Math.max(TEMPERATURE_BOUNDS.min, Math.min(TEMPERATURE_BOUNDS.max, state.temperature));
 
       // Simular humedad
       if (state.devices.extractor.isOn) {
-        state.humidity -= 0.3 + (Math.random() - 0.5) * 0.1;
+        state.humidity -= HUMIDITY_EXTRACTOR_RATE + (Math.random() - 0.5) * HUMIDITY_NOISE_AMPLITUDE;
       } else {
-        state.humidity += 0.1 + (Math.random() - 0.5) * 0.15;
+        state.humidity += HUMIDITY_NATURAL_RATE + (Math.random() - 0.5) * HUMIDITY_NOISE_AMPLITUDE;
       }
-      state.humidity = Math.max(30, Math.min(90, state.humidity));
+      state.humidity = Math.max(HUMIDITY_BOUNDS.min, Math.min(HUMIDITY_BOUNDS.max, state.humidity));
 
       // Simular CO2
       if (state.devices.extractor.isOn) {
-        state.co2 -= 15 + Math.random() * 10;
+        state.co2 -= CO2_EXTRACTOR_RATE.min + Math.random() * (CO2_EXTRACTOR_RATE.max - CO2_EXTRACTOR_RATE.min);
       } else {
-        state.co2 += 5 + Math.random() * 8;
+        state.co2 += CO2_NATURAL_RATE.min + Math.random() * (CO2_NATURAL_RATE.max - CO2_NATURAL_RATE.min);
       }
-      state.co2 = Math.max(400, Math.min(2500, state.co2));
+      state.co2 = Math.max(CO2_BOUNDS.min, Math.min(CO2_BOUNDS.max, state.co2));
 
       // Simular PM2.5
       if (state.devices.purifier.isOn) {
-        state.pm25 -= 0.5 + Math.random() * 0.5;
+        state.pm25 -= PM25_PURIFIER_RATE + Math.random() * PM25_PURIFIER_RATE;
       } else {
-        state.pm25 += 0.1 + Math.random() * 0.2;
+        state.pm25 += PM25_NATURAL_RATE.min + Math.random() * (PM25_NATURAL_RATE.max - PM25_NATURAL_RATE.min);
       }
-      state.pm25 = Math.max(5, Math.min(120, state.pm25));
+      state.pm25 = Math.max(PM25_BOUNDS.min, Math.min(PM25_BOUNDS.max, state.pm25));
 
-      const telemetryTopic = `safeair/${EMULATOR_ID}/telemetry`;
+      const telemetryTopic = TOPIC_TELEMETRY(EMULATOR_ID);
       const payload = {
         emulatorId: EMULATOR_ID,
         roomId: state.roomId || undefined,
@@ -288,7 +321,7 @@ async function run(): Promise<void> {
         timestamp: new Date().toISOString()
       };
 
-      mqttClient.publish(telemetryTopic, JSON.stringify(payload), { qos: 1 }, (err) => {
+      mqttClient.publish(telemetryTopic, JSON.stringify(payload), { qos: MQTT_QOS }, (err) => {
         if (!err) {
           logHeader("TELEMETRÍA PUBLICADA");
           console.log(`${bold}Temperatura:${reset} ${state.temperature.toFixed(2)} °C`);
@@ -297,7 +330,7 @@ async function run(): Promise<void> {
           console.log(`${bold}PM2.5:${reset} ${state.pm25.toFixed(2)} ug/m3`);
         }
       });
-    }, 5000);
+    }, SIMULATION_INTERVAL_MS);
   }
 }
 

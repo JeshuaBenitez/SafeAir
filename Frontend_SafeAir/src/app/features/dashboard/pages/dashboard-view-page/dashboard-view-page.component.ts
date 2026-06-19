@@ -1,4 +1,4 @@
-import { AsyncPipe, NgIf, NgFor, DatePipe } from '@angular/common';
+import { AsyncPipe, NgIf, NgFor } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -38,7 +38,6 @@ interface MetricsHistoryRow {
     AsyncPipe,
     NgIf,
     NgFor,
-    DatePipe,
     FormsModule,
     DashboardSidebarComponent,
     DashboardTopbarComponent,

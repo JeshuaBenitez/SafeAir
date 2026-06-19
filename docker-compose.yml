@@ -26,6 +26,62 @@ services:
       retries: 5
 
   # =============================================
+  # MariaDB - Base destino para practica ENLACE
+  # =============================================
+  mariadb:
+    profiles:
+      - enlace
+    image: mariadb:11
+    container_name: safeair-enlace-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${ENLACE_MARIADB_DB:-enlace_mariadb}
+      MARIADB_USER: ${ENLACE_MARIADB_USER:-mariadb}
+      MARIADB_PASSWORD: ${ENLACE_MARIADB_PASSWORD:-1234567890}
+      MARIADB_ROOT_PASSWORD: ${ENLACE_MARIADB_ROOT_PASSWORD:-1234567890}
+    ports:
+      - "${ENLACE_MARIADB_PORT:-3306}:3306"
+    volumes:
+      - enlace_mariadb_data:/var/lib/mysql
+    networks:
+      - safeair-network
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h localhost -u root -p$${MARIADB_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # =============================================
+  # SQL Server - Base destino para practica ENLACE
+  # =============================================
+  sqlserver:
+    profiles:
+      - enlace
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: safeair-enlace-sqlserver
+    restart: unless-stopped
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_PID: ${ENLACE_MSSQL_PID:-Developer}
+      MSSQL_SA_PASSWORD: ${ENLACE_SQLSERVER_PASSWORD:-Hallo1505}
+    ports:
+      - "${ENLACE_SQLSERVER_PORT:-1433}:1433"
+    volumes:
+      - enlace_sqlserver_data:/var/opt/mssql
+    networks:
+      - safeair-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -C -Q \"SELECT 1\" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\""
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 30s
+
+  # =============================================
   # EMQX - Broker MQTT (OBLIGATORIO, no cambiar a Mosquitto)
   # =============================================
   mqtt:
@@ -146,6 +202,8 @@ services:
 # =============================================
 volumes:
   db_data:
+  enlace_mariadb_data:
+  enlace_sqlserver_data:
   mqtt_data:
   mqtt_log:
 

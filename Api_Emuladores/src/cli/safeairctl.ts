@@ -1,20 +1,21 @@
 import dotenv from "dotenv";
 import fs from "fs";
 import mqtt from "mqtt";
-import os from "os";
-import path from "path";
 import readline from "readline";
 import { randomUUID } from "crypto";
+import {
+  CLI_CONFIG_PATH,
+  getDefaultApiUrl,
+  getDefaultMqttUrl,
+  DEFAULT_LOG_INTERVAL_MS,
+  DEFAULT_LOG_LIMIT
+} from "./constants";
 
 dotenv.config();
 
 type Options = Record<string, string | boolean>;
 type Config = { token?: string; apiUrl?: string; email?: string };
 type JsonValue = Record<string, unknown> | unknown[];
-
-const CONFIG_PATH = path.join(os.homedir(), ".safeairctl.json");
-const DEFAULT_API_URL = "http://localhost:3000";
-const DEFAULT_MQTT_URL = "mqtt://localhost:1883";
 
 function parseOptions(args: string[]): { positional: string[]; options: Options } {
   const positional: string[] = [];
@@ -52,22 +53,22 @@ function boolOption(options: Options, name: string): boolean {
 
 function readConfig(): Config {
   try {
-    return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8")) as Config;
+    return JSON.parse(fs.readFileSync(CLI_CONFIG_PATH, "utf8")) as Config;
   } catch {
     return {};
   }
 }
 
 function writeConfig(config: Config): void {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
+  fs.writeFileSync(CLI_CONFIG_PATH, JSON.stringify(config, null, 2), { mode: 0o600 });
 }
 
 function apiUrl(): string {
-  return (process.env.SAFEAIR_API_URL || readConfig().apiUrl || DEFAULT_API_URL).replace(/\/$/, "");
+  return getDefaultApiUrl();
 }
 
 function mqttUrl(): string {
-  return process.env.SAFEAIR_MQTT_URL || DEFAULT_MQTT_URL;
+  return getDefaultMqttUrl();
 }
 
 function token(): string | undefined {
@@ -386,9 +387,9 @@ async function actuators(command: string, options: Options): Promise<void> {
 
 async function logs(command: string, options: Options): Promise<void> {
   if (command === "tail") {
-    const intervalMs = Number(option(options, "interval") ?? 3000);
+    const intervalMs = Number(option(options, "interval") ?? DEFAULT_LOG_INTERVAL_MS);
     for (;;) {
-      const result = await apiRequest<JsonValue>("GET", "/api/v1/logs?limit=" + encodeURIComponent(option(options, "limit") ?? "20"));
+      const result = await apiRequest<JsonValue>("GET", "/api/v1/logs?limit=" + encodeURIComponent(option(options, "limit") ?? DEFAULT_LOG_LIMIT));
       console.clear();
       print((result as { logs?: unknown[] }).logs ?? result, boolOption(options, "json"));
       await new Promise((resolve) => setTimeout(resolve, intervalMs));
@@ -426,8 +427,8 @@ Groups:
   users, rooms, emulators, actuators, logs
 
 Environment:
-  SAFEAIR_API_URL=${DEFAULT_API_URL}
-  SAFEAIR_MQTT_URL=${DEFAULT_MQTT_URL}
+  SAFEAIR_API_URL=${getDefaultApiUrl()}
+  SAFEAIR_MQTT_URL=${getDefaultMqttUrl()}
   SAFEAIR_TOKEN=<token>`);
 }
 

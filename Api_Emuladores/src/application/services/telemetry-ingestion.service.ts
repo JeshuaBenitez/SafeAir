@@ -7,6 +7,7 @@ import { AlarmService } from "./alarm.service";
 import { addLog } from "./debug-logs.service";
 import type { TelemetryInput } from "../../domain/types/telemetry.types";
 import { EmulatorResolutionService } from "./emulator-resolution.service";
+import { ManualOverridePolicy } from "./manual-override.policy";
 
 const telemetrySchema = z.object({
   emulatorId: z.string().min(1),
@@ -24,7 +25,8 @@ export class TelemetryIngestionService {
     private readonly cycleRepository: CycleRepository,
     private readonly ruleEvaluationService: RuleEvaluationService,
     private readonly deviceActionService: DeviceActionService,
-    private readonly alarmService: AlarmService
+    private readonly alarmService: AlarmService,
+    private readonly manualOverridePolicy: ManualOverridePolicy
   ) {}
 
   async handleIncomingTelemetry(rawTelemetry: TelemetryInput, source: "mqtt" | "rest"): Promise<{ roomId: string; emulatorExternalId: string }> {
@@ -192,6 +194,35 @@ export class TelemetryIngestionService {
     });
 
     for (const action of evaluation.actions) {
+      // Respect a recent manual override: if the user pressed OFF (or ON)
+      // for the same device within the grace period, do NOT re-apply an
+      // automatic rule-engine action that would contradict the user.
+      const blocked = await this.manualOverridePolicy.isBlocked({
+        roomId,
+        deviceType: action.deviceType,
+        deviceIndex: 1
+      });
+
+      if (blocked) {
+        addLog({
+          timestamp: new Date().toISOString(),
+          level: "info",
+          source: "api",
+          event: "rule-engine.action.suppressed",
+          message: `Suppressed rule-engine action for ${action.deviceType} due to recent manual override`,
+          details: {
+            roomId,
+            deviceType: action.deviceType,
+            deviceIndex: 1,
+            suppressedAction: action.action,
+            reason: action.reason
+          },
+          roomId,
+          emulatorId: telemetry.emulatorId
+        });
+        continue;
+      }
+
       // Action persistence happens before publication to preserve traceability.
       await this.deviceActionService.createAndPublish({
         roomId,

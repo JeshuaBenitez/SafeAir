@@ -91,12 +91,35 @@ export class MetricsQueryService {
       const actions = latestActions[type] ?? [];
       const count = unitCounts[type];
 
+      // Filter actions: prioritize manual over rule-engine, then by recency
+      const manualActions = actions.filter((item) => item.requestedBy === "manual");
+      const ruleActions = actions.filter((item) => item.requestedBy !== "manual");
+
+      // For state changes, prefer manual actions within the last 60 seconds
+      // to honor user commands over automatic rule engine triggers
+      const now = Date.now();
+      const MANUAL_GRACE_PERIOD_MS = 60_000; // 60 seconds
+
       return Array.from({ length: count }, (_, index) => {
         const deviceIndex = index + 1;
         const reported = statesByIndex.get(deviceIndex);
+
+        // Find state action for this specific device index
+        const recentManualStateAction = manualActions.find(
+          (item) => item.deviceIndex === deviceIndex &&
+                    mapState(item.action) !== null &&
+                    (now - new Date(item.executedAt).getTime()) < MANUAL_GRACE_PERIOD_MS
+        );
+
+        // If there's a recent manual action, use it; otherwise use the latest rule action for this device
+        const deviceManualActions = manualActions.filter((item) => item.deviceIndex === deviceIndex);
+        const deviceRuleActions = ruleActions.filter((item) => item.deviceIndex === deviceIndex);
+        const stateAction = recentManualStateAction ??
+                            (deviceManualActions.find((item) => mapState(item.action) !== null) ??
+                            deviceRuleActions.find((item) => mapState(item.action) !== null));
+
         const deviceActions = actions.filter((item) => item.deviceIndex === deviceIndex);
         const action = deviceActions[0];
-        const stateAction = deviceActions.find((item) => mapState(item.action) !== null);
         const setpointAction = deviceActions.find((item) => getActionSetpoint(item) !== null);
         const reportedAt = reported?.reportedAt ? new Date(reported.reportedAt).getTime() : 0;
         const stateActionAt = stateAction?.executedAt ? new Date(stateAction.executedAt).getTime() : 0;
@@ -104,7 +127,9 @@ export class MetricsQueryService {
         const actionState = mapState(stateAction?.action);
         const actionSetpoint = getActionSetpoint(setpointAction);
         const mqttConfirmsAction = Boolean(reported && stateAction && actionState === reported.isOn);
-        const useActionState = Boolean(stateAction && actionState !== null && stateActionAt >= reportedAt && !mqttConfirmsAction);
+
+        // Use action state if: it's recent OR MQTT doesn't confirm it
+        const useActionState = Boolean(stateAction && actionState !== null && (stateActionAt >= reportedAt || !mqttConfirmsAction));
         const useActionSetpoint = Boolean(type === "minisplit" && actionSetpoint !== null && setpointActionAt >= reportedAt);
 
         return {
@@ -123,7 +148,9 @@ export class MetricsQueryService {
             : useActionSetpoint
               ? setpointAction?.executedAt ?? null
               : reported?.reportedAt ?? action?.executedAt ?? null,
-          source: useActionState || useActionSetpoint ? "manual" : reported?.source ?? (action ? "manual" : null)
+          source: useActionState || useActionSetpoint
+            ? (stateAction?.requestedBy === "manual" ? "manual" : "rule-engine")
+            : reported?.source ?? (action ? "manual" : null)
         };
       });
     };

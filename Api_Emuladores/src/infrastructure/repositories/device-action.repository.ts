@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import { DeviceActionModel } from "../database/models";
 
 type ActuatorType = "minisplit" | "purifier" | "extractor";
@@ -43,5 +44,29 @@ export class DeviceActionRepository {
     }
 
     return result;
+  }
+
+  async hasRecentManualOverride(input: {
+    roomId: string;
+    deviceType: ActuatorType;
+    deviceIndex: number;
+    sinceMs: number;
+  }): Promise<boolean> {
+    const cutoff = new Date(Date.now() - input.sinceMs);
+    const manualActions = await DeviceActionModel.findAll({
+      where: {
+        roomId: input.roomId,
+        deviceType: input.deviceType,
+        deviceIndex: input.deviceIndex,
+        requestedBy: "manual",
+        executedAt: {
+          [Op.gte]: cutoff
+        }
+      },
+      order: [["executedAt", "DESC"]],
+      limit: 1
+    });
+
+    return manualActions.length > 0;
   }
 }
