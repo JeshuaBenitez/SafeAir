@@ -1,77 +1,390 @@
 # SafeAir
 
-SafeAir es una plataforma IoT para monitoreo y control de calidad del aire en espacios cerrados. El estado actual del proyecto está orientado a demo y validación local, con frontend Angular, API Node.js + Express + TypeScript, PostgreSQL, broker MQTT EMQX y emuladores Java.
+SafeAir es una plataforma IoT para monitoreo y control de calidad del aire en espacios cerrados. El proyecto integra un frontend Angular, una API Node.js/Express, PostgreSQL, un broker MQTT EMQX y emuladores Java/Spring Boot que simulan sensores y actuadores.
 
-El modelo operativo actual es **multiusuario personalizado con pool de emuladores libres**: los usuarios crean sus propias instancias y habitaciones; las habitaciones nuevas toman un emulador libre si existe uno operativo; si no hay emulador disponible, la habitación queda marcada sin emulador y no debe mostrar telemetría falsa.
+Tambien incluye una practica de gestores de bases de datos llamada **ENLACE**, donde se inicializa un modelo normalizado en PostgreSQL, se carga informacion desde Excel y se replica hacia MariaDB y SQL Server para validar datos con procedimientos almacenados.
 
-## Estado Actual
+## Objetivo
 
-- Validado en modo local/all-in-one con Docker Compose.
-- Docker Compose levanta todos los servicios necesarios en una sola máquina.
-- El modo distribuido por LAN/VPN requiere configurar IPs reales de cada host y validación adicional.
-- No usar nombres antiguos del proyecto ni rutas debug obsoletas.
+El objetivo principal es demostrar un sistema distribuido donde un usuario puede registrar aulas o habitaciones, recibir telemetria ambiental simulada y controlar actuadores como minisplit, purificador y extractor.
 
-## Credenciales y Rutas
+El sistema funciona asi:
 
-Credencial admin seed local:
+1. El usuario entra al frontend en `http://localhost:8080`.
+2. El frontend consume la API en `http://localhost:3000`.
+3. La API guarda usuarios, habitaciones, configuraciones, mediciones, alarmas y acciones en PostgreSQL.
+4. Los emuladores Java publican telemetria al broker EMQX usando MQTT.
+5. La API esta suscrita a los topics MQTT, valida la telemetria y la persiste.
+6. Cuando el usuario prende/apaga un actuador, el frontend llama a la API.
+7. La API valida el comando, lo guarda en `device_actions` y lo publica por MQTT hacia el emulador.
+8. El emulador actualiza su estado interno y vuelve a reportar telemetria y estados de actuadores.
 
-- Email: `admin@safeair.local`
-- Password: `admin123`
+## Tecnologias
 
-Rutas principales:
+| Parte | Tecnologia |
+| --- | --- |
+| Frontend | Angular 19, TypeScript, Nginx |
+| API | Node.js, Express, TypeScript, Sequelize |
+| Base principal | PostgreSQL 16 |
+| Broker | EMQX MQTT |
+| Emulador | Java 21, Spring Boot, Maven, Eclipse Paho |
+| ENLACE | PostgreSQL, MariaDB, SQL Server, JDBC |
 
-- Frontend: `http://localhost:8080`
-- API health: `http://localhost:3000/health`
-- Logs debug: `http://localhost:3000/debug/logs/html`
-- Emuladores debug: `http://localhost:3000/debug/emulators/html`
-- Estado debug: `http://localhost:3000/debug/status`
-- EMQX dashboard: `http://localhost:18083`
+## Levantar el Proyecto con Docker Compose
 
-## Modo Local Base
-
-Este modo sirve para desarrollo y validación local en una sola máquina. Primero levanta solo la base operativa:
-
-- `db`
-- `mqtt`
-- `api`
-- `frontend`
-
-Comando:
+Desde la raiz del proyecto:
 
 ```bash
-docker compose --env-file .env.docker up --build -d db mqtt api frontend
+docker compose --env-file .env.docker --profile emulator up --build -d
 ```
 
-Verificación rápida:
+Esto levanta:
+
+- `db`: PostgreSQL principal de SafeAir.
+- `mqtt`: broker EMQX.
+- `api`: backend Express.
+- `frontend`: interfaz Angular servida con Nginx.
+- `emulator-java`: emuladores IoT Java.
+
+Verificar:
 
 ```bash
 docker compose ps
 curl http://localhost:3000/health
 ```
 
-Flujo funcional:
-
-1. Registrar usuario operador.
-2. Login y OTP.
-3. Crear de 1 a 3 habitaciones desde el frontend.
-4. Consultar los `emulatorExternalId` asignados.
-5. Copiar esos IDs a `SAFEAIR_EMULATOR_ID_1..3` en `.env.docker`.
-6. Levantar el emulador Java.
-
-El emulador no debe arrancar antes de que existan rooms con emulador asignado, porque la API ignora telemetría de emuladores libres.
-
-URLs esperadas:
+URLs locales:
 
 | Servicio | URL |
 | --- | --- |
 | Frontend | `http://localhost:8080` |
 | API health | `http://localhost:3000/health` |
-| Logs debug | `http://localhost:3000/debug/logs/html` |
+| API logs debug | `http://localhost:3000/debug/logs/html` |
 | Emuladores debug | `http://localhost:3000/debug/emulators/html` |
 | Estado debug | `http://localhost:3000/debug/status` |
 | EMQX dashboard | `http://localhost:18083` |
 
-Comandos útiles:
+Credencial local sembrada:
+
+- Email: `admin@safeair.local`
+- Password: `admin123`
+
+### Levantar Gestores ENLACE
+
+Para la practica ENLACE:
+
+```bash
+docker compose --profile enlace up -d db mariadb sqlserver
+```
+
+Verificar:
+
+```bash
+docker compose --profile enlace ps
+```
+
+Puertos usados por ENLACE segun `.env`:
+
+| Gestor | Host | Puerto | Base |
+| --- | --- | --- | --- |
+| PostgreSQL | `localhost` | `6543` | `enlace` |
+| MariaDB | `localhost` | `3307` | `enlace_mariadb` |
+| SQL Server | `localhost` | `14330` | `enlace_sqlserver` |
+
+Inicializar estructuras:
+
+```bash
+cd SafeAir-System-Emulator
+mvn -DskipTests exec:java \
+  -Dexec.mainClass=com.safeair.emulator.enlace.EnlaceDatabaseTool \
+  -Dexec.args="init"
+```
+
+Cargar datos desde Excel:
+
+```bash
+cd SafeAir-System-Emulator
+mvn -DskipTests exec:java \
+  -Dexec.mainClass=com.safeair.emulator.enlace.EnlaceDatabaseTool \
+  -Dexec.args="populate /home/jbenitez/BD/Procedimientos Almacenados/ENLACE.xls"
+```
+
+Replicar desde PostgreSQL hacia MariaDB y SQL Server:
+
+```bash
+cd SafeAir-System-Emulator
+mvn -DskipTests exec:java \
+  -Dexec.mainClass=com.safeair.emulator.enlace.EnlaceDatabaseTool \
+  -Dexec.args="replicate"
+```
+
+Validar los tres gestores:
+
+```bash
+cd SafeAir-System-Emulator
+mvn -DskipTests exec:java \
+  -Dexec.mainClass=com.safeair.emulator.enlace.EnlaceDatabaseTool \
+  -Dexec.args="validate"
+```
+
+Ver conteos:
+
+```bash
+cd SafeAir-System-Emulator
+mvn -DskipTests exec:java \
+  -Dexec.mainClass=com.safeair.emulator.enlace.EnlaceDatabaseTool \
+  -Dexec.args="status"
+```
+
+## Bajar el Proyecto con Docker Compose
+
+Bajar contenedores sin borrar datos:
+
+```bash
+docker compose --profile emulator --profile enlace down
+```
+
+Bajar solo SafeAir:
+
+```bash
+docker compose --profile emulator down
+```
+
+Bajar ENLACE:
+
+```bash
+docker compose --profile enlace down
+```
+
+Borrar tambien volumenes persistentes:
+
+```bash
+docker compose --profile emulator --profile enlace down -v
+```
+
+Usa `down -v` solo si quieres reiniciar las bases desde cero. Ese comando elimina datos de PostgreSQL, MariaDB, SQL Server y EMQX.
+
+## Consultas a Bases de Datos
+
+### PostgreSQL SafeAir
+
+Entrar al contenedor:
+
+```bash
+docker compose exec db psql -U postgres -d safeair
+```
+
+Entrar desde el host:
+
+```bash
+PGPASSWORD=1234567890 psql -h localhost -p 6543 -U postgres -d safeair
+```
+
+Visualizar tablas:
+
+```sql
+\dt
+```
+
+Ver tablas principales:
+
+```sql
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY table_name;
+```
+
+Ver habitaciones y emuladores asignados:
+
+```sql
+SELECT u.email, i.name AS instance_name, r.name AS room_name, e."emulatorExternalId"
+FROM users u
+JOIN instances i ON i."userId" = u.id
+JOIN rooms r ON r."instanceId" = i.id
+LEFT JOIN emulators e ON e."roomId" = r.id
+ORDER BY u.email, r.name;
+```
+
+### Almacenamiento de Datos por Actuadores
+
+Los comandos manuales o automaticos se almacenan en `device_actions`. El ultimo estado reportado por MQTT se guarda en `device_states`. Las mediciones ambientales se almacenan en `cycle_measurements`.
+
+Consultar acciones de actuadores:
+
+```sql
+SELECT "roomId", "deviceType", "deviceIndex", action, reason, "requestedBy", "executedAt"
+FROM device_actions
+ORDER BY "executedAt" DESC
+LIMIT 20;
+```
+
+Consultar ultimo estado de actuadores:
+
+```sql
+SELECT "roomId", "emulatorId", "deviceType", "deviceIndex", "isOn",
+       mode, "targetTemperature", "reportedAt"
+FROM device_states
+ORDER BY "reportedAt" DESC
+LIMIT 20;
+```
+
+Consultar ultimas mediciones:
+
+```sql
+SELECT "roomId", temperature, humidity, co2, pm25, "measuredAt", source
+FROM cycle_measurements
+ORDER BY "measuredAt" DESC
+LIMIT 20;
+```
+
+### PostgreSQL ENLACE
+
+```bash
+PGPASSWORD=1234567890 psql -h localhost -p 6543 -U postgres -d enlace
+```
+
+```sql
+\dt
+
+SELECT COUNT(*) FROM escuela;
+SELECT COUNT(*) FROM resultado_promedio;
+SELECT COUNT(*) FROM resultado_logro;
+SELECT COUNT(*) FROM alumnos_evaluados;
+
+CALL validar_base_enlace();
+
+SELECT nombre_validacion, COUNT(*) AS total
+FROM validacion_error
+GROUP BY nombre_validacion
+ORDER BY nombre_validacion;
+```
+
+### MariaDB ENLACE
+
+```bash
+docker compose --profile enlace exec mariadb mariadb -u mariadb -p enlace_mariadb
+```
+
+Password local: `1234567890`
+
+```sql
+SHOW TABLES;
+
+SELECT COUNT(*) FROM escuela;
+SELECT COUNT(*) FROM resultado_promedio;
+SELECT COUNT(*) FROM resultado_logro;
+SELECT COUNT(*) FROM alumnos_evaluados;
+
+CALL validar_base_enlace();
+
+SELECT nombre_validacion, COUNT(*) AS total
+FROM validacion_error
+GROUP BY nombre_validacion
+ORDER BY nombre_validacion;
+```
+
+### SQL Server ENLACE
+
+```bash
+docker compose --profile enlace exec sqlserver /opt/mssql-tools18/bin/sqlcmd \
+  -S localhost -U sa -P 'Hallo1505' -d enlace_sqlserver -C
+```
+
+Visualizar tablas:
+
+```sql
+SELECT TABLE_SCHEMA, TABLE_NAME
+FROM INFORMATION_SCHEMA.TABLES
+WHERE TABLE_TYPE = 'BASE TABLE'
+ORDER BY TABLE_NAME;
+GO
+```
+
+Consultar conteos y validaciones:
+
+```sql
+SELECT COUNT(*) AS escuelas FROM dbo.escuela;
+SELECT COUNT(*) AS resultados_promedio FROM dbo.resultado_promedio;
+SELECT COUNT(*) AS resultados_logro FROM dbo.resultado_logro;
+SELECT COUNT(*) AS alumnos_evaluados FROM dbo.alumnos_evaluados;
+GO
+
+EXEC dbo.validar_base_enlace;
+GO
+
+SELECT nombre_validacion, COUNT(*) AS total
+FROM dbo.validacion_error
+GROUP BY nombre_validacion
+ORDER BY nombre_validacion;
+GO
+```
+
+## Sistema de Gestores de Bases de Datos
+
+El proyecto maneja dos contextos de persistencia.
+
+El primer contexto es **SafeAir**, que usa PostgreSQL como base transaccional principal. La API crea y sincroniza sus tablas con Sequelize. Ahi se guardan los usuarios, instancias, habitaciones, configuraciones fisicas, emuladores asignados, ciclos de monitoreo, mediciones, estados de actuadores, acciones y alarmas. Esta base es la fuente de verdad operativa de la plataforma.
+
+El segundo contexto es **ENLACE**, usado para practicar interoperabilidad entre gestores. El flujo es:
+
+1. PostgreSQL actua como origen normalizado.
+2. `EnlaceDatabaseTool init` crea bases, tablas, catalogos y procedimientos en PostgreSQL, MariaDB y SQL Server.
+3. `populate` importa el Excel ENLACE hacia PostgreSQL.
+4. `replicate` copia las tablas normalizadas desde PostgreSQL hacia MariaDB y SQL Server.
+5. `validate` ejecuta procedimientos almacenados equivalentes en los tres gestores.
+6. `status` muestra conteos por tabla para comparar los resultados.
+
+Las tablas ENLACE modelan entidades educativas: `entidad`, `municipio`, `localidad`, `escuela`, `nivel_educativo`, `grado`, `materia`, `resultado_promedio`, `resultado_logro`, `alumnos_evaluados` y `validacion_error`. Las validaciones revisan reglas como clave de escuela, grado de marginacion, coherencia de alumnos evaluados y porcentajes por nivel de logro.
+
+La replicacion conserva los IDs originales. En SQL Server se habilita `IDENTITY_INSERT` por tabla para insertar las llaves provenientes de PostgreSQL. En MariaDB se limpian tablas con `FOREIGN_KEY_CHECKS = 0` antes de replicar. El proceso usa transacciones para confirmar o revertir la copia completa si ocurre un error.
+
+## Arquitectura
+
+La arquitectura combina comunicacion HTTP sincrona y mensajeria MQTT asincrona.
+
+```text
+Frontend Angular
+  -> API Express
+      -> PostgreSQL SafeAir
+      -> EMQX MQTT
+          -> Emulador Java
+              -> EMQX MQTT
+                  -> API Express
+                      -> PostgreSQL SafeAir
+```
+
+Capas principales:
+
+- `Frontend_SafeAir`: interfaz Angular para login, dashboard, reportes y control de actuadores.
+- `Api_Emuladores/src/api`: rutas, middlewares y contratos HTTP.
+- `Api_Emuladores/src/application`: casos de uso como autenticacion, habitaciones, metricas, comandos e ingestion de telemetria.
+- `Api_Emuladores/src/domain`: tipos y reglas de dominio, por ejemplo calculos derivados de configuracion.
+- `Api_Emuladores/src/infrastructure`: modelos Sequelize, repositorios y gateway MQTT.
+- `SafeAir-System-Emulator`: simulacion Java de sensores y actuadores.
+- `SafeAir-System-Emulator/src/main/java/com/safeair/emulator/enlace`: herramienta JDBC para gestores ENLACE.
+
+## Patrones de Diseno y SOLID
+
+Patrones identificados en el proyecto:
+
+- **Arquitectura por capas**: separa API, aplicacion, dominio e infraestructura.
+- **Repository**: los repositorios encapsulan acceso a Sequelize y evitan que los servicios dependan directo de consultas SQL.
+- **Service Layer**: los servicios de aplicacion concentran casos de uso como `TelemetryIngestionService`, `ActuatorCommandService` y `MetricsQueryService`.
+- **Gateway/Adapter**: `mqtt.gateway.ts` encapsula la comunicacion con EMQX.
+- **Dependency Injection manual**: `container.ts` instancia dependencias y las inyecta en servicios.
+- **Pub/Sub**: MQTT desacopla comandos y telemetria entre API y emuladores.
+- **DTO/Schema Validation**: se usa validacion de entradas, por ejemplo con Zod en telemetria.
+
+Principios SOLID aplicados:
+
+- **S - Responsabilidad unica**: cada servicio atiende un caso de uso concreto; los repositorios solo persisten/consultan.
+- **O - Abierto/cerrado**: nuevas reglas, rutas o repositorios pueden agregarse sin reescribir todo el flujo.
+- **L - Sustitucion de Liskov**: los servicios consumen contratos simples de repositorios/gateways sin depender de detalles del motor.
+- **I - Segregacion de interfaces**: la logica esta separada por modulos pequenos en lugar de una unica clase global.
+- **D - Inversion de dependencias**: los servicios de aplicacion reciben repositorios y gateways desde el contenedor, no los crean dentro del caso de uso.
+
+## Comandos Utiles
 
 ```bash
 docker compose logs -f api
@@ -79,284 +392,17 @@ docker compose logs -f mqtt
 docker compose logs -f frontend
 docker compose logs -f emulator-java
 docker compose restart api
-docker compose down
-```
-
-Levantar emulador despues de crear rooms:
-
-```bash
-docker compose --env-file .env.docker up -d emulator-java
-```
-
-Obtener IDs asignados para configurar `SAFEAIR_EMULATOR_ID_1..3`:
-
-```bash
-docker compose --env-file .env.docker exec -T db psql -U postgres -d safeair -P pager=off -c '
-SELECT u.email, r.name AS room_name, e."emulatorExternalId"
-FROM users u
-JOIN instances i ON i."userId" = u.id
-JOIN rooms r ON r."instanceId" = i.id
-LEFT JOIN emulators e ON e."roomId" = r.id
-ORDER BY u.email, r.name;
-'
+docker compose ps
 ```
 
 ## Persistencia
 
-Docker Compose usa volúmenes para PostgreSQL y EMQX. En modo normal:
+Docker Compose usa volumenes persistentes:
 
-```bash
-docker compose up -d
-```
+- `db_data`
+- `mqtt_data`
+- `mqtt_log`
+- `enlace_mariadb_data`
+- `enlace_sqlserver_data`
 
-no destruye usuarios ni datos persistidos.
-
-Importante:
-
-- `docker compose down -v` elimina los volúmenes y reinicia la base de datos.
-- Ese reset es útil para pruebas locales desde cero.
-- En producción o entornos estables no debe usarse `down -v`.
-- La pérdida de cuentas/datos al reiniciar ocurre solo si se eliminan volúmenes, se borra la base o se reinicializa manualmente el almacenamiento.
-
-## Variables Relevantes
-
-API (`Api_Emuladores` / `docker-compose.yml`):
-
-| Variable | Uso |
-| --- | --- |
-| `DB_HOST` | Host de PostgreSQL |
-| `DB_PORT` | Puerto de PostgreSQL |
-| `DB_NAME` | Nombre de base de datos |
-| `DB_USER` | Usuario de base de datos |
-| `DB_PASSWORD` | Password de base de datos |
-| `MQTT_URL` | URL MQTT para conectar API con EMQX, ejemplo `mqtt://10.0.0.10:1883` |
-| `MQTT_USERNAME` | Usuario MQTT opcional |
-| `MQTT_PASSWORD` | Password MQTT opcional |
-| `MQTT_CLIENT_ID` | Client id MQTT de la API |
-| `MQTT_TELEMETRY_TOPIC` | Topic de telemetría |
-| `MQTT_ACTUATOR_STATE_TOPIC` | Topic de estado de actuadores |
-| `MQTT_QOS` | QoS MQTT |
-| `CORS_ORIGINS` | Orígenes permitidos del frontend |
-| `AUTH_SKIP_OTP` | Omite OTP en demo/local si está en `true` |
-| `JWT_SECRET` | Secreto para JWT |
-
-Frontend (`Frontend_SafeAir`):
-
-| Variable | Uso |
-| --- | --- |
-| `API_BASE_URL` | URL base del API para Angular, ejemplo `http://10.0.0.20:3000`. El Dockerfile también tiene un build arg con ese nombre para configurar el proxy Nginx como host:puerto, ejemplo `10.0.0.20:3000`. |
-
-Emulador Java (`SafeAir-System-Emulator`):
-
-| Variable | Uso |
-| --- | --- |
-| `MQTT_HOST` | Host/IP del broker EMQX |
-| `MQTT_PORT` | Puerto MQTT |
-| `MQTT_TLS_ENABLED` | Habilita/deshabilita TLS |
-| `MQTT_USERNAME` | Usuario MQTT opcional |
-| `MQTT_PASSWORD` | Password MQTT opcional |
-| `MQTT_CONSOLE_LOG_ENABLED` | Logs MQTT en consola |
-| `SPRING_PROFILES_ACTIVE` | Perfil Spring, por ejemplo `profile1` |
-| `SAFEAIR_EMULATOR_ID_1..3` | IDs asignados a rooms creadas por el usuario; deben copiarse desde la BD/debug antes de levantar `emulator-java` |
-
-PostgreSQL:
-
-| Variable | Uso |
-| --- | --- |
-| `POSTGRES_DB` | Base inicial |
-| `POSTGRES_USER` | Usuario inicial |
-| `POSTGRES_PASSWORD` | Password inicial |
-
-## Despliegue Distribuido en LAN/VPN
-
-El `docker compose up -d --build` completo es solo para modo local/all-in-one. En modo distribuido cada equipo debe ejecutar solo el servicio que le corresponde y comunicarse por IPs privadas de la LAN/VPN.
-
-No usar `localhost`, `127.0.0.1` ni nombres internos de Docker como `db`, `mqtt` o `api` cuando los servicios estén en máquinas separadas. Esos nombres solo funcionan dentro de la red de Docker Compose de una misma máquina.
-
-Distribución objetivo:
-
-| Equipo | Servicio |
-| --- | --- |
-| Laptop Fedora | PostgreSQL + EMQX |
-| Laptop Windows de compañero | API |
-| Laptop Ubuntu de compañero | Frontend |
-| PC Windows de escritorio | Emuladores Java |
-
-Ejemplo de IPs VPN privadas:
-
-```text
-FEDORA_VPN_IP=10.10.0.10
-API_WINDOWS_VPN_IP=10.10.0.20
-FRONTEND_UBUNTU_VPN_IP=10.10.0.30
-EMULATOR_WINDOWS_VPN_IP=10.10.0.40
-```
-
-Reemplaza esos valores por las IPs reales de ZeroTier, Tailscale o tu VPN/LAN.
-
-### Fedora: PostgreSQL + EMQX
-
-PostgreSQL:
-
-```bash
-docker run -d --name safeair-db \
-  -e POSTGRES_DB=safeair \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -p 5432:5432 \
-  -v safeair_db_data:/var/lib/postgresql/data \
-  postgres:16
-```
-
-EMQX:
-
-```bash
-docker run -d --name safeair-mqtt \
-  -e EMQX_ALLOW_ANONYMOUS=true \
-  -e EMQX_LOG_LEVEL=info \
-  -p 1883:1883 \
-  -p 8084:8084 \
-  -p 18083:18083 \
-  -v safeair_mqtt_data:/opt/emqx/data \
-  -v safeair_mqtt_log:/opt/emqx/log \
-  emqx/emqx:latest
-```
-
-### Laptop Windows: API
-
-Desde el repo:
-
-```bash
-docker build -t safeair-api ./Api_Emuladores
-
-docker run -d --name safeair-api \
-  -e NODE_ENV=production \
-  -e DB_HOST=10.10.0.10 \
-  -e DB_PORT=5432 \
-  -e DB_NAME=safeair \
-  -e DB_USER=postgres \
-  -e DB_PASSWORD=postgres \
-  -e MQTT_URL=mqtt://10.10.0.10:1883 \
-  -e MQTT_CLIENT_ID=safeair-api \
-  -e MQTT_TELEMETRY_TOPIC=safeair/+/telemetry \
-  -e MQTT_ACTUATOR_STATE_TOPIC=safeair/+/actuator-state \
-  -e MQTT_QOS=1 \
-  -e CORS_ORIGINS=http://10.10.0.30:8080 \
-  -e AUTH_SKIP_OTP=true \
-  -e JWT_SECRET=replace-with-strong-secret-at-least-32-chars \
-  -p 3000:3000 \
-  safeair-api
-```
-
-La API debe apuntar a PostgreSQL y EMQX usando la IP VPN de Fedora.
-
-### Laptop Ubuntu: Frontend
-
-Desde el repo:
-
-```bash
-docker build \
-  --build-arg API_BASE_URL=10.10.0.20:3000 \
-  -t safeair-frontend \
-  ./Frontend_SafeAir
-
-docker run -d --name safeair-frontend \
-  -p 8080:80 \
-  safeair-frontend
-```
-
-El frontend debe consumir la API usando la IP VPN del host donde corre la API. En el estado actual del proyecto, Angular lee `API_BASE_URL` desde `window.__env` o desde los archivos `environment`. Si en una prueba distribuida el navegador intenta llamar a `localhost:3000`, configura el runtime `window.__env.API_BASE_URL` o ajusta `Frontend_SafeAir/src/environments/environment.prod.ts` para usar `http://10.10.0.20:3000` antes de compilar. Si ejecutas Angular sin Docker, configura `API_BASE_URL` con URL completa, por ejemplo `http://10.10.0.20:3000`.
-
-### PC Windows: Emuladores Java
-
-Desde el repo:
-
-```bash
-docker build -t safeair-emulator ./SafeAir-System-Emulator
-
-docker run -d --name safeair-emulator-java \
-  -e MQTT_HOST=10.10.0.10 \
-  -e MQTT_PORT=1883 \
-  -e MQTT_TLS_ENABLED=false \
-  -e MQTT_USERNAME= \
-  -e MQTT_PASSWORD= \
-  -e MQTT_CONSOLE_LOG_ENABLED=true \
-  -e SPRING_PROFILES_ACTIVE=profile1 \
-  -p 8081:8080 \
-  safeair-emulator
-```
-
-Los emuladores deben conectarse a EMQX usando la IP VPN de Fedora.
-
-## VPN Para Pruebas Remotas
-
-Para pruebas remotas se puede usar una VPN tipo ZeroTier o Tailscale. La VPN crea una red privada entre equipos y entrega una IP privada a cada host.
-
-Reglas prácticas:
-
-- Frontend apunta al API por la IP VPN del host del API.
-- API apunta a PostgreSQL y EMQX por la IP VPN de Fedora.
-- Emuladores apuntan a EMQX por la IP VPN de Fedora.
-- `CORS_ORIGINS` en la API debe incluir el origen real del frontend, por ejemplo `http://10.10.0.30:8080`.
-- Firewalls locales deben permitir los puertos usados.
-
-## Puertos Esperados
-
-| Puerto | Servicio |
-| --- | --- |
-| `5432` | PostgreSQL |
-| `1883` | MQTT TCP |
-| `3000` | API |
-| `8080` | Frontend |
-| `8081` | Emulador Java/debug HTTP |
-| `8084` | MQTT WebSocket EMQX |
-| `18083` | EMQX dashboard |
-
-En el compose local, PostgreSQL también se publica como `6543:5432` para acceso desde el host.
-
-## Checklist de Validación Local
-
-- [ ] `docker compose ps` muestra `db`, `mqtt`, `api`, `frontend` y `emulator-java` arriba.
-- [ ] `http://localhost:3000/health` responde.
-- [ ] Login funciona con `admin@safeair.local`.
-- [ ] Creación/listado de instancias funciona.
-- [ ] Creación/listado de rooms funciona.
-- [ ] Telemetría real llega a rooms con emulador asignado.
-- [ ] Reports consultan historial y renderizan registros.
-- [ ] Actuadores responden desde frontend/debug.
-- [ ] `/debug/logs/html`, `/debug/emulators/html` y `/debug/status` funcionan.
-
-## Checklist de Validación Distribuida/VPN
-
-- [ ] API alcanza PostgreSQL en la IP VPN de Fedora.
-- [ ] API alcanza EMQX en la IP VPN de Fedora.
-- [ ] Frontend alcanza API en la IP VPN del host Windows API.
-- [ ] Emulador Java alcanza EMQX en la IP VPN de Fedora.
-- [ ] Login funciona desde el frontend distribuido.
-- [ ] Telemetría se refleja en el frontend.
-- [ ] Actuadores responden y publican/reciben estado.
-
-La validación local está documentada para el modo all-in-one. La validación distribuida por LAN/VPN depende de pruebas adicionales con los equipos reales conectados.
-
-## Solución de Problemas
-
-Si no conecta desde otra máquina:
-
-```bash
-ping <IP_VPN_DEL_HOST>
-curl http://<API_WINDOWS_VPN_IP>:3000/health
-```
-
-Revisar:
-
-- IP VPN correcta.
-- Firewall del host.
-- Puertos publicados.
-- `CORS_ORIGINS` con el origen real del frontend.
-- API sin `DB_HOST=db` ni `MQTT_URL=mqtt://mqtt:1883` en despliegue distribuido.
-- Frontend sin `localhost` cuando la API está en otra máquina.
-
----
-
-SafeAir - Proyecto de Desarrollo de Sistemas en Red.
-
-Ultima actualizacion: Junio 2026.
+Mientras uses `docker compose down` los datos se conservan. Si usas `docker compose down -v`, Docker elimina los volumenes y las bases se reinician.
